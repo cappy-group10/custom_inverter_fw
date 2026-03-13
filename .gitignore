@@ -23,8 +23,8 @@ reference/**
 *.bin
 
 # CCS build directories
-Debug/
-Release/
+# Debug/
+# Release/
 *_RAM/
 *_FLASH/
 CPU1_RAM/

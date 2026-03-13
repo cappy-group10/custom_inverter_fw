@@ -8,6 +8,9 @@
     },
     {
       "path": "main-motor-control/example_PM_endat22_init_drivelib"
+    },
+    {
+      "path": "endat"
     }
   ],
   "settings": {}

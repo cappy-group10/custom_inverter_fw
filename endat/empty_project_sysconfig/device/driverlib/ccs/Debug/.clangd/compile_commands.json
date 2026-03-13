@@ -1,0 +1,152 @@
+[
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/adc.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/asysctl.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/can.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/cla.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/clb.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/cmpss.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/cputimer.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/dac.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/dcsm.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/dma.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ecap.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/emif.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/epwm.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/eqep.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/flash.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/gpio.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/hrpwm.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/i2c.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/interrupt.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ipc.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/mcbsp.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/memcfg.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/sci.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/sdfm.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/spi.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/sysctl.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/upp.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/usb.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/version.c"
+   },
+   {
+      "directory" : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs/Debug",
+      "command"   : "clang++ -I\"/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/ccs\" -I\"../\" -I\"/Applications/ti/ccs2040/ccs/tools/compiler/ti-cgt-c2000_22.6.3.LTS/include\" -DDEBUG -xc",
+      "file"      : "/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/driverlib/f2837xd/driverlib/xbar.c"
+   }
+]
