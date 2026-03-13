@@ -176,7 +176,8 @@ SECTIONS
    .const_cla	    : > RAMLS2
 #endif //CLA_C
 
-    .TI.ramfunc 	: >> RAMGS0 | RAMGS1 | RAMGS2 | RAMGS3, ALIGN(8)
+   .TI.ramfunc 	: >> RAMGS0 | RAMGS1 | RAMGS2 | RAMGS3, ALIGN(8) // this worked for EABI format
+   ramfuncs 	: >> RAMGS0 | RAMGS1 | RAMGS2 | RAMGS3, ALIGN(8)
 
    // For endat support, CLB data exchange registers are needed.
    Clb1DataExchgRegsFile : > CLB1_DATAXCHG

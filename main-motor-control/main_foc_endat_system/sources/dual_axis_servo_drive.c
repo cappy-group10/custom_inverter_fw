@@ -54,6 +54,8 @@
 
 #include "sfra_settings.h"
 
+#include "endat.h"
+
 //
 // Instrumentation code for timing verifications
 // display variable A (in pu) on DAC
@@ -217,6 +219,9 @@ MotorRunStop_e runMotor = MOTOR_STOP;
 CtrlState_e ctrlState = CTRL_STOP;
 bool flagSyncRun = false;
 
+volatile uint32_t endatPosRaw = 0;   // raw position word from EnDat encoder
+volatile uint16_t endatInitDone = 0; // flag: 1 = init succeeded
+
 //
 // These are defined by the linker file
 //
@@ -285,16 +290,16 @@ void main(void)
     HAL_setupMotorFaultProtection(halMtrHandle[MTR_2],
                                   motorVars[MTR_2].currentLimit);
 
-// Note that the vectorial sum of d-q PI outputs should be less than 1.0 which
-// refers to maximum duty cycle for SVGEN. Another duty cycle limiting factor
-// is current sense through shunt resistors which depends on hardware/software
-// implementation. Depending on the application requirements 3,2 or a single
-// shunt resistor can be used for current waveform reconstruction. The higher
-// number of shunt resistors allow the higher duty cycle operation and better
-// dc bus utilization. The users should adjust the PI saturation levels
-// carefully during open loop tests (i.e pi_id.Umax, pi_iq.Umax and Umins) as
-// in project manuals. Violation of this procedure yields distorted  current
-// waveforms and unstable closed loop operations that may damage the inverter.
+    // Note that the vectorial sum of d-q PI outputs should be less than 1.0 which
+    // refers to maximum duty cycle for SVGEN. Another duty cycle limiting factor
+    // is current sense through shunt resistors which depends on hardware/software
+    // implementation. Depending on the application requirements 3,2 or a single
+    // shunt resistor can be used for current waveform reconstruction. The higher
+    // number of shunt resistors allow the higher duty cycle operation and better
+    // dc bus utilization. The users should adjust the PI saturation levels
+    // carefully during open loop tests (i.e pi_id.Umax, pi_iq.Umax and Umins) as
+    // in project manuals. Violation of this procedure yields distorted  current
+    // waveforms and unstable closed loop operations that may damage the inverter.
     // reset some control variables for motor_1
     resetControlVars(&motorVars[0]);
 
@@ -417,6 +422,15 @@ void main(void)
 
     // current feedback offset calibration for motor_1
     runOffsetsCalculation(&motorVars[1]);
+
+    // EnDat encoder initialization test
+    EnDat_Init();
+    endat21_runCommandSet();      // exercises basic EnDat 2.1 command set
+    endat22_setupAddlData();      // configure 2 additional data words
+    EnDat_initDelayComp();        // cable propagation delay calibration
+    PM_endat22_setFreq(ENDAT_RUNTIME_FREQ_DIVIDER);
+    DELAY_US(800L);
+    endatInitDone = 1;
 
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
@@ -589,7 +603,15 @@ void B1(void) // Toggle GPIO-00
 void B2(void) // SPARE
 //----------------------------------------
 {
-
+    // EnDat position readback test (runs every other 50us A-task cycle)
+    if(endatInitDone)
+    {
+        endat22Data.dataReady = 0;   // clear flag before starting
+        PM_endat22_setupCommand(
+            ENCODER_SEND_POSITION_VALUES_WITH_ADDITIONAL_DATA, 0, 0, 2);
+        PM_endat22_startOperation(); // fires SPI, returns immediately
+        // spiRxFifoIsr will set dataReady=1 asynchronously
+    }
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
     B_Task_Ptr = &B3;
