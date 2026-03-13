@@ -282,6 +282,7 @@ void main(void)
     motorVars[1].currentLimit = 9.0;        // 9A
 
 
+    #ifndef DISABLE_MOTOR_FAULTS
     // setup faults protection for motor_1
     HAL_setupMotorFaultProtection(halMtrHandle[MTR_1],
                                   motorVars[MTR_1].currentLimit);
@@ -289,6 +290,7 @@ void main(void)
     // setup faults protection for motor_2
     HAL_setupMotorFaultProtection(halMtrHandle[MTR_2],
                                   motorVars[MTR_2].currentLimit);
+    #endif // DISABLE_MOTOR_FAULTS
 
     // Note that the vectorial sum of d-q PI outputs should be less than 1.0 which
     // refers to maximum duty cycle for SVGEN. Another duty cycle limiting factor
@@ -399,12 +401,13 @@ void main(void)
     ctrlState = CTRL_STOP;
 #endif
 
+    #ifndef ENDAT_HACK
     // Waiting for enable flag set
     while(enableFlag == false)
     {
         backTicker++;
     }
-
+    #endif
     //find out the FCL SW version information
     while(FCL_getSwVersion() != 0x00000008)
     {
@@ -606,11 +609,12 @@ void B2(void) // SPARE
     // EnDat position readback test (runs every other 50us A-task cycle)
     if(endatInitDone)
     {
-        endat22Data.dataReady = 0;   // clear flag before starting
-        PM_endat22_setupCommand(
-            ENCODER_SEND_POSITION_VALUES_WITH_ADDITIONAL_DATA, 0, 0, 2);
-        PM_endat22_startOperation(); // fires SPI, returns immediately
-        // spiRxFifoIsr will set dataReady=1 asynchronously
+        // endat22Data.dataReady = 0;   // clear flag before starting
+        // PM_endat22_setupCommand(
+        //     ENCODER_SEND_POSITION_VALUES_WITH_ADDITIONAL_DATA, 0, 0, 2);
+        // PM_endat22_startOperation(); // fires SPI, returns immediately
+        // // spiRxFifoIsr will set dataReady=1 asynchronously
+        endat21_readPosition();
     }
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
@@ -2411,6 +2415,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
 {
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)mtrHandle;
 
+    #ifndef DISABLE_MOTOR_FAULTS
     // *******************************************************
     // Current limit setting / tuning in Debug environment
     // *******************************************************
@@ -2500,7 +2505,10 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->ctrlState = CTRL_STOP;
         pMotor->ptrFCL->lsw = ENC_ALIGNMENT;
     }
+    #endif // DISABLE_MOTOR_FAULTS
 
+    // Gate driver logic runs regardless — kept outside the guard
+    // so motor start/stop state machine still functions in bench mode
     if(pMotor->ctrlState == CTRL_RUN)
     {
         if(pMotor->runMotor == MOTOR_STOP)
