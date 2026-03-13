@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?ccsproject version="1.0"?>
+<projectOptions>
+	<ccsVariant value="50:Theia-based"/>
+	<ccsVersion value="70.4.0"/>
+	<deviceFamily value="C2000"/>
+	<executableActions value=""/>
+	<createSlaveProjects value=""/>
+	<templateProperties value="id=dual_axis_servo_drive_fcl_qep_f2837x.projectspec.example_dual_axis_control"/>
+	<sourceLookupPath value="${PROJECT_LOC}/src_driver"/>
+	<!-- <origin value="/Users/danialnoorizadeh/ti/C2000Ware_MotorControl_SDK_5_04_00_00/solutions/boostxl_3phganinv/f2837x/ccs/sensored_foc/dual_axis_servo_drive_fcl_qep_f2837x.projectspec"/> -->
+	<filesToOpen value=""/>
+	<activeTargetConfiguration value="targetConfigs/TMS320F28379D.ccxml"/>
+</projectOptions>

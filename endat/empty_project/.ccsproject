@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?ccsproject version="1.0"?>
+<projectOptions>
+	<ccsVariant value="50:Theia-based"/>
+	<ccsVersion value="70.4.0"/>
+	<deviceFamily value="C2000"/>
+	<executableActions value=""/>
+	<createSlaveProjects value=""/>
+	<templateProperties value="id=empty_bitfield_driverlib.projectspec.Driverlib + Bit-Field Empty Example CCS Project"/>
+	<origin value="/Users/danialnoorizadeh/ti/C2000Ware_6_00_01_00/device_support/f2837xd/examples/cpu1/empty_bitfield_driverlib/cpu01/ccs/empty_bitfield_driverlib.projectspec"/>
+	<filesToOpen value=""/>
+</projectOptions>

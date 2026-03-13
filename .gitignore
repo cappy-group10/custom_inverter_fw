@@ -1,0 +1,57 @@
+# Reference materials (external TI examples)
+reference/**
+!reference/README.md
+
+# IDE and Editor
+.theia/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+*.obj
+*.out
+*.map
+*.d
+*.pp
+# *.asm
+# *.lib
+*.a
+*.hex
+*.bin
+
+# CCS build directories
+Debug/
+Release/
+*_RAM/
+*_FLASH/
+CPU1_RAM/
+CPU1_FLASH/
+CPU2_RAM/
+CPU2_FLASH/
+ENC*RAM/
+ENC*FLASH/
+
+# CCS generated files
+# .ccsproject
+# .cproject
+.launches/
+.settings/
+ccsObjs.opt
+makefile
+objects.mk
+sources.mk
+subdir_*.mk
+*_linkInfo.xml
+
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
