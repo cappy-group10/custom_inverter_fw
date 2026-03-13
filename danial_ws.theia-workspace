@@ -1,0 +1,14 @@
+{
+  "folders": [
+    {
+      "path": "endat/PM_endat22_init"
+    },
+    {
+      "path": "main-motor-control/main_foc_endat_system"
+    },
+    {
+      "path": "main-motor-control/example_PM_endat22_init_drivelib"
+    }
+  ],
+  "settings": {}
+}
