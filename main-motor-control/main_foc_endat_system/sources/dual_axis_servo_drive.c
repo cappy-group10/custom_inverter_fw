@@ -96,7 +96,9 @@ __interrupt void motor2ControlISR(void);
 static inline void getFCLTime(MOTOR_Num_e motorNum);
 #endif
 
+#if(BUILDLEVEL > FCL_LEVEL1)
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+#endif
 
 //
 // SFRA utility functions
@@ -720,6 +722,7 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
+#if(BUILDLEVEL > FCL_LEVEL1)
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
     MOTOR_Vars_t *pMotor = &motorVars[motorNum];
@@ -746,6 +749,7 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
     // EnDat-only mode: keep previous valid position feedback when the latest
     // sample is not valid yet (for example CRC failure or no fresh frame).
 }
+#endif
 
 //****************************************************************************
 // INCRBUILD 1
@@ -2382,6 +2386,7 @@ __interrupt void motor1ControlISR(void)
 //  motor2ControlISR()
 __interrupt void motor2ControlISR(void)
 {
+#if ENABLE_MOTOR2
 
 #if(BUILDLEVEL == FCL_LEVEL1)
     buildLevel1_M2();
@@ -2402,11 +2407,14 @@ __interrupt void motor2ControlISR(void)
     buildLevel46_M2();
 #endif
 
-
     // Acknowledges an interrupt
     HAL_ackInt_M2(halMtrHandle[MTR_2]);
 
     motorVars[1].isrTicker++;
+#else
+    // Keep ISR symbol for vector-table compatibility when motor 2 is disabled.
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP3);
+#endif
 } // motor2ControlISR Ends Here
 
 //
