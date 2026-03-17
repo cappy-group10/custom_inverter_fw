@@ -56,6 +56,10 @@
 
 #include "endat.h"
 
+#ifndef ENABLE_MOTOR2
+#define ENABLE_MOTOR2  (0)
+#endif
+
 //
 // Instrumentation code for timing verifications
 // display variable A (in pu) on DAC
@@ -92,7 +96,9 @@ __interrupt void motor2ControlISR(void);
 static inline void getFCLTime(MOTOR_Num_e motorNum);
 #endif
 
+#if(BUILDLEVEL > FCL_LEVEL1)
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+#endif
 
 //
 // SFRA utility functions
@@ -248,9 +254,11 @@ void main(void)
     halMtrHandle[MTR_1] =
             HAL_MTR_init(&halMtr[MTR_1], sizeof(halMtr[MTR_1]));
 
-    // initialize the driver for motor 1
+    #if ENABLE_MOTOR2
+    // initialize the driver for motor 2
     halMtrHandle[MTR_2] =
             HAL_MTR_init(&halMtr[MTR_2], sizeof(halMtr[MTR_2]));
+    #endif
 
     // Disable sync(Freeze clock to PWM as well). GTBCLKSYNC is applicable
     // only for multiple core devices. Uncomment the below statement if
@@ -263,8 +271,10 @@ void main(void)
     // set the driver parameters for motor 1
     HAL_setMotorParams(halMtrHandle[MTR_1]);
 
+    #if ENABLE_MOTOR2
     // set the driver parameters for motor 2
     HAL_setMotorParams(halMtrHandle[MTR_2]);
+    #endif
 
     // Enable sync and clock to PWM
     SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
@@ -272,17 +282,23 @@ void main(void)
     // initialize motor parameters for motor_1
     initMotorParameters(&motorVars[0], halMtrHandle[0]);
 
+    #if ENABLE_MOTOR2
     // initialize motor parameters for motor_2
     initMotorParameters(&motorVars[1], halMtrHandle[1]);
+    #endif
 
     // initialize motor control variables for motor_1
     initControlVars(&motorVars[0]);
 
+    #if ENABLE_MOTOR2
     // initialize motor control variables for motor_2
     initControlVars(&motorVars[1]);
+    #endif
 
     motorVars[0].currentLimit = 9.0;        // 9A
+    #if ENABLE_MOTOR2
     motorVars[1].currentLimit = 9.0;        // 9A
+    #endif
 
 
     #ifndef DISABLE_MOTOR_FAULTS
@@ -290,9 +306,11 @@ void main(void)
     HAL_setupMotorFaultProtection(halMtrHandle[MTR_1],
                                   motorVars[MTR_1].currentLimit);
 
+    #if ENABLE_MOTOR2
     // setup faults protection for motor_2
     HAL_setupMotorFaultProtection(halMtrHandle[MTR_2],
                                   motorVars[MTR_2].currentLimit);
+    #endif
     #endif // DISABLE_MOTOR_FAULTS
 
     // Note that the vectorial sum of d-q PI outputs should be less than 1.0 which
@@ -308,14 +326,18 @@ void main(void)
     // reset some control variables for motor_1
     resetControlVars(&motorVars[0]);
 
+    #if ENABLE_MOTOR2
     // reset some control variables for motor_2
     resetControlVars(&motorVars[1]);
+    #endif
 
     // clear any spurious OST & DCAEVT1 flags for motor_1
     HAL_clearTZFlag(halMtrHandle[MTR_1]);
 
+    #if ENABLE_MOTOR2
     // clear any spurious OST & DCAEVT1 flags for motor_2
     HAL_clearTZFlag(halMtrHandle[MTR_2]);
+    #endif
 
     // Clear LED counter
     led1Cnt = 0;
@@ -369,6 +391,7 @@ void main(void)
     motorVars[0].posSlewRate =  0.001;
     motorVars[0].fclClrCntr = 1;
 
+    #if ENABLE_MOTOR2
     motorVars[1].IdRef_start = 0.2;
     motorVars[1].IqRef = 0.1;
     motorVars[1].speedRef = 0.1;
@@ -379,6 +402,7 @@ void main(void)
     motorVars[1].posCntrMax = 5000;
     motorVars[1].posSlewRate =  0.001;
     motorVars[1].fclClrCntr = 1;
+    #endif
 
 //
 // Initialize Datalog module for motor 1 or motor 2
@@ -420,14 +444,18 @@ void main(void)
     // Configure interrupt for motor_1
     HAL_setupInterrupts(halMtrHandle[MTR_1]);
 
+    #if ENABLE_MOTOR2
     // Configure interrupt for motor_2
     HAL_setupInterrupts(halMtrHandle[MTR_2]);
+    #endif
 
     // current feedback offset calibration for motor_1
     runOffsetsCalculation(&motorVars[0]);
 
-    // current feedback offset calibration for motor_1
+    #if ENABLE_MOTOR2
+    // current feedback offset calibration for motor_2
     runOffsetsCalculation(&motorVars[1]);
+    #endif
 
     // EnDat encoder initialization test
     EnDat_Init();
@@ -442,18 +470,24 @@ void main(void)
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
 
+    #if ENABLE_MOTOR2
     // Configure interrupt for motor_2
     HAL_enableInterrupts(halMtrHandle[MTR_2]);
+    #endif
 
     //Clear the latch flag
     motorVars[0].clearTripFlagDMC = 1;
+    #if ENABLE_MOTOR2
     motorVars[1].clearTripFlagDMC = 1;
+    #endif
 
     // Disable Driver Gate
     GPIO_writePin(motorVars[0].drvEnableGateGPIO, 1);
 
+    #if ENABLE_MOTOR2
     // Disable Driver Gate
     GPIO_writePin(motorVars[1].drvEnableGateGPIO, 1);
+    #endif
 
     // enable global interrupt
     EINT;          // Enable Global interrupt INTM
@@ -688,6 +722,7 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
+#if(BUILDLEVEL > FCL_LEVEL1)
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
     MOTOR_Vars_t *pMotor = &motorVars[motorNum];
@@ -714,6 +749,7 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
     // EnDat-only mode: keep previous valid position feedback when the latest
     // sample is not valid yet (for example CRC failure or no fresh frame).
 }
+#endif
 
 //****************************************************************************
 // INCRBUILD 1
@@ -801,6 +837,7 @@ static inline void buildLevel1_M1(void)
 }
 
 // build level 1 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel1_M2)
 static inline void buildLevel1_M2(void)
 {
@@ -874,6 +911,7 @@ static inline void buildLevel1_M2(void)
                                 M2_INV_PWM_HALF_TBPRD));
     return;
 }
+#endif
 #endif // (BUILDLEVEL==FCL_LEVEL1)
 
 //
@@ -1025,6 +1063,7 @@ static inline void buildLevel2_M1(void)
 }
 
 // build level 2 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel2_M2)
 
 static inline void buildLevel2_M2(void)
@@ -1157,6 +1196,7 @@ static inline void buildLevel2_M2(void)
                                M2_INV_PWM_HALF_TBPRD));
     return;
 }
+#endif
 
 #endif // (BUILDLEVEL==FCL_LEVEL2)
 
@@ -1296,6 +1336,7 @@ static inline void buildLevel3_M1(void)
 }
 
 // build level 3 subroutine for motor_1
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel3_M2)
 
 static inline void buildLevel3_M2(void)
@@ -1418,6 +1459,7 @@ static inline void buildLevel3_M2(void)
 
     return;
 }
+#endif
 
 #endif // (BUILDLEVEL==FCL_LEVEL3)
 
@@ -1632,6 +1674,7 @@ static inline void buildLevel46_M1(void)
 }
 
 // build level 4/6 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel46_M2)
 
 static inline void buildLevel46_M2(void)
@@ -1816,6 +1859,7 @@ static inline void buildLevel46_M2(void)
 
     return;
  }
+#endif
 #endif // ( (BUILDLEVEL==FCL_LEVEL4) || (BUILDLEVEL == FCL_LEVEL6) )
 
 //
@@ -2016,6 +2060,7 @@ static inline void buildLevel5_M1(void)
 }
 
 // build level 5 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel5_M2)
 
 static inline void buildLevel5_M2(void)
@@ -2191,6 +2236,7 @@ static inline void buildLevel5_M2(void)
 
     return;
 }
+#endif
 #endif // (BUILDLEVEL==FCL_LEVEL5)
 
 // ****************************************************************************
@@ -2350,6 +2396,7 @@ __interrupt void motor1ControlISR(void)
 //  motor2ControlISR()
 __interrupt void motor2ControlISR(void)
 {
+#if ENABLE_MOTOR2
 
 #if(BUILDLEVEL == FCL_LEVEL1)
     buildLevel1_M2();
@@ -2370,11 +2417,14 @@ __interrupt void motor2ControlISR(void)
     buildLevel46_M2();
 #endif
 
-
     // Acknowledges an interrupt
     HAL_ackInt_M2(halMtrHandle[MTR_2]);
 
     motorVars[1].isrTicker++;
+#else
+    // Keep ISR symbol for vector-table compatibility when motor 2 is disabled.
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP3);
+#endif
 } // motor2ControlISR Ends Here
 
 //
