@@ -437,6 +437,7 @@ void main(void)
     PM_endat22_setFreq(ENDAT_RUNTIME_FREQ_DIVIDER);
     DELAY_US(800L);
     endatInitDone = 1;
+    endat21_schedulePositionRead();
 
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
@@ -613,7 +614,9 @@ void B2(void) // SPARE
     // At ENDAT_RUNTIME_FREQ_DIVIDER = 6, the line runs near 8.33 MHz.
     if(endatInitDone)
     {
-        endat21_readPosition();
+        endat21_servicePositionRead();
+        endat21_schedulePositionRead();
+        endatCrcFailCount = gEndatCrcFailCount;
     }
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
@@ -705,6 +708,7 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
             return;
         }
 
+        endatCrcFailCount = gEndatCrcFailCount;
     }
 
     // EnDat-only mode: keep previous valid position feedback when the latest
