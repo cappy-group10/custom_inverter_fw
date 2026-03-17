@@ -56,6 +56,7 @@
 
 #include "endat.h"
 
+
 //
 // Instrumentation code for timing verifications
 // display variable A (in pu) on DAC
@@ -68,7 +69,6 @@
 #ifdef _FLASH
 #ifndef __cplusplus
 #pragma CODE_SECTION(motor1ControlISR, ".TI.ramfunc");
-#pragma CODE_SECTION(motor2ControlISR, ".TI.ramfunc");
 #endif
 
 #ifdef __cplusplus
@@ -80,9 +80,7 @@
 //  Prototype statements for Local Functions
 //
 //#pragma INTERRUPT (motor1ControlISR, HPI)
-//#pragma INTERRUPT (motor2ControlISR, HPI)
 __interrupt void motor1ControlISR(void);
-__interrupt void motor2ControlISR(void);
 
 //
 // Motor drive utility functions
@@ -92,7 +90,9 @@ __interrupt void motor2ControlISR(void);
 static inline void getFCLTime(MOTOR_Num_e motorNum);
 #endif
 
+#if(BUILDLEVEL > FCL_LEVEL1)
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+#endif
 
 //
 // SFRA utility functions
@@ -144,7 +144,7 @@ uint16_t serialCommsTimer = 0;
 //
 // Global variables used in this system
 //
-MOTOR_Vars_t motorVars[2] = {MOTOR1_DEFAULTS, MOTOR2_DEFAULTS};
+MOTOR_Vars_t motorVars[2] = {MOTOR1_DEFAULTS};
 
 #pragma DATA_SECTION(motorVars, "ClaData");
 
@@ -211,7 +211,7 @@ HAL_MTR_Obj    halMtr[2];         //!< the hardware abstraction layer object
 // FCL Latency variables
 volatile uint16_t FCL_cycleCount[2];
 
-// control dual motor with the same speed and acceleration at the same time
+// system-level control references
 float32_t speedRef = 0.02;
 float32_t IdRef = 0.0;
 float32_t IqRef = 0.10;
@@ -248,9 +248,6 @@ void main(void)
     halMtrHandle[MTR_1] =
             HAL_MTR_init(&halMtr[MTR_1], sizeof(halMtr[MTR_1]));
 
-    // initialize the driver for motor 1
-    halMtrHandle[MTR_2] =
-            HAL_MTR_init(&halMtr[MTR_2], sizeof(halMtr[MTR_2]));
 
     // Disable sync(Freeze clock to PWM as well). GTBCLKSYNC is applicable
     // only for multiple core devices. Uncomment the below statement if
@@ -263,8 +260,6 @@ void main(void)
     // set the driver parameters for motor 1
     HAL_setMotorParams(halMtrHandle[MTR_1]);
 
-    // set the driver parameters for motor 2
-    HAL_setMotorParams(halMtrHandle[MTR_2]);
 
     // Enable sync and clock to PWM
     SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_TBCLKSYNC);
@@ -272,17 +267,12 @@ void main(void)
     // initialize motor parameters for motor_1
     initMotorParameters(&motorVars[0], halMtrHandle[0]);
 
-    // initialize motor parameters for motor_2
-    initMotorParameters(&motorVars[1], halMtrHandle[1]);
 
     // initialize motor control variables for motor_1
     initControlVars(&motorVars[0]);
 
-    // initialize motor control variables for motor_2
-    initControlVars(&motorVars[1]);
 
     motorVars[0].currentLimit = 9.0;        // 9A
-    motorVars[1].currentLimit = 9.0;        // 9A
 
 
     #ifndef DISABLE_MOTOR_FAULTS
@@ -290,9 +280,6 @@ void main(void)
     HAL_setupMotorFaultProtection(halMtrHandle[MTR_1],
                                   motorVars[MTR_1].currentLimit);
 
-    // setup faults protection for motor_2
-    HAL_setupMotorFaultProtection(halMtrHandle[MTR_2],
-                                  motorVars[MTR_2].currentLimit);
     #endif // DISABLE_MOTOR_FAULTS
 
     // Note that the vectorial sum of d-q PI outputs should be less than 1.0 which
@@ -308,14 +295,10 @@ void main(void)
     // reset some control variables for motor_1
     resetControlVars(&motorVars[0]);
 
-    // reset some control variables for motor_2
-    resetControlVars(&motorVars[1]);
 
     // clear any spurious OST & DCAEVT1 flags for motor_1
     HAL_clearTZFlag(halMtrHandle[MTR_1]);
 
-    // clear any spurious OST & DCAEVT1 flags for motor_2
-    HAL_clearTZFlag(halMtrHandle[MTR_2]);
 
     // Clear LED counter
     led1Cnt = 0;
@@ -343,11 +326,6 @@ void main(void)
     configureSFRA(SFRA_GUI_PLOT_GH_H, M1_SAMPLING_FREQ);
 #endif
 
-#if SFRA_MOTOR == MOTOR_2
-    // Plot GH & H plots using SFRA_GUI, GH & CL plots using SFRA_GUI_MC
-    configureSFRA(SFRA_GUI_PLOT_GH_H, M2_SAMPLING_FREQ);
-#endif
-
 #endif
     // **************** SFRA & SFRA_GUI COMM INIT CODE END ********************
 
@@ -369,19 +347,9 @@ void main(void)
     motorVars[0].posSlewRate =  0.001;
     motorVars[0].fclClrCntr = 1;
 
-    motorVars[1].IdRef_start = 0.2;
-    motorVars[1].IqRef = 0.1;
-    motorVars[1].speedRef = 0.1;
-    motorVars[1].lsw1Speed = 0.02;
-
-    motorVars[1].posPtr = 0;
-    motorVars[1].posPtrMax = posPtrMax;
-    motorVars[1].posCntrMax = 5000;
-    motorVars[1].posSlewRate =  0.001;
-    motorVars[1].fclClrCntr = 1;
 
 //
-// Initialize Datalog module for motor 1 or motor 2
+// Initialize Datalog module for motor 1
 //
     DLOG_4CH_F_init(&dlog_4ch1);
     dlog_4ch1.input_ptr1 = &dlogCh1;    //data value
@@ -420,14 +388,10 @@ void main(void)
     // Configure interrupt for motor_1
     HAL_setupInterrupts(halMtrHandle[MTR_1]);
 
-    // Configure interrupt for motor_2
-    HAL_setupInterrupts(halMtrHandle[MTR_2]);
 
     // current feedback offset calibration for motor_1
     runOffsetsCalculation(&motorVars[0]);
 
-    // current feedback offset calibration for motor_1
-    runOffsetsCalculation(&motorVars[1]);
 
     // EnDat encoder initialization test
     EnDat_Init();
@@ -442,18 +406,13 @@ void main(void)
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
 
-    // Configure interrupt for motor_2
-    HAL_enableInterrupts(halMtrHandle[MTR_2]);
 
     //Clear the latch flag
     motorVars[0].clearTripFlagDMC = 1;
-    motorVars[1].clearTripFlagDMC = 1;
 
     // Disable Driver Gate
     GPIO_writePin(motorVars[0].drvEnableGateGPIO, 1);
 
-    // Disable Driver Gate
-    GPIO_writePin(motorVars[1].drvEnableGateGPIO, 1);
 
     // enable global interrupt
     EINT;          // Enable Global interrupt INTM
@@ -552,9 +511,6 @@ void A1(void) // SPARE (not used)
 void A2(void) // SPARE (not used)
 //-----------------------------------------------------------------
 {
-    // motor_2 running logic control [FIX]
-    // runMotorControl(&motorVars[1], halMtrHandle[1]);
-
     //-------------------
     //the next time CpuTimer0 'counter' reaches Period value go to A3
     A_Task_Ptr = &A3;
@@ -688,6 +644,7 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
+#if(BUILDLEVEL > FCL_LEVEL1)
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
     MOTOR_Vars_t *pMotor = &motorVars[motorNum];
@@ -714,6 +671,7 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
     // EnDat-only mode: keep previous valid position feedback when the latest
     // sample is not valid yet (for example CRC failure or no fresh frame).
 }
+#endif
 
 //****************************************************************************
 // INCRBUILD 1
@@ -800,80 +758,6 @@ static inline void buildLevel1_M1(void)
     return;
 }
 
-// build level 1 subroutine for motor_2
-#pragma FUNC_ALWAYS_INLINE(buildLevel1_M2)
-static inline void buildLevel1_M2(void)
-{
-// -------------------------------------------------------------------------
-// control force angle generation based on 'runMotor'
-// -------------------------------------------------------------------------
-    if(motorVars[1].runMotor == MOTOR_STOP)
-    {
-        motorVars[1].rc.TargetValue = 0;
-        motorVars[1].rc.SetpointValue = 0;
-        motorVars[1].ipark.Ds = 0.0;
-        motorVars[1].ipark.Qs = 0.0;
-    }
-    else
-    {
-        motorVars[1].ipark.Ds = VdTesting;
-        motorVars[1].ipark.Qs = VqTesting;
-        motorVars[1].rc.TargetValue = motorVars[1].speedRef;
-    }
-
-// -----------------------------------------------------------------------------
-// Connect inputs of the RMP module and call the ramp control module
-// -----------------------------------------------------------------------------
-    fclRampControl(&motorVars[1].rc);
-
-// -----------------------------------------------------------------------------
-// Connect inputs of the RAMP GEN module and call the ramp generator module
-// -----------------------------------------------------------------------------
-    motorVars[1].ptrFCL->rg.Freq = motorVars[1].rc.SetpointValue;
-    fclRampGen((RAMPGEN *)&motorVars[1].ptrFCL->rg);
-
-// -----------------------------------------------------------------------------
-// Connect inputs of the INV_PARK module and call the inverse park module
-// -----------------------------------------------------------------------------
-    motorVars[1].ipark.Sine = __sinpuf32(motorVars[1].ptrFCL->rg.Out);
-    motorVars[1].ipark.Cosine = __cospuf32(motorVars[1].ptrFCL->rg.Out);
-    runIPark(&motorVars[1].ipark);
-
-// -----------------------------------------------------------------------------
-// Position encoder suite module
-// -----------------------------------------------------------------------------
-#if(POSITION_ENCODER == QEP_POS_ENCODER)
-    FCL_runQEPWrap_M2(); // to wrap up the CLA functions in library
-#endif
-
-// ----------------------------------------------------------------------------
-//  Measure DC Bus voltage
-// ----------------------------------------------------------------------------
-    motorVars[1].FCL_params.Vdcbus = getVdc(&motorVars[1]);
-
-// -----------------------------------------------------------------------------
-// Connect inputs of the SVGEN_DQ module and call the space-vector gen. module
-// -----------------------------------------------------------------------------
-    motorVars[1].svgen.Ualpha = motorVars[1].ipark.Alpha;
-    motorVars[1].svgen.Ubeta  = motorVars[1].ipark.Beta;
-    runSVGenDQ(&motorVars[1].svgen);
-
-// -----------------------------------------------------------------------------
-// Computed Duty and Write to CMPA register
-// -----------------------------------------------------------------------------
-    EPWM_setCounterCompareValue(halMtr[1].pwmHandle[0], EPWM_COUNTER_COMPARE_A,
-                    (uint16_t)((M2_INV_PWM_HALF_TBPRD * motorVars[1].svgen.Tc) +
-                                M2_INV_PWM_HALF_TBPRD));
-
-    EPWM_setCounterCompareValue(halMtr[1].pwmHandle[1], EPWM_COUNTER_COMPARE_A,
-                    (uint16_t)((M2_INV_PWM_HALF_TBPRD * motorVars[1].svgen.Ta) +
-                                M2_INV_PWM_HALF_TBPRD));
-
-    EPWM_setCounterCompareValue(halMtr[1].pwmHandle[2], EPWM_COUNTER_COMPARE_A,
-                    (uint16_t)((M2_INV_PWM_HALF_TBPRD * motorVars[1].svgen.Tb) +
-                                M2_INV_PWM_HALF_TBPRD));
-    return;
-}
 #endif // (BUILDLEVEL==FCL_LEVEL1)
 
 //
@@ -1024,140 +908,6 @@ static inline void buildLevel2_M1(void)
     return;
 }
 
-// build level 2 subroutine for motor_2
-#pragma FUNC_ALWAYS_INLINE(buildLevel2_M2)
-
-static inline void buildLevel2_M2(void)
-{
-    // -------------------------------------------------------------------------
-    // Alignment Routine: this routine aligns the motor to zero electrical
-    // angle and in case of QEP also finds the index location and initializes
-    // the angle w.r.t. the index location
-    // -------------------------------------------------------------------------
-    if(motorVars[1].runMotor == MOTOR_STOP)
-    {
-        motorVars[1].ptrFCL->lsw = ENC_ALIGNMENT;
-        motorVars[1].IdRef = 0;
-        motorVars[1].pi_id.ref = motorVars[1].IdRef;
-
-        FCL_resetController(&motorVars[1]);
-
-        motorVars[1].ipark.Ds = 0.0;
-        motorVars[1].ipark.Qs = 0.0;
-    }
-    else if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-    {
-        // for restarting from (runMotor = STOP)
-        motorVars[1].rc.TargetValue = 0;
-        motorVars[1].rc.SetpointValue = 0;
-
-        // for QEP, spin the motor to find the index pulse
-        motorVars[1].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
-
-        motorVars[1].ipark.Ds = VdTesting;
-        motorVars[1].ipark.Qs = VqTesting;
-    } // end else if(lsw == ENC_ALIGNMENT)
-
-// ----------------------------------------------------------------------------
-//  Connect inputs of the RMP module and call the ramp control module
-// ----------------------------------------------------------------------------
-    if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-    {
-        motorVars[1].rc.TargetValue = 0;
-    }
-    else
-    {
-        motorVars[1].rc.TargetValue = motorVars[1].speedRef;
-    }
-
-    fclRampControl(&motorVars[1].rc);
-
-// ----------------------------------------------------------------------------
-//  Connect inputs of the RAMP GEN module and call the ramp generator module
-// ----------------------------------------------------------------------------
-    motorVars[1].ptrFCL->rg.Freq = motorVars[1].rc.SetpointValue;
-    fclRampGen((RAMPGEN *)&motorVars[1].ptrFCL->rg);
-
-// ----------------------------------------------------------------------------
-//  Measure phase currents, subtract the offset and normalize from (-0.5,+0.5)
-//  to (-1,+1). Connect inputs of the CLARKE module and call the clarke
-//  transformation module
-// ----------------------------------------------------------------------------
-
-    //wait on ADC EOC
-    while(ADC_getInterruptStatus(M2_IW_ADC_BASE, ADC_INT_NUMBER2) == 0);
-
-    NOP;    //1 cycle delay for ADC PPB result
-
-    motorVars[1].clarke.As = (float32_t)M2_IFB_V_PPB *
-            motorVars[1].FCL_params.adcScale;
-
-    motorVars[1].clarke.Bs = (float32_t)M2_IFB_W_PPB *
-            motorVars[1].FCL_params.adcScale;
-
-    runClarke(&motorVars[1].clarke);
-
-// ----------------------------------------------------------------------------
-//  Measure DC Bus voltage using SDFM Filter3
-// ----------------------------------------------------------------------------
-    motorVars[1].FCL_params.Vdcbus = getVdc(&motorVars[1]);
-
-// ----------------------------------------------------------------------------
-// Connect inputs of the PARK module and call the park module
-// ----------------------------------------------------------------------------
-    motorVars[1].park.Alpha  = motorVars[1].clarke.Alpha;
-    motorVars[1].park.Beta   = motorVars[1].clarke.Beta;
-    motorVars[1].park.Angle  = motorVars[1].ptrFCL->rg.Out;
-    motorVars[1].park.Sine   = __sinpuf32(motorVars[1].park.Angle);
-    motorVars[1].park.Cosine = __cospuf32(motorVars[1].park.Angle);
-    runPark(&motorVars[1].park);
-
-// ----------------------------------------------------------------------------
-// Connect inputs of the INV_PARK module and call the inverse park module
-// ----------------------------------------------------------------------------
-    motorVars[1].ipark.Sine = motorVars[1].park.Sine;
-    motorVars[1].ipark.Cosine = motorVars[1].park.Cosine;
-    runIPark(&motorVars[1].ipark);
-
-// ----------------------------------------------------------------------------
-// Position encoder suite module
-// ----------------------------------------------------------------------------
-#if(POSITION_ENCODER == QEP_POS_ENCODER)
-    FCL_runQEPWrap_M2();
-#endif
-
-    // Position Sensing is performed in CLA
-    updateMotorPositionFeedback(MTR_2);
-
-// ----------------------------------------------------------------------------
-// Connect inputs of the SPEED_FR module and call the speed calculation module
-// ----------------------------------------------------------------------------
-    runSpeedFR(&motorVars[1].speed);
-
-// ----------------------------------------------------------------------------
-// Connect inputs of the SVGEN_DQ module and call the space-vector gen. module
-// ----------------------------------------------------------------------------
-    motorVars[1].svgen.Ualpha = motorVars[1].ipark.Alpha;
-    motorVars[1].svgen.Ubeta  = motorVars[1].ipark.Beta;
-    runSVGenDQ(&motorVars[1].svgen);
-
-// ----------------------------------------------------------------------------
-//  Computed Duty and Write to CMPA register
-// ----------------------------------------------------------------------------
-    EPWM_setCounterCompareValue(halMtr[1].pwmHandle[0], EPWM_COUNTER_COMPARE_A,
-                   (uint16_t)((M2_INV_PWM_HALF_TBPRD * motorVars[1].svgen.Tc) +
-                               M2_INV_PWM_HALF_TBPRD));
-
-    EPWM_setCounterCompareValue(halMtr[1].pwmHandle[1], EPWM_COUNTER_COMPARE_A,
-                   (uint16_t)((M2_INV_PWM_HALF_TBPRD * motorVars[1].svgen.Ta) +
-                               M2_INV_PWM_HALF_TBPRD));
-
-    EPWM_setCounterCompareValue(halMtr[1].pwmHandle[2], EPWM_COUNTER_COMPARE_A,
-                   (uint16_t)((M2_INV_PWM_HALF_TBPRD * motorVars[1].svgen.Tb) +
-                               M2_INV_PWM_HALF_TBPRD));
-    return;
-}
-
 #endif // (BUILDLEVEL==FCL_LEVEL2)
 
 
@@ -1296,128 +1046,6 @@ static inline void buildLevel3_M1(void)
 }
 
 // build level 3 subroutine for motor_1
-#pragma FUNC_ALWAYS_INLINE(buildLevel3_M2)
-
-static inline void buildLevel3_M2(void)
-{
-
-#if(FCL_CNTLR ==  PI_CNTLR)
-    FCL_runPICtrl_M2(&motorVars[1]);
-#endif
-
-#if(FCL_CNTLR ==  CMPLX_CNTLR)
-    FCL_runComplexCtrl_M2(&motorVars[1]);
-#endif
-
-// ----------------------------------------------------------------------------
-// FCL_cycleCount calculations for debug
-// customer can remove the below code in final implementation
-// ----------------------------------------------------------------------------
-    getFCLTime(MTR_2);
-
-// ----------------------------------------------------------------------------
-// Measure DC Bus voltage using SDFM Filter3
-// ----------------------------------------------------------------------------
-    motorVars[1].FCL_params.Vdcbus = getVdc(&motorVars[0]);
-
-// ----------------------------------------------------------------------------
-// Fast current loop controller wrapper
-// ----------------------------------------------------------------------------
-#if(FCL_CNTLR ==  PI_CNTLR)
-    FCL_runPICtrlWrap_M2(&motorVars[1]);
-#endif
-
-#if(FCL_CNTLR ==  CMPLX_CNTLR)
-    FCL_runComplexCtrlWrap_M2(&motorVars[1]);
-#endif
-
-// ----------------------------------------------------------------------------
-// Alignment Routine: this routine aligns the motor to zero electrical angle
-// and in case of QEP also finds the index location and initializes the angle
-// w.r.t. the index location
-// ----------------------------------------------------------------------------
-    if(motorVars[1].runMotor == MOTOR_STOP)
-    {
-        motorVars[1].ptrFCL->lsw = ENC_ALIGNMENT;
-        motorVars[1].pi_id.ref = 0;
-        motorVars[1].IdRef = 0;
-        FCL_resetController(&motorVars[1]);
-
-        // motorVars[1].state |= 0x8000; // FIXME
-    }
-    else if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-    {
-        // alignment current
-        motorVars[1].IdRef = motorVars[1].IdRef_start;  //0.1;
-
-        // motorVars[1].state |= 0x0001;
-
-        // set up an alignment and hold time for shaft to settle down
-        if(motorVars[1].pi_id.ref >= motorVars[1].IdRef)
-        {
-            // motorVars[1].state |= 0x0002;
-
-            motorVars[1].alignCntr++;
-
-            if(motorVars[1].alignCntr >= motorVars[1].alignCnt)
-            {
-                motorVars[1].alignCntr  = 0;
-
-                // for QEP, spin the motor to find the index pulse
-                motorVars[1].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
-
-                // motorVars[1].state |= 0x0004;
-            }
-        }
-    } // end else if(lsw == ENC_ALIGNMENT)
-    else if(motorVars[1].ptrFCL->lsw == ENC_CALIBRATION_DONE)
-    {
-        motorVars[1].IdRef = motorVars[1].IdRef_run;
-
-        // motorVars[1].state |= 0x0010;
-    }
-
-// ----------------------------------------------------------------------------
-// Connect inputs of the RMP module and call the ramp control module
-// ----------------------------------------------------------------------------
-    if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-    {
-        motorVars[1].rc.TargetValue = 0;
-        motorVars[1].rc.SetpointValue = 0;
-    }
-    else
-    {
-        motorVars[1].rc.TargetValue = motorVars[1].speedRef;
-
-        // motorVars[1].state |= 0x0020;
-    }
-
-    fclRampControl(&motorVars[1].rc);
-
-// ----------------------------------------------------------------------------
-// Connect inputs of the RAMP GEN module and call the ramp generator module
-// ----------------------------------------------------------------------------
-    motorVars[1].ptrFCL->rg.Freq = motorVars[1].rc.SetpointValue;
-    fclRampGen((RAMPGEN *)&motorVars[1].ptrFCL->rg);
-
-    updateMotorPositionFeedback(MTR_2);
-
-    runSpeedFR(&motorVars[1].speed);
-
-// ----------------------------------------------------------------------------
-// setup iqref for FCL
-// ----------------------------------------------------------------------------
-    motorVars[1].ptrFCL->pi_iq.ref =
-           (motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT) ? 0 : motorVars[1].IqRef;
-
-// ----------------------------------------------------------------------------
-// setup idref for FCL
-// ----------------------------------------------------------------------------
-    motorVars[1].pi_id.ref =
-           ramper(motorVars[1].IdRef, motorVars[1].pi_id.ref, 0.00001);
-
-    return;
-}
 
 #endif // (BUILDLEVEL==FCL_LEVEL3)
 
@@ -1631,191 +1259,6 @@ static inline void buildLevel46_M1(void)
    return;
 }
 
-// build level 4/6 subroutine for motor_2
-#pragma FUNC_ALWAYS_INLINE(buildLevel46_M2)
-
-static inline void buildLevel46_M2(void)
-{
-
-#if(FCL_CNTLR ==  PI_CNTLR)
-    FCL_runPICtrl_M2(&motorVars[1]);
-#endif
-
-#if(FCL_CNTLR ==  CMPLX_CNTLR)
-    FCL_runComplexCtrl_M2(&motorVars[1]);
-#endif
-
-// ----------------------------------------------------------------------------
-// FCL_cycleCount calculations for debug
-// customer can remove the below code in final implementation
-// ----------------------------------------------------------------------------
-    getFCLTime(MTR_2);
-
-// -----------------------------------------------------------------------------
-// Measure DC Bus voltage using SDFM Filter3
-// ----------------------------------------------------------------------------
-    motorVars[1].FCL_params.Vdcbus = getVdc(&motorVars[1]);
-
-// ----------------------------------------------------------------------------
-// Fast current loop controller wrapper
-// ----------------------------------------------------------------------------
-#if(FCL_CNTLR ==  PI_CNTLR)
-    FCL_runPICtrlWrap_M2(&motorVars[1]);
-#endif
-
-#if(FCL_CNTLR ==  CMPLX_CNTLR)
-    FCL_runComplexCtrlWrap_M2(&motorVars[1]);
-#endif
-
-    // ------------------------------------------------------------------------
-    // Alignment Routine: this routine aligns the motor to zero electrical
-    // angle and in case of QEP also finds the index location and initializes
-    // the angle w.r.t. the index location
-    // ------------------------------------------------------------------------
-    if(motorVars[1].runMotor == MOTOR_RUN)
-    {
-        if(motorVars[1].ptrFCL->lsw == ENC_CALIBRATION_DONE)
-        {
-            motorVars[1].IdRef = motorVars[1].IdRef_run;
-            motorVars[1].rc.TargetValue = motorVars[1].speedRef;
-        }
-        else if(motorVars[1].ptrFCL->lsw == ENC_WAIT_FOR_INDEX)
-        {
-            motorVars[1].rc.TargetValue = motorVars[1].lsw1Speed *
-                    (motorVars[1].speedRef > 0 ? 1 : -1);
-
-            // -----------------------------------------------------------------------------
-            //  Connect inputs of the RAMP GEN module and call the ramp generator module
-            // -----------------------------------------------------------------------------
-                motorVars[1].ptrFCL->rg.Freq = motorVars[1].rc.SetpointValue;
-                fclRampGen((RAMPGEN *)&motorVars[1].ptrFCL->rg);
-
-        }
-        else if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-        {
-            motorVars[1].rc.TargetValue = 0;
-            motorVars[1].rc.SetpointValue = 0;
-
-            // alignment current
-            motorVars[1].IdRef = motorVars[1].IdRef_start;  //(0.1);
-
-            // set up an alignment and hold time for shaft to settle down
-            if(motorVars[1].tempIdRef >= motorVars[1].IdRef)
-            {
-                motorVars[1].alignCntr++;
-
-                if(motorVars[1].alignCntr >= motorVars[1].alignCnt)
-                {
-                    motorVars[1].alignCntr  = 0;
-
-                    // for QEP, spin the motor to find the index pulse
-                    motorVars[1].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
-                }
-            }
-        } // end else if(lsw == ENC_ALIGNMENT)
-    }
-    else
-    {
-        motorVars[1].IdRef = 0;
-        motorVars[1].tempIdRef = motorVars[1].IdRef;
-
-        motorVars[1].rc.TargetValue = 0;
-
-        FCL_resetController(&motorVars[1]);
-    }
-
-// -----------------------------------------------------------------------------
-//  Connect inputs of the RMP module and call the ramp control module
-// -----------------------------------------------------------------------------
-    fclRampControl(&motorVars[1].rc);
-
-// -----------------------------------------------------------------------------
-//  Connect inputs of the SPEED_FR module and call the speed calculation module
-// -----------------------------------------------------------------------------
-    updateMotorPositionFeedback(MTR_2);
-    runSpeedFR(&motorVars[1].speed);
-
-#if((BUILDLEVEL == FCL_LEVEL6)  && (SFRA_MOTOR == MOTOR_2))
-// -----------------------------------------------------------------------------
-//    SFRA collect routine, only to be called after SFRA inject has occurred 1st
-// -----------------------------------------------------------------------------
-    if(sfraCollectStart)
-    {
-        collectSFRA(&motorVars[1]);    // Collect noise feedback from loop
-    }
-
-// -----------------------------------------------------------------------------
-//  SFRA injection
-// -----------------------------------------------------------------------------
-    injectSFRA();               // create SFRA Noise per 'sfraTestLoop'
-    sfraCollectStart = 1;       // enable SFRA data collection
-#endif
-
-// -----------------------------------------------------------------------------
-//    Connect inputs of the PI module and call the PID speed controller module
-// -----------------------------------------------------------------------------
-    motorVars[1].speedLoopCount++;
-
-    if(motorVars[1].speedLoopCount >= motorVars[1].speedLoopPrescaler)
-    {
-
-#if((BUILDLEVEL == FCL_LEVEL6) && (SFRA_MOTOR == MOTOR_2))
-        // SFRA Noise injection in speed loop
-        motorVars[1].pid_spd.term.Ref =
-                motorVars[1].rc.SetpointValue + sfraNoiseW;
-#else   // #if(BUILDLEVEL == FCL_LEVEL4)
-        motorVars[1].pid_spd.term.Ref =
-                motorVars[1].rc.SetpointValue;  //speedRef;
-#endif
-
-        motorVars[1].pid_spd.term.Fbk = motorVars[1].speed.Speed;
-        runPID(&motorVars[1].pid_spd);
-
-        motorVars[1].speedLoopCount = 0;
-    }
-
-    if((motorVars[1].ptrFCL->lsw != ENC_CALIBRATION_DONE) ||
-            (motorVars[1].runMotor == MOTOR_STOP))
-    {
-        motorVars[1].pid_spd.data.d1 = 0;
-        motorVars[1].pid_spd.data.d2 = 0;
-        motorVars[1].pid_spd.data.i1 = 0;
-        motorVars[1].pid_spd.data.ud = 0;
-        motorVars[1].pid_spd.data.ui = 0;
-        motorVars[1].pid_spd.data.up = 0;
-    }
-
-// -----------------------------------------------------------------------------
-//    setup iqref and idref for FCL
-// -----------------------------------------------------------------------------
-#if((BUILDLEVEL == FCL_LEVEL6) && (SFRA_MOTOR == MOTOR_2))
-    // SFRA Noise injection in Q axis
-    motorVars[1].ptrFCL->pi_iq.ref =
-            (motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT) ? 0 :
-                    (motorVars[1].ptrFCL->lsw == ENC_WAIT_FOR_INDEX) ?
-                            motorVars[1].IqRef :
-                            (motorVars[1].pid_spd.term.Out + sfraNoiseQ);
-
-    // SFRA Noise injection in D axis
-    motorVars[1].tempIdRef =
-            ramper(motorVars[1].IdRef, motorVars[1].tempIdRef, 0.00001);
-
-    motorVars[1].pi_id.ref = motorVars[1].tempIdRef + sfraNoiseD;
-#else   // #if(BUILDLEVEL == FCL_LEVEL4)
-    // setup iqref
-    motorVars[1].ptrFCL->pi_iq.ref =
-            (motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT) ? 0 :
-                    (motorVars[1].ptrFCL->lsw == ENC_WAIT_FOR_INDEX) ?
-                            motorVars[1].IqRef : motorVars[1].pid_spd.term.Out;
-
-    // setup idref
-    motorVars[1].tempIdRef = ramper(motorVars[1].IdRef,
-                                    motorVars[1].tempIdRef, 0.00001);
-    motorVars[1].pi_id.ref = motorVars[1].tempIdRef;
-#endif
-
-    return;
- }
 #endif // ( (BUILDLEVEL==FCL_LEVEL4) || (BUILDLEVEL == FCL_LEVEL6) )
 
 //
@@ -2015,182 +1458,6 @@ static inline void buildLevel5_M1(void)
     return;
 }
 
-// build level 5 subroutine for motor_2
-#pragma FUNC_ALWAYS_INLINE(buildLevel5_M2)
-
-static inline void buildLevel5_M2(void)
-{
-
-#if(FCL_CNTLR ==  PI_CNTLR)
-    FCL_runPICtrl_M2(&motorVars[1]);
-#endif
-
-#if(FCL_CNTLR ==  CMPLX_CNTLR)
-    FCL_runComplexCtrl_M2(&motorVars[1]);
-#endif
-
-// -----------------------------------------------------------------------------
-//    FCL_cycleCount calculations for debug
-//    customer can remove the below code in final implementation
-// -----------------------------------------------------------------------------
-    getFCLTime(MTR_2);
-
-// -----------------------------------------------------------------------------
-//  Measure DC Bus voltage using SDFM Filter3
-// -----------------------------------------------------------------------------
-    motorVars[1].FCL_params.Vdcbus = getVdc(&motorVars[1]);
-
-// -----------------------------------------------------------------------------
-// Fast current loop controller wrapper
-// -----------------------------------------------------------------------------
-#if(FCL_CNTLR ==  PI_CNTLR)
-    FCL_runPICtrlWrap_M2(&motorVars[1]);
-#endif
-
-#if(FCL_CNTLR ==  CMPLX_CNTLR)
-    FCL_runComplexCtrlWrap_M2(&motorVars[1]);
-#endif
-
-// -----------------------------------------------------------------------------
-//  Alignment Routine: this routine aligns the motor to zero electrical angle
-//  and in case of QEP also finds the index location and initializes the angle
-//  w.r.t. the index location
-// -----------------------------------------------------------------------------
-    if(motorVars[1].runMotor == MOTOR_STOP)
-    {
-        motorVars[1].ptrFCL->lsw = ENC_ALIGNMENT;
-        motorVars[1].lsw2EntryFlag = 0;
-        motorVars[1].alignCntr = 0;
-        motorVars[1].posCntr = 0;
-        motorVars[1].posPtr = 0;
-        motorVars[1].IdRef = 0;
-        motorVars[1].pi_id.ref = motorVars[1].IdRef;
-        FCL_resetController(&motorVars[1]);
-    }
-    else if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-    {
-        // alignment curretnt
-        motorVars[1].IdRef = motorVars[1].IdRef_start;  //(0.1);
-
-        // for restarting from (runMotor = STOP)
-        motorVars[1].rc.TargetValue = 0;
-        motorVars[1].rc.SetpointValue = 0;
-
-        // set up an alignment and hold time for shaft to settle down
-        if(motorVars[1].pi_id.ref >= motorVars[1].IdRef)
-        {
-            motorVars[1].alignCntr++;
-
-            if(motorVars[1].alignCntr >= motorVars[1].alignCnt)
-            {
-                motorVars[1].alignCntr  = 0;
-
-                // for QEP, spin the motor to find the index pulse
-                motorVars[1].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
-            }
-        }
-    } // end else if(lsw == ENC_ALIGNMENT)
-    else if(motorVars[1].ptrFCL->lsw == ENC_CALIBRATION_DONE)
-    {
-        motorVars[1].IdRef = motorVars[1].IdRef_run;
-    }
-
-// -----------------------------------------------------------------------------
-//  Connect inputs of the RAMP GEN module and call the ramp generator module
-// -----------------------------------------------------------------------------
-    motorVars[1].ptrFCL->rg.Freq = motorVars[1].speedRef * 0.1;
-    fclRampGen((RAMPGEN *)&motorVars[1].ptrFCL->rg);
-
-// -----------------------------------------------------------------------------
-//  Connect inputs of the SPEED_FR module and call the speed calculation module
-// -----------------------------------------------------------------------------
-    updateMotorPositionFeedback(MTR_2);
-    runSpeedFR(&motorVars[1].speed);
-
-// -----------------------------------------------------------------------------
-//    Connect inputs of the PID module and call the PID speed controller module
-// -----------------------------------------------------------------------------
-    motorVars[1].speedLoopCount++;
-
-    if(motorVars[1].speedLoopCount >= motorVars[1].speedLoopPrescaler)
-    {
-        if(motorVars[1].ptrFCL->lsw == ENC_CALIBRATION_DONE)
-        {
-            if(!motorVars[1].lsw2EntryFlag)
-            {
-                motorVars[1].lsw2EntryFlag = 1;
-                motorVars[1].rc.TargetValue = motorVars[1].posMechTheta;
-                motorVars[1].pi_pos.Fbk = motorVars[1].rc.TargetValue;
-                motorVars[1].pi_pos.Ref = motorVars[1].pi_pos.Fbk;
-            }
-            else
-            {
-                // ========== reference position setting =========
-#if(BUILDLEVEL == FCL_LEVEL5)
-                // choose between 1 of 2 position commands
-                // The user can choose between a position reference table
-                // used within refPosGen() or feed it in from rg1.Out
-                // Position command read from a table
-                motorVars[1].rc.TargetValue =
-                        refPosGen(motorVars[1].rc.TargetValue, &motorVars[1]);
-
-#endif
-
-                motorVars[1].rc.SetpointValue = motorVars[1].rc.TargetValue -
-                             (float32_t)((int32_t)motorVars[1].rc.TargetValue);
-
-                // Rolling in angle within 0 to 1pu
-                if(motorVars[1].rc.SetpointValue < 0)
-                {
-                    motorVars[1].rc.SetpointValue += 1.0;
-                }
-
-                motorVars[1].pi_pos.Ref = motorVars[1].rc.SetpointValue;
-                motorVars[1].pi_pos.Fbk = motorVars[1].posMechTheta;
-            }
-
-            runPIPos(&motorVars[1].pi_pos);
-
-            // speed PI regulator
-            motorVars[1].pid_spd.term.Ref = motorVars[1].pi_pos.Out;
-            motorVars[1].pid_spd.term.Fbk = motorVars[1].speed.Speed;
-            runPID(&motorVars[1].pid_spd);
-        }
-
-        motorVars[1].speedLoopCount = 0;
-    }
-
-    if(motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT)
-    {
-        motorVars[1].rc.SetpointValue = 0;  // position = 0 deg
-        motorVars[1].pid_spd.data.d1 = 0;
-        motorVars[1].pid_spd.data.d2 = 0;
-        motorVars[1].pid_spd.data.i1 = 0;
-        motorVars[1].pid_spd.data.ud = 0;
-        motorVars[1].pid_spd.data.ui = 0;
-        motorVars[1].pid_spd.data.up = 0;
-        motorVars[1].pi_pos.ui = 0;
-        motorVars[1].pi_pos.i1 = 0;
-        motorVars[1].ptrFCL->rg.Out = 0;
-        motorVars[1].lsw2EntryFlag = 0;
-    }
-
-// -----------------------------------------------------------------------------
-//  Setup iqref for FCL
-// -----------------------------------------------------------------------------
-    motorVars[1].ptrFCL->pi_iq.ref =
-            (motorVars[1].ptrFCL->lsw == ENC_ALIGNMENT) ? 0 :
-                    (motorVars[1].ptrFCL->lsw == ENC_WAIT_FOR_INDEX) ?
-                            motorVars[1].IqRef : motorVars[1].pid_spd.term.Out;
-
-// -----------------------------------------------------------------------------
-//  Setup idref for FCL
-// -----------------------------------------------------------------------------
-    motorVars[1].pi_id.ref =
-            ramper(motorVars[1].IdRef, motorVars[1].pi_id.ref, 0.00001);
-
-    return;
-}
 #endif // (BUILDLEVEL==FCL_LEVEL5)
 
 // ****************************************************************************
@@ -2275,8 +1542,8 @@ __interrupt void motor1ControlISR(void)
 // -----------------------------------------------------------------------------
     dlogCh1 = motorVars[0].posElecTheta;
     dlogCh2 = motorVars[0].speed.Speed;
-    dlogCh3 = motorVars[1].posElecTheta;
-    dlogCh4 = motorVars[1].speed.Speed;
+    dlogCh3 = motorVars[0].ptrFCL->pi_iq.ref;
+    dlogCh4 = motorVars[0].ptrFCL->pi_iq.fbk;
 
 #ifdef DACOUT_EN
 //------------------------------------------------------------------------------
@@ -2306,7 +1573,7 @@ __interrupt void motor1ControlISR(void)
     DAC_setShadowValue(hal.dacHandle[0],
                        DAC_MACRO_PU(motorVars[0].pi_pos.Fbk));
     DAC_setShadowValue(hal.dacHandle[1],
-                       DAC_MACRO_PU(motorVars[1].pi_pos.Fbk));
+                       DAC_MACRO_PU(motorVars[0].pi_pos.Ref));
 #endif   // DACOUT_EN
 
 #elif(BUILDLEVEL == FCL_LEVEL6)
@@ -2346,36 +1613,6 @@ __interrupt void motor1ControlISR(void)
 } // motor1ControlISR Ends Here
 
 
-#pragma CODE_ALIGN(motor2ControlISR, 2)
-//  motor2ControlISR()
-__interrupt void motor2ControlISR(void)
-{
-
-#if(BUILDLEVEL == FCL_LEVEL1)
-    buildLevel1_M2();
-
-#elif(BUILDLEVEL == FCL_LEVEL2)
-    buildLevel2_M2();
-
-#elif(BUILDLEVEL == FCL_LEVEL3)
-    buildLevel3_M2();
-
-#elif(BUILDLEVEL == FCL_LEVEL4)
-    buildLevel46_M2();
-
-#elif(BUILDLEVEL == FCL_LEVEL5)
-    buildLevel5_M2();
-
-#elif(BUILDLEVEL == FCL_LEVEL6)
-    buildLevel46_M2();
-#endif
-
-
-    // Acknowledges an interrupt
-    HAL_ackInt_M2(halMtrHandle[MTR_2]);
-
-    motorVars[1].isrTicker++;
-} // motor2ControlISR Ends Here
 
 //
 // POSITION LOOP UTILITY FUNCTIONS
@@ -2437,6 +1674,7 @@ float32_t refPosGen(float32_t out, MOTOR_Vars_t *pMotor)
 void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
 {
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)mtrHandle;
+    (void)obj;
 
     #ifndef DISABLE_MOTOR_FAULTS
     // *******************************************************
@@ -2563,35 +1801,28 @@ void runSyncControl(void)
     
     if(flagSyncRun == true)
     {
-        if((motorVars[0].tripFlagDMC == 0) && (motorVars[1].tripFlagDMC == 0))
+        if(motorVars[0].tripFlagDMC == 0)
         {
 
 #if(BUILDLEVEL != FCL_LEVEL5)
             motorVars[0].speedRef = speedRef;
-            motorVars[1].speedRef = speedRef;
 #endif
 
 #if(BUILDLEVEL == FCL_LEVEL3)
             motorVars[0].IdRef_run = IdRef;
-            motorVars[1].IdRef_run = IdRef;
 
             motorVars[0].IqRef = IqRef;
-            motorVars[1].IqRef = IqRef;
 #endif
 
             motorVars[0].ctrlState = ctrlState;
-            motorVars[1].ctrlState = ctrlState;
         }
         else
         {
             motorVars[0].ctrlState = CTRL_STOP;
-            motorVars[1].ctrlState = CTRL_STOP;
             motorVars[0].speedRef = 0.0;
-            motorVars[1].speedRef = 0.0;
         }
 
-        if((motorVars[0].runMotor == MOTOR_RUN) &&
-                (motorVars[1].runMotor == MOTOR_RUN))
+        if(motorVars[0].runMotor == MOTOR_RUN)
         {
             runMotor = MOTOR_RUN;
         }
