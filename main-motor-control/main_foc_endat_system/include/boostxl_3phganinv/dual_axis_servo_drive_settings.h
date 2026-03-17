@@ -134,7 +134,7 @@ typedef float _iq;
 #define  SAMPLING_METHOD     SINGLE_SAMPLING   // DOUBLE_SAMPLING   // SINGLE_SAMPLING
 #define  FCL_CNTLR           PI_CNTLR          // CMPLX_CNTLR       //
 #define  CURRENT_SENSE       LEM_CURRENT_SENSE
-#define  POSITION_ENCODER    QEP_POS_ENCODER
+#define  POSITION_ENCODER    ENDAT_POS_ENCODER
 
 #define  SFRA_MOTOR          MOTOR_1
 
@@ -145,8 +145,8 @@ typedef float _iq;
 #error  Critical: Only LEM_CURRENT_SENSE is supported in this example
 #endif
 
-#if(POSITION_ENCODER != QEP_POS_ENCODER)
-#error  Critical: Only QEP_POS_ENCODER is supported in this example
+#if(POSITION_ENCODER != ENDAT_POS_ENCODER)
+#error  Critical: This configuration supports only ENDAT_POS_ENCODER
 #endif
 
 #ifndef BUILDLEVEL
@@ -159,4 +159,3 @@ typedef float _iq;
 
 
 #endif  // end of DUAL_AXIS_SERVO_DRIVE_SETTINGS_H definition
-
