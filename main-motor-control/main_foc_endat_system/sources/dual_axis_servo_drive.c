@@ -837,6 +837,7 @@ static inline void buildLevel1_M1(void)
 }
 
 // build level 1 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel1_M2)
 static inline void buildLevel1_M2(void)
 {
@@ -910,6 +911,7 @@ static inline void buildLevel1_M2(void)
                                 M2_INV_PWM_HALF_TBPRD));
     return;
 }
+#endif
 #endif // (BUILDLEVEL==FCL_LEVEL1)
 
 //
@@ -1061,6 +1063,7 @@ static inline void buildLevel2_M1(void)
 }
 
 // build level 2 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel2_M2)
 
 static inline void buildLevel2_M2(void)
@@ -1193,6 +1196,7 @@ static inline void buildLevel2_M2(void)
                                M2_INV_PWM_HALF_TBPRD));
     return;
 }
+#endif
 
 #endif // (BUILDLEVEL==FCL_LEVEL2)
 
@@ -1332,6 +1336,7 @@ static inline void buildLevel3_M1(void)
 }
 
 // build level 3 subroutine for motor_1
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel3_M2)
 
 static inline void buildLevel3_M2(void)
@@ -1454,6 +1459,7 @@ static inline void buildLevel3_M2(void)
 
     return;
 }
+#endif
 
 #endif // (BUILDLEVEL==FCL_LEVEL3)
 
@@ -1668,6 +1674,7 @@ static inline void buildLevel46_M1(void)
 }
 
 // build level 4/6 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel46_M2)
 
 static inline void buildLevel46_M2(void)
@@ -1852,6 +1859,7 @@ static inline void buildLevel46_M2(void)
 
     return;
  }
+#endif
 #endif // ( (BUILDLEVEL==FCL_LEVEL4) || (BUILDLEVEL == FCL_LEVEL6) )
 
 //
@@ -2052,6 +2060,7 @@ static inline void buildLevel5_M1(void)
 }
 
 // build level 5 subroutine for motor_2
+#if ENABLE_MOTOR2
 #pragma FUNC_ALWAYS_INLINE(buildLevel5_M2)
 
 static inline void buildLevel5_M2(void)
@@ -2227,6 +2236,7 @@ static inline void buildLevel5_M2(void)
 
     return;
 }
+#endif
 #endif // (BUILDLEVEL==FCL_LEVEL5)
 
 // ****************************************************************************
