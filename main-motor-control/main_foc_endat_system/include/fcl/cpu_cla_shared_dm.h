@@ -36,7 +36,7 @@
 #include "fcl_pi.h"
 #include "RAMP_GEN_CLA.h"
 
-#include "dual_axis_servo_drive_user.h"
+#include "motor_drive_user.h"
 
 #ifdef __cplusplus
 extern "C" {

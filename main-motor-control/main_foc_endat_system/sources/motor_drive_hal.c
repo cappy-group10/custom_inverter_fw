@@ -1,6 +1,6 @@
 //#############################################################################
 //
-// FILE:    dual_axis_servo_drive_hal.c
+// FILE:    motor_drive_hal.c
 //
 // TITLE:   define initialize the handle functions of device
 //
@@ -44,10 +44,10 @@
 //
 // includes
 //
-#include "dual_axis_servo_drive_settings.h"
-#include "dual_axis_servo_drive_hal.h"
+#include "motor_drive_settings.h"
+#include "motor_drive_hal.h"
 
-#include "dual_axis_servo_drive.h"
+#include "motor_drive.h"
 
 #include "stdbool.h"
 #include "stdint.h"
@@ -74,7 +74,6 @@ extern uint32_t Cla1ConstLoadSize;
 // interrupt routines for CPU
 //
 extern __interrupt void motor1ControlISR(void);
-extern __interrupt void motor2ControlISR(void);
 
 //
 // tasks 1-4 are owned by the FCL for motor 1
@@ -110,13 +109,6 @@ void HAL_enableInterrupts(HAL_MTR_Handle handle)
         // Enable PWM1INT in PIE group 3
         //
         Interrupt_enable(M1_INT_PWM);
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
-        //
-        // Enable PWM4INT in PIE group 3
-        //
-        Interrupt_enable(M2_INT_PWM);        // Enable PWM1INT in PIE group 3
     }
 
     //
@@ -739,16 +731,6 @@ void HAL_setupInterrupts(HAL_MTR_Handle handle)
                                ADC_INT_NUMBER1, M1_IW_ADC_SOC_NUM);
         ADC_enableContinuousMode(M1_IW_ADC_BASE, ADC_INT_NUMBER1);
         ADC_enableInterrupt(M1_IW_ADC_BASE, ADC_INT_NUMBER1);
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
-        Interrupt_register(M2_INT_PWM, &motor2ControlISR);
-
-        // Enable AdcA-ADCINT1- to help verify EoC before result data read
-        ADC_setInterruptSource(M2_IW_ADC_BASE,
-                               ADC_INT_NUMBER2, M2_IW_ADC_SOC_NUM);
-        ADC_enableContinuousMode(M2_IW_ADC_BASE, ADC_INT_NUMBER2);
-        ADC_enableInterrupt(M2_IW_ADC_BASE, ADC_INT_NUMBER2);
     }
 
     return;

@@ -1,6 +1,6 @@
 //#############################################################################
 //
-// FILE:    dual_axis_servo_drive_user.h
+// FILE:    motor_drive_user.h
 //
 // TITLE:   motor parameters definition
 //

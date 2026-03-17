@@ -1,6 +1,6 @@
 //#############################################################################
 //
-// FILE:    dual_axis_servo_drive_settings.h
+// FILE:    motor_drive_settings.h
 //
 // TITLE:   User settings
 //

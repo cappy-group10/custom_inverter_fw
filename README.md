@@ -51,9 +51,9 @@ custom_inverter_fw/
 │       ├── include/            # Header files (HAL, FCL, etc.)
 │       ├── lib/                # Pre-compiled libraries
 │       ├── sources/            # Source code
-│       │   ├── dual_axis_servo_drive.c    # Main application
-│       │   ├── dual_axis_servo_drive_hal.c # Hardware abstraction
-│       │   ├── dual_axis_servo_drive_user.c # User functions
+│       │   ├── motor_drive.c    # Main application
+│       │   ├── motor_drive_hal.c # Hardware abstraction
+│       │   ├── motor_drive_user.c # User functions
 │       │   ├── endat/          # EnDat protocol implementation
 │       │   └── sfra_gui.c      # SFRA GUI interface
 │       ├── src_device/         # Device-specific drivers

@@ -1,6 +1,6 @@
 //#############################################################################
 //
-// FILE:    dual_axis_servo_drive_hal.h
+// FILE:    motor_drive_hal.h
 //
 // TITLE:   header file of device handle configuration
 //
@@ -52,7 +52,7 @@
 #include "device.h"
 #include "driverlib.h"
 
-#include "dual_axis_servo_drive_user.h"
+#include "motor_drive_user.h"
 
 //
 // Define the system frequency (MHz)

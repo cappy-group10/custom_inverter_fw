@@ -34,7 +34,7 @@
 //------------------------------------------------------------------------------
 //  Software:       Motor Control SDK
 //
-// FILE:    dual_axis_servo_drive.h
+// FILE:    motor_drive.h
 //
 // TITLE:   Include header files used in the project
 //
@@ -47,7 +47,7 @@
 #define DUAL_AXIS_SERVO_DRIVE_H
 
 //
-//! \file   solutions/common/sensored_foc/include/dual_axis_servo_drive.h
+//! \file   solutions/common/sensored_foc/include/motor_drive.h
 //! \brief  header file to be included in all labs
 //!
 //
@@ -65,7 +65,7 @@
 
 #include "device.h"
 
-#include "dual_axis_servo_drive_user.h"
+#include "motor_drive_user.h"
 
 #include "clarke.h"
 #include "park.h"

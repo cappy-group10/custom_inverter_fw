@@ -61,9 +61,9 @@
 #include "DCL_NLPID.h"
 #endif
 
-#include "dual_axis_servo_drive_settings.h"
-#include "dual_axis_servo_drive_user.h"
-#include "dual_axis_servo_drive_hal.h"
+#include "motor_drive_settings.h"
+#include "motor_drive_user.h"
+#include "motor_drive_hal.h"
 
 #ifndef PI
 #define PI 3.14159265358979

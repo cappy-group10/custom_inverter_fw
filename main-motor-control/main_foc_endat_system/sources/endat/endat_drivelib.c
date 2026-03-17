@@ -4,7 +4,7 @@
 //  Description:    EnDat encoder interface - CONVERTED TO DRIVERLIB
 //                  Original used F28x HAL/bitfield style (F28x_Project.h).
 //                  This version uses C2000 driverlib exclusively to match the
-//                  dual_axis_servo_drive project build environment.
+//                  motor_drive project build environment.
 //
 //  Target:         TMS320F28379D
 //

@@ -47,9 +47,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include "dual_axis_servo_drive_settings.h"
-#include "dual_axis_servo_drive_user.h"
-#include "dual_axis_servo_drive_hal.h"
+#include "motor_drive_settings.h"
+#include "motor_drive_user.h"
+#include "motor_drive_hal.h"
 
 #include "sfra_f32.h"
 #include "sfra_gui_scicomms_driverlib.h"

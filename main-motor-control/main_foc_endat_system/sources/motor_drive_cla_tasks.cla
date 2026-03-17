@@ -34,7 +34,7 @@
 //------------------------------------------------------------------------------
 //  Software:       Motor Control SDK
 //
-// FILE:    dual_axis_servo_drive_cla_tasks.cla
+// FILE:    motor_drive_cla_tasks.cla
 //
 // TITLE:   CLA tasks if any in the example
 //

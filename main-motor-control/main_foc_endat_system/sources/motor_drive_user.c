@@ -34,7 +34,7 @@
 //------------------------------------------------------------------------------
 //  Software:       Motor Control SDK
 //
-// FILE:    dual_axis_servo_drive_user.c
+// FILE:    motor_drive_user.c
 //
 // TITLE:   Initialize the parameter variables for motor
 //
@@ -48,10 +48,10 @@
 //
 // includes
 //
-#include "dual_axis_servo_drive_settings.h"
-#include "dual_axis_servo_drive_user.h"
-#include "dual_axis_servo_drive_hal.h"
-#include "dual_axis_servo_drive.h"
+#include "motor_drive_settings.h"
+#include "motor_drive_user.h"
+#include "motor_drive_hal.h"
+#include "motor_drive.h"
 
 #include "sfra_settings.h"
 

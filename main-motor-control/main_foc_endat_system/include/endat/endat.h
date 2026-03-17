@@ -37,6 +37,7 @@ extern void     EnDat_initDelayComp(void);
 extern uint16_t CheckCRC(uint16_t expectcrc5, uint16_t receivecrc5);
 
 extern void     endat21_readPosition(void);
+extern void     endat21_runCommandSet(void);
 extern void     endat21_schedulePositionRead(void);
 extern void     endat21_servicePositionRead(void);
 extern bool     endat21_getPositionFeedback(float32_t *mechThetaPu,

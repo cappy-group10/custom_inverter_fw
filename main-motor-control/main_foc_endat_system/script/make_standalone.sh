@@ -58,17 +58,17 @@ echo "--- Source files ---"
 copy_file "sources/dlog_4ch_f.c" \
   "$SDK_ROOT/libraries/utilities/datalog/source/dlog_4ch_f.c"
 
-copy_file "sources/dual_axis_servo_drive.c" \
-  "$SDK_ROOT/solutions/common/sensored_foc/source/dual_axis_servo_drive.c"
+copy_file "sources/motor_drive.c" \
+  "$SDK_ROOT/solutions/common/sensored_foc/source/motor_drive.c"
 
-copy_file "sources/dual_axis_servo_drive_cla_tasks.cla" \
-  "$SDK_ROOT/solutions/common/sensored_foc/source/dual_axis_servo_drive_cla_tasks.cla"
+copy_file "sources/motor_drive_cla_tasks.cla" \
+  "$SDK_ROOT/solutions/common/sensored_foc/source/motor_drive_cla_tasks.cla"
 
-copy_file "sources/dual_axis_servo_drive_hal.c" \
-  "$SDK_ROOT/solutions/boostxl_3phganinv/f2837x/source/dual_axis_servo_drive_hal.c"
+copy_file "sources/motor_drive_hal.c" \
+  "$SDK_ROOT/solutions/boostxl_3phganinv/f2837x/source/motor_drive_hal.c"
 
-copy_file "sources/dual_axis_servo_drive_user.c" \
-  "$SDK_ROOT/solutions/common/sensored_foc/source/dual_axis_servo_drive_user.c"
+copy_file "sources/motor_drive_user.c" \
+  "$SDK_ROOT/solutions/common/sensored_foc/source/motor_drive_user.c"
 
 copy_file "sources/fcl_cla_code_dm.cla" \
   "$SDK_ROOT/libraries/fcl/source/fcl_cla_code_dm.cla"
@@ -127,12 +127,12 @@ copy_file "lib/sfra.lib" \
 # ── 6. Debug graph/vars files ─────────────────────────────────────────────────
 echo ""
 echo "--- Debug graph files ---"
-copy_file "debug/dual_axis_servo_drive_graph1.graphProp" \
-  "$SDK_ROOT/solutions/common/sensored_foc/debug/dual_axis_servo_drive_graph1.graphProp"
-copy_file "debug/dual_axis_servo_drive_graph2.graphProp" \
-  "$SDK_ROOT/solutions/common/sensored_foc/debug/dual_axis_servo_drive_graph2.graphProp"
-copy_file "debug/dual_axis_servo_drive_vars.txt" \
-  "$SDK_ROOT/solutions/common/sensored_foc/debug/dual_axis_servo_drive_vars.txt"
+copy_file "debug/motor_drive_graph1.graphProp" \
+  "$SDK_ROOT/solutions/common/sensored_foc/debug/motor_drive_graph1.graphProp"
+copy_file "debug/motor_drive_graph2.graphProp" \
+  "$SDK_ROOT/solutions/common/sensored_foc/debug/motor_drive_graph2.graphProp"
+copy_file "debug/motor_drive_vars.txt" \
+  "$SDK_ROOT/solutions/common/sensored_foc/debug/motor_drive_vars.txt"
 
 # ── 7. Include directories ────────────────────────────────────────────────────
 echo ""
