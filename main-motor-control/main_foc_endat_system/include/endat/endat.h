@@ -15,6 +15,8 @@
 #ifndef ENDAT_H
 #define ENDAT_H
 
+#include <stdbool.h>
+
 #include "PM_endat22_Include.h"
 
 // Encoder type: 22 = EnDat 2.2, 21 = EnDat 2.1
@@ -35,8 +37,16 @@ extern void     EnDat_initDelayComp(void);
 extern uint16_t CheckCRC(uint16_t expectcrc5, uint16_t receivecrc5);
 
 extern void     endat21_readPosition(void);
+extern void     endat21_schedulePositionRead(void);
+extern void     endat21_servicePositionRead(void);
+extern bool     endat21_getPositionFeedback(float32_t *mechThetaPu,
+                                            float32_t *elecThetaPu,
+                                            uint32_t *rawPosition,
+                                            uint16_t polePairs);
 extern void     endat22_readPositionWithAddlData(void);
 extern void     endat22_setupAddlData(void);
+
+extern volatile uint32_t gEndatCrcFailCount;
 
 // ISR — declared __interrupt for driverlib PIE vector table registration
 // (registered via Interrupt_register(INT_SPIB_RX, &spiRxFifoIsr) in EnDat_Init)
