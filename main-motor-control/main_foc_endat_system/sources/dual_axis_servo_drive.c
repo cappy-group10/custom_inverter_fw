@@ -92,6 +92,8 @@ __interrupt void motor2ControlISR(void);
 static inline void getFCLTime(MOTOR_Num_e motorNum);
 #endif
 
+static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+
 //
 // SFRA utility functions
 //
@@ -221,6 +223,7 @@ bool flagSyncRun = false;
 
 volatile uint32_t endatPosRaw = 0;   // raw position word from EnDat encoder
 volatile uint16_t endatInitDone = 0; // flag: 1 = init succeeded
+volatile uint32_t endatCrcFailCount = 0;
 
 //
 // These are defined by the linker file
@@ -606,14 +609,10 @@ void B1(void) // Toggle GPIO-00
 void B2(void) // SPARE
 //----------------------------------------
 {
-    // EnDat position readback test (runs every other 50us A-task cycle)
+    // EnDat service loop runs in B-task (100us) to avoid blocking ISR cycles.
+    // At ENDAT_RUNTIME_FREQ_DIVIDER = 6, the line runs near 8.33 MHz.
     if(endatInitDone)
     {
-        // endat22Data.dataReady = 0;   // clear flag before starting
-        // PM_endat22_setupCommand(
-        //     ENCODER_SEND_POSITION_VALUES_WITH_ADDITIONAL_DATA, 0, 0, 2);
-        // PM_endat22_startOperation(); // fires SPI, returns immediately
-        // // spiRxFifoIsr will set dataReady=1 asynchronously
         endat21_readPosition();
     }
     //-----------------
@@ -686,6 +685,32 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
+static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
+{
+    MOTOR_Vars_t *pMotor = &motorVars[motorNum];
+
+    if(endatInitDone)
+    {
+        float32_t mechThetaPu = 0.0F;
+        float32_t elecThetaPu = 0.0F;
+        uint32_t rawPosition = 0U;
+
+        if(endat21_getPositionFeedback(&mechThetaPu, &elecThetaPu, &rawPosition,
+                                       pMotor->ptrFCL->qep.PolePairs))
+        {
+            pMotor->posMechTheta = mechThetaPu;
+            pMotor->posElecTheta = elecThetaPu;
+            pMotor->speed.ElecTheta = pMotor->posElecTheta;
+            endatPosRaw = rawPosition;
+            return;
+        }
+
+    }
+
+    // EnDat-only mode: keep previous valid position feedback when the latest
+    // sample is not valid yet (for example CRC failure or no fresh frame).
+}
+
 //****************************************************************************
 // INCRBUILD 1
 //****************************************************************************
@@ -738,7 +763,9 @@ static inline void buildLevel1_M1(void)
 // -----------------------------------------------------------------------------
 // Position encoder suite module
 // -----------------------------------------------------------------------------
+#if(POSITION_ENCODER == QEP_POS_ENCODER)
     FCL_runQEPWrap_M1(); // to wrap up the CLA functions in library
+#endif
 
 // ----------------------------------------------------------------------------
 //  Measure DC Bus voltage
@@ -811,7 +838,9 @@ static inline void buildLevel1_M2(void)
 // -----------------------------------------------------------------------------
 // Position encoder suite module
 // -----------------------------------------------------------------------------
+#if(POSITION_ENCODER == QEP_POS_ENCODER)
     FCL_runQEPWrap_M2(); // to wrap up the CLA functions in library
+#endif
 
 // ----------------------------------------------------------------------------
 //  Measure DC Bus voltage
@@ -955,16 +984,16 @@ static inline void buildLevel2_M1(void)
 // ----------------------------------------------------------------------------
 // Position encoder suite module
 // ----------------------------------------------------------------------------
+#if(POSITION_ENCODER == QEP_POS_ENCODER)
     FCL_runQEPWrap_M1();
+#endif
 
     // Position Sensing is performed in CLA
-    motorVars[0].posElecTheta = motorVars[0].ptrFCL->qep.ElecTheta;
-    motorVars[0].posMechTheta = motorVars[0].ptrFCL->qep.MechTheta;
+    updateMotorPositionFeedback(MTR_1);
 
 // ----------------------------------------------------------------------------
 // Connect inputs of the SPEED_FR module and call the speed calculation module
 // ----------------------------------------------------------------------------
-    motorVars[0].speed.ElecTheta = motorVars[0].posElecTheta;
     runSpeedFR(&motorVars[0].speed);
 
 // ----------------------------------------------------------------------------
@@ -1089,16 +1118,16 @@ static inline void buildLevel2_M2(void)
 // ----------------------------------------------------------------------------
 // Position encoder suite module
 // ----------------------------------------------------------------------------
+#if(POSITION_ENCODER == QEP_POS_ENCODER)
     FCL_runQEPWrap_M2();
+#endif
 
     // Position Sensing is performed in CLA
-    motorVars[1].posElecTheta = motorVars[1].ptrFCL->qep.ElecTheta;
-    motorVars[1].posMechTheta = motorVars[1].ptrFCL->qep.MechTheta;
+    updateMotorPositionFeedback(MTR_2);
 
 // ----------------------------------------------------------------------------
 // Connect inputs of the SPEED_FR module and call the speed calculation module
 // ----------------------------------------------------------------------------
-    motorVars[1].speed.ElecTheta = motorVars[1].posElecTheta;
     runSpeedFR(&motorVars[1].speed);
 
 // ----------------------------------------------------------------------------
@@ -1243,8 +1272,7 @@ static inline void buildLevel3_M1(void)
     motorVars[0].ptrFCL->rg.Freq = motorVars[0].rc.SetpointValue;
     fclRampGen((RAMPGEN *)&motorVars[0].ptrFCL->rg);
 
-    motorVars[0].posElecTheta = motorVars[0].ptrFCL->qep.ElecTheta;
-    motorVars[0].speed.ElecTheta = motorVars[0].posElecTheta;
+    updateMotorPositionFeedback(MTR_1);
 
     runSpeedFR(&motorVars[0].speed);
 
@@ -1368,8 +1396,7 @@ static inline void buildLevel3_M2(void)
     motorVars[1].ptrFCL->rg.Freq = motorVars[1].rc.SetpointValue;
     fclRampGen((RAMPGEN *)&motorVars[1].ptrFCL->rg);
 
-    motorVars[1].posElecTheta = motorVars[1].ptrFCL->qep.ElecTheta;
-    motorVars[1].speed.ElecTheta = motorVars[1].posElecTheta;
+    updateMotorPositionFeedback(MTR_2);
 
     runSpeedFR(&motorVars[1].speed);
 
@@ -1514,9 +1541,7 @@ static inline void buildLevel46_M1(void)
 // -----------------------------------------------------------------------------
 //  Connect inputs of the SPEED_FR module and call the speed calculation module
 // -----------------------------------------------------------------------------
-    motorVars[0].posElecTheta = motorVars[0].ptrFCL->qep.ElecTheta;
-    motorVars[0].posMechTheta = motorVars[0].ptrFCL->qep.MechTheta;
-    motorVars[0].speed.ElecTheta = motorVars[0].posElecTheta;
+    updateMotorPositionFeedback(MTR_1);
     runSpeedFR(&motorVars[0].speed);
 
 #if((BUILDLEVEL == FCL_LEVEL6) && (SFRA_MOTOR == MOTOR_1))
@@ -1703,9 +1728,7 @@ static inline void buildLevel46_M2(void)
 // -----------------------------------------------------------------------------
 //  Connect inputs of the SPEED_FR module and call the speed calculation module
 // -----------------------------------------------------------------------------
-    motorVars[1].posElecTheta = motorVars[1].ptrFCL->qep.ElecTheta;
-    motorVars[1].posMechTheta = motorVars[1].ptrFCL->qep.MechTheta;
-    motorVars[1].speed.ElecTheta = motorVars[1].posElecTheta;
+    updateMotorPositionFeedback(MTR_2);
     runSpeedFR(&motorVars[1].speed);
 
 #if((BUILDLEVEL == FCL_LEVEL6)  && (SFRA_MOTOR == MOTOR_2))
@@ -1901,9 +1924,7 @@ static inline void buildLevel5_M1(void)
 // -----------------------------------------------------------------------------
 //   Connect inputs of the SPEED_FR module and call the speed calculation module
 // -----------------------------------------------------------------------------
-    motorVars[0].posElecTheta = motorVars[0].ptrFCL->qep.ElecTheta;
-    motorVars[0].posMechTheta = motorVars[0].ptrFCL->qep.MechTheta;
-    motorVars[0].speed.ElecTheta = motorVars[0].posElecTheta;
+    updateMotorPositionFeedback(MTR_1);
     runSpeedFR(&motorVars[0].speed);
 
 // -----------------------------------------------------------------------------
@@ -2079,9 +2100,7 @@ static inline void buildLevel5_M2(void)
 // -----------------------------------------------------------------------------
 //  Connect inputs of the SPEED_FR module and call the speed calculation module
 // -----------------------------------------------------------------------------
-    motorVars[1].posElecTheta = motorVars[1].ptrFCL->qep.ElecTheta;
-    motorVars[1].posMechTheta = motorVars[1].ptrFCL->qep.MechTheta;
-    motorVars[1].speed.ElecTheta = motorVars[1].posElecTheta;
+    updateMotorPositionFeedback(MTR_2);
     runSpeedFR(&motorVars[1].speed);
 
 // -----------------------------------------------------------------------------
