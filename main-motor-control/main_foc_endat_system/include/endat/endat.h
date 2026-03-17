@@ -48,8 +48,7 @@ extern void     endat22_setupAddlData(void);
 
 extern volatile uint32_t gEndatCrcFailCount;
 
-// ISR — declared __interrupt for driverlib PIE vector table registration
-// (registered via Interrupt_register(INT_SPIB_RX, &spiRxFifoIsr) in EnDat_Init)
+// ISR — declared __interrupt for PIE vector table registration in EnDat_Init
 extern __interrupt void spiRxFifoIsr(void);
 
 #endif // ENDAT_H

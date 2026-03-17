@@ -22,6 +22,7 @@
 
 #include "F28x_Project.h"     // Device Headerfile and Examples Include File
 #include "endat.h"
+#include <math.h>
 
 uint16_t endat22CRCtable[SIZEOF_ENDAT_CRCTABLE];	// Declare CRC table for EnDat CRC calculations
 
@@ -29,6 +30,42 @@ ENDAT_DATA_STRUCT endat22Data;		//PM EnDat22 data structure
 
 uint16_t crc5_result;	//variable for calculated crc result checking
 uint16_t retval1;		//used for function return val storage and checks
+
+volatile uint32_t gEndatCrcFailCount = 0U;
+
+static volatile uint32_t gEndatRawPosition = 0U;
+static volatile float32_t gEndatMechThetaPu = 0.0F;
+static volatile float32_t gEndatElecThetaPu = 0.0F;
+static volatile uint16_t gEndatDataValid = 0U;
+static volatile uint16_t gEndatReadPending = 0U;
+
+static inline uint16_t endatGetType(void)
+{
+    return (ENCODER_TYPE == 22) ? ENDAT22 : ENDAT21;
+}
+
+static inline uint32_t endatGetPositionRaw(void)
+{
+    uint32_t rawPosition = ((uint32_t)endat22Data.position_hi << 16U) |
+                           (uint32_t)endat22Data.position_lo;
+
+    if(endat22Data.position_clocks < 32U)
+    {
+        const uint32_t posMask = (1UL << endat22Data.position_clocks) - 1UL;
+        rawPosition &= posMask;
+    }
+
+    return rawPosition;
+}
+
+static inline uint16_t endatValidatePositionCrc(void)
+{
+    crc5_result = PM_endat22_getCrcPos(endat22Data.position_clocks, endatGetType(),
+                                       endat22Data.position_lo, endat22Data.position_hi,
+                                       endat22Data.error1, endat22Data.error2,
+                                       endat22CRCtable);
+    return CheckCRC(crc5_result, endat22Data.data_crc);
+}
 
 
 // Function to initialize EnDat operation
@@ -232,7 +269,7 @@ void error(void) {
 	for (;;);
 }
 
-interrupt void spiRxFifoIsr(void)
+__interrupt void spiRxFifoIsr(void)
 {
 	uint16_t i;
     for (i=0;i<=endat22Data.fifo_level;i++){endat22Data.rdata[i]= endat22Data.spi->SPIRXBUF;}
@@ -387,15 +424,85 @@ void endat21_readPosition(void)
 	while (endat22Data.dataReady != 1) {}
 	retval1 = PM_endat22_receiveData(ENCODER_SEND_POSITION_VALUES, 0);
 
-	// CRC check for Position Data
-	crc5_result =  PM_endat22_getCrcPos(endat22Data.position_clocks, ENDAT21, endat22Data.position_lo,
-					endat22Data.position_hi, endat22Data.error1, endat22Data.error2, endat22CRCtable);
-
-	if (!CheckCRC(crc5_result,endat22Data.data_crc))
+	if(!endatValidatePositionCrc())
 	{
-		ESTOP0;
+		gEndatCrcFailCount++;
+		return;
 	}
+
+	gEndatRawPosition = endatGetPositionRaw();
+
+	if(endat22Data.position_clocks != 0U)
+	{
+		const float32_t maxCount = (endat22Data.position_clocks >= 32U) ?
+				4294967296.0F : (float32_t)(1UL << endat22Data.position_clocks);
+		gEndatMechThetaPu = (float32_t)gEndatRawPosition / maxCount;
+		gEndatDataValid = 1U;
+	}
+
 	DELAY_US(200L); 	//Delay 200us
+}
+
+void endat21_schedulePositionRead(void)
+{
+	if(gEndatReadPending != 0U)
+	{
+		return;
+	}
+
+	endat22Data.dataReady = 0U;
+	retval1 = PM_endat22_setupCommand(ENCODER_SEND_POSITION_VALUES, 0, 0, 0);
+	PM_endat22_startOperation();
+	gEndatReadPending = 1U;
+}
+
+void endat21_servicePositionRead(void)
+{
+	if((gEndatReadPending == 0U) || (endat22Data.dataReady != 1U))
+	{
+		return;
+	}
+
+	retval1 = PM_endat22_receiveData(ENCODER_SEND_POSITION_VALUES, 0);
+
+	if(!endatValidatePositionCrc())
+	{
+		gEndatCrcFailCount++;
+		gEndatReadPending = 0U;
+		return;
+	}
+
+	gEndatRawPosition = endatGetPositionRaw();
+
+	if(endat22Data.position_clocks != 0U)
+	{
+		const float32_t maxCount = (endat22Data.position_clocks >= 32U) ?
+				4294967296.0F : (float32_t)(1UL << endat22Data.position_clocks);
+		gEndatMechThetaPu = (float32_t)gEndatRawPosition / maxCount;
+		gEndatDataValid = 1U;
+	}
+
+	gEndatReadPending = 0U;
+}
+
+bool endat21_getPositionFeedback(float32_t *mechThetaPu,
+							 float32_t *elecThetaPu,
+							 uint32_t *rawPosition,
+							 uint16_t polePairs)
+{
+	if((gEndatDataValid == 0U) || (endat22Data.position_clocks == 0U))
+	{
+		return false;
+	}
+
+	*mechThetaPu = gEndatMechThetaPu;
+	*rawPosition = gEndatRawPosition;
+
+	gEndatElecThetaPu = gEndatMechThetaPu * (float32_t)polePairs;
+	gEndatElecThetaPu = gEndatElecThetaPu - floorf(gEndatElecThetaPu);
+	*elecThetaPu = gEndatElecThetaPu;
+
+	return true;
 }
 //***************************************************************************
 // End of file
