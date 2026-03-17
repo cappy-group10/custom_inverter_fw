@@ -170,12 +170,16 @@ void EnDat_Init(void)
     PM_endat22_setFreq(ENDAT_INIT_FREQ_DIVIDER);
 
     // ----- Encoder Receive Reset (command ERR) x2 -----
+    EPWM_clearTripZoneFlag(EPWM4_BASE, EPWM_TZ_FLAG_OST | EPWM_TZ_INTERRUPT);
+
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(ENCODER_RECEIVE_RESET, 0xAA, 0x2222, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
     retval1 = PM_endat22_receiveData(ENCODER_RECEIVE_RESET, 0);
     DEVICE_DELAY_US(1000000UL); // 1 s
 
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(ENCODER_RECEIVE_RESET, 0xAA, 0x2222, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
@@ -183,6 +187,7 @@ void EnDat_Init(void)
     DEVICE_DELAY_US(2000UL);
 
     // ----- Select Memory Area: encoder manufacturer parameters (MRS=0xA1) -----
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(SELECTION_OF_MEMORY_AREA, 0xA1, 0x5555, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
@@ -195,6 +200,7 @@ void EnDat_Init(void)
     DEVICE_DELAY_US(200UL);
 
     // ----- Read position clock count (address 0xD) -----
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(ENCODER_SEND_PARAMETER, 0xD, 0xAAAA, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
@@ -225,13 +231,12 @@ static void Endat_setup_GPIO(void)
     // Confirmed from pin_map.h: GPIO_7_EPWM4B
     GPIO_setPinConfig(GPIO_7_EPWM4B);
 
-    // GPIO9 -> EnDat TxEN.
-    // The original HAL set GPIO9 mux=3 but pin_map.h has no SPIB/peripheral
-    // entry at mux=3 for GPIO9 on this device — it is a plain GPIO output.
-    // Drive it high to assert the RS-485 transmit enable on the EnDat interface.
-    GPIO_setPinConfig(GPIO_9_GPIO9);
-    GPIO_setDirectionMode(9, GPIO_DIR_MODE_OUT);
-    GPIO_writePin(9, 1);
+    // GPIO9 -> EnDat TxEN through OUTPUTXBAR6.
+    // The original HAL used GPAMUX1.GPIO9 = 3. On F2837xD that maps to
+    // OUTPUTXBAR6, which is driven inside PM_endat22_setupPeriph().
+    // Configuring this pin as plain GPIO keeps TxEN static and can block
+    // bidirectional EnDat transfers.
+    GPIO_setPinConfig(GPIO_9_OUTPUTXBAR6);
 
     // GPIO63 -> SPISIMOB
     // Confirmed from pin_map.h: GPIO_63_SPISIMOB
@@ -311,6 +316,7 @@ void EnDat_initDelayComp(void)
 {
     uint16_t delay1, delay2;
 
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(ENCODER_SEND_POSITION_VALUES, 0, 0, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
@@ -325,6 +331,7 @@ void EnDat_initDelayComp(void)
     DEVICE_DELAY_US(200UL);
     delay1 = PM_endat22_getDelayCompVal();
 
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(ENCODER_SEND_POSITION_VALUES, 0, 0, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
@@ -379,6 +386,7 @@ uint16_t CheckCRC(uint16_t expectcrc5, uint16_t receivecrc5)
 // ---------------------------------------------------------------------------
 void endat22_setupAddlData(void)
 {
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(
         ENCODER_SEND_POSITION_VALUES_AND_SELECTION_OF_THE_MEMORY_AREA, 0xA1, 0, 0);
     PM_endat22_startOperation();
@@ -392,6 +400,7 @@ void endat22_setupAddlData(void)
     if (!CheckCRC(crc5_result, endat22Data.data_crc)) { asm(" ESTOP0"); }
     DEVICE_DELAY_US(200UL);
 
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(
         ENCODER_SEND_POSITION_VALUES_AND_SEND_PARAMETER, 0xD, 0, 0);
     PM_endat22_startOperation();
@@ -405,6 +414,7 @@ void endat22_setupAddlData(void)
     if (!CheckCRC(crc5_result, endat22Data.data_crc)) { asm(" ESTOP0"); }
     DEVICE_DELAY_US(200UL);
 
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(
         ENCODER_SEND_POSITION_VALUES_AND_SELECTION_OF_THE_MEMORY_AREA, 0x45, 0, 0);
     PM_endat22_startOperation();
@@ -418,6 +428,7 @@ void endat22_setupAddlData(void)
     if (!CheckCRC(crc5_result, endat22Data.data_crc)) { asm(" ESTOP0"); }
     DEVICE_DELAY_US(200UL);
 
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(
         ENCODER_SEND_POSITION_VALUES_AND_SELECTION_OF_THE_MEMORY_AREA, 0x59, 0, 1);
     PM_endat22_startOperation();
@@ -437,6 +448,7 @@ void endat22_setupAddlData(void)
 // ---------------------------------------------------------------------------
 void endat22_readPositionWithAddlData(void)
 {
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(
         ENCODER_SEND_POSITION_VALUES_WITH_ADDITIONAL_DATA, 0, 0, 2);
     PM_endat22_startOperation();
@@ -466,6 +478,7 @@ void endat22_readPositionWithAddlData(void)
 // ---------------------------------------------------------------------------
 void endat21_readPosition(void)
 {
+    endat22Data.dataReady = 0U;
     retval1 = PM_endat22_setupCommand(ENCODER_SEND_POSITION_VALUES, 0, 0, 0);
     PM_endat22_startOperation();
     while (endat22Data.dataReady != 1) {}
