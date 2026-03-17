@@ -69,7 +69,6 @@
 #ifdef _FLASH
 #ifndef __cplusplus
 #pragma CODE_SECTION(motor1ControlISR, ".TI.ramfunc");
-#pragma CODE_SECTION(motor2ControlISR, ".TI.ramfunc");
 #endif
 
 #ifdef __cplusplus
@@ -81,9 +80,7 @@
 //  Prototype statements for Local Functions
 //
 //#pragma INTERRUPT (motor1ControlISR, HPI)
-//#pragma INTERRUPT (motor2ControlISR, HPI)
 __interrupt void motor1ControlISR(void);
-__interrupt void motor2ControlISR(void);
 
 //
 // Motor drive utility functions
@@ -1616,13 +1613,6 @@ __interrupt void motor1ControlISR(void)
 } // motor1ControlISR Ends Here
 
 
-#pragma CODE_ALIGN(motor2ControlISR, 2)
-//  motor2ControlISR()
-__interrupt void motor2ControlISR(void)
-{
-    // motor 2 removed from control path; keep symbol for HAL linkage.
-    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP3);
-} // motor2ControlISR Ends Here
 
 //
 // POSITION LOOP UTILITY FUNCTIONS
