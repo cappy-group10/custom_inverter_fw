@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>PM_endat22_init</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name>
+			<triggers>full,incremental,</triggers>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>com.ti.ccstudio.core.ccsNature</nature>
+		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
+		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
+	</natures>
+	<variableList>
+		<variable>
+			<name>INSTALLROOT_F2837XD1</name>
+			<value>$%7BPARENT-7-ORIGINAL_PROJECT_ROOT%7D/controlSUITE/device_support/F2837xD/v150</value>
+		</variable>
+		<variable>
+			<name>ORIGINAL_PROJECT_ROOT</name>
+			<value>file:/Users/danialnoorizadeh/ti/controlSUITE/development_kits/BOOSTXL_POSMGR/v01_01_00_00/endat22-F28379DLpad-S2/examples/PM_endat22_BasicPosAcc_DelComp</value>
+		</variable>
+		<variable>
+			<name>PM_ENDAT_LIB</name>
+			<value>$%7BPARENT-7-ORIGINAL_PROJECT_ROOT%7D/controlSUITE/libs/app_libs/position_manager/v01_02_00_00/endat22</value>
+		</variable>
+	</variableList>
+</projectDescription>
