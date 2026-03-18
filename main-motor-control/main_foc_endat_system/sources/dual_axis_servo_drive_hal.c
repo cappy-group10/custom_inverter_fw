@@ -192,6 +192,129 @@ HAL_Handle HAL_init(void *pMemory, const size_t numBytes)
 } // end of HAL_init() function
 
 //
+
+// HAL_fixPWMPinSwap()
+
+//
+
+// Daughter board routes:  1A 2A 3A 1B 2B 3B
+
+// Firmware expects:       1A 1B 2A 2B 3A 3B
+
+//
+
+// Strategy:
+
+//   - EPWMxA signals are already correct (GPIO0, GPIO2, GPIO4)
+
+//   - Reroute EPWMxB through Output X-BAR onto the next module's
+
+//     physical GPIO that the board wired as the "B" position:
+
+//
+
+//       EPWM1B (should be GPIO1)  → currently comes out nowhere useful
+
+//       EPWM2B (should be GPIO3)  → same
+
+//       EPWM3B (should be GPIO5)  → same
+
+//
+
+//   The board physically connects:
+
+//       GPIO1 → EPWM2A position   (wrong)
+
+//       GPIO3 → EPWM3A position   (wrong)
+
+//       GPIO5 → EPWM1B position   (wrong)
+
+//   So we reassign GPIOs 1,3,5 via Output XBAR to carry 1B,2B,3B.
+
+//
+
+void HAL_fixPWMPinSwap(void)
+
+{
+
+    EALLOW;
+ 
+    //------------------------------------------------------------------
+
+    // Step 1: Release GPIO1, GPIO3, GPIO5 from their ePWM peripheral
+
+    //         mux so Output X-BAR can drive them instead.
+
+    //         MUX value 3 = Output X-BAR on these pins (see pin mux table)
+
+    //------------------------------------------------------------------
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO1 = 3;   // GPIO1  → OUTPUTXBAR1
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO3 = 3;   // GPIO3  → OUTPUTXBAR2
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO5 = 3;   // GPIO5  → OUTPUTXBAR3
+ 
+    // Make sure they are outputs (should already be, belt-and-suspenders)
+
+    GpioCtrlRegs.GPADIR.bit.GPIO1 = 1;
+
+    GpioCtrlRegs.GPADIR.bit.GPIO3 = 1;
+
+    GpioCtrlRegs.GPADIR.bit.GPIO5 = 1;
+ 
+    //------------------------------------------------------------------
+
+    // Step 2: Configure Output X-BAR
+
+    //
+
+    //   OUTPUTXBAR1 → carry EPWM1B → out on GPIO1
+
+    //   OUTPUTXBAR2 → carry EPWM2B → out on GPIO3
+
+    //   OUTPUTXBAR3 → carry EPWM3B → out on GPIO5
+
+    //
+
+    // Each OUTPUTXBARn has a MUX0TO15CFG register.
+
+    // For EPWMxB signals (from F2837xD Output X-BAR mux table):
+
+    //   EPWM1B = MUX1  (bits [3:2] of MUX0TO15CFG)
+
+    //   EPWM2B = MUX3  (bits [7:6])
+
+    //   EPWM3B = MUX5  (bits [11:10])
+
+    // Value 0x1 in each mux field selects the EPWMxB source.
+
+    //------------------------------------------------------------------
+ 
+    // OUTPUTXBAR1 → EPWM1B
+
+    OutputXbarRegs.OUTPUT1MUX0TO15CFG.bit.MUX1  = 1;   // select EPWM1B
+
+    OutputXbarRegs.OUTPUT1MUXENABLE.bit.MUX1     = 1;   // enable it
+ 
+    // OUTPUTXBAR2 → EPWM2B
+
+    OutputXbarRegs.OUTPUT2MUX0TO15CFG.bit.MUX3  = 1;   // select EPWM2B
+
+    OutputXbarRegs.OUTPUT2MUXENABLE.bit.MUX3     = 1;
+ 
+    // OUTPUTXBAR3 → EPWM3B
+
+    OutputXbarRegs.OUTPUT3MUX0TO15CFG.bit.MUX5  = 1;   // select EPWM3B
+
+    OutputXbarRegs.OUTPUT3MUXENABLE.bit.MUX5     = 1;
+ 
+    EDIS;
+
+}
+ 
+
+//
 // Initializes the hardware abstraction layer (HAL) object for motors
 //
 HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
@@ -279,6 +402,10 @@ void HAL_setMotorParams(HAL_MTR_Handle handle)
     // setup the PWMs
     //
     HAL_setupMotorPWMs(handle);
+
+    #ifdef FIX_EPWM
+    HAL_fixPWMPinSwap();
+    #endif
 
     //
     // setup the CMPSS

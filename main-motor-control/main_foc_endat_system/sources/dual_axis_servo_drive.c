@@ -393,6 +393,7 @@ void main(void)
     runOffsetsCalculation(&motorVars[0]);
 
 
+    #ifndef DISABLE_ENDAT
     // EnDat encoder initialization test
     EnDat_Init();
     endat21_runCommandSet();      // exercises basic EnDat 2.1 command set
@@ -402,6 +403,8 @@ void main(void)
     DELAY_US(800L);
     endatInitDone = 1;
     endat21_schedulePositionRead();
+
+    #endif
 
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
@@ -568,12 +571,14 @@ void B2(void) // SPARE
 {
     // EnDat service loop runs in B-task (100us) to avoid blocking ISR cycles.
     // At ENDAT_RUNTIME_FREQ_DIVIDER = 6, the line runs near 8.33 MHz.
+    #ifndef DISABLE_ENDAT
     if(endatInitDone)
     {
         endat21_servicePositionRead();
         endat21_schedulePositionRead();
         endatCrcFailCount = gEndatCrcFailCount;
     }
+    #endif
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
     B_Task_Ptr = &B3;

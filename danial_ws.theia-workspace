@@ -1,11 +1,29 @@
 {
-  "folders": [
-    {
-      "path": "endat/PM_endat22_init"
+    "folders": [
+        {
+            "path": "endat/PM_endat22_init"
+        },
+        {
+            "path": "main-motor-control/main_foc_endat_system"
+        },
+        {
+            "path": "file:///c%3A/Users/brent/workspace_ccstheia/syscfg_lp_f2837xd"
+        }
+    ],
+    "settings": {},
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [
+            {
+                "name": "main_foc_endat_system",
+                "type": "ccs-debug",
+                "request": "launch",
+                "projectInfo": {
+                    "name": "main_foc_endat_system",
+                    "resourceId": "/main_foc_endat_system"
+                }
+            }
+        ]
     },
-    {
-      "path": "main-motor-control/main_foc_endat_system"
-    }
-  ],
-  "settings": {}
+    "configurations": []
 }

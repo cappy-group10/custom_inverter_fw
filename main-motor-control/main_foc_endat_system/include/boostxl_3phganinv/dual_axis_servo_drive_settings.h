@@ -71,6 +71,17 @@ typedef float _iq;
 #include "dlog_4ch_f.h"
 
 
+// hal.h or hal_obj.h — add these defines for Output XBAR mux values
+
+// EPWMxB Output XBAR mux selections (from F2837xD mux table, Table 3-x)
+
+#define XBAR_MUX_EPWM1B   0x0001   // MUX0,  bit 1 (ePWM1B)
+
+#define XBAR_MUX_EPWM2B   0x0004   // MUX2,  bit 1 (ePWM2B)  
+
+#define XBAR_MUX_EPWM3B   0x0010   // MUX4,  bit 1 (ePWM3B)
+
+
 //
 // List of control GND configurations - COLD or HOT
 //

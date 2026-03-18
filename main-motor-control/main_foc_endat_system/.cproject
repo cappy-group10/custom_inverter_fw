@@ -28,8 +28,8 @@
                                 <listOptionValue value="CCS_MBS_VERSION=70.0.0"/>
                                 <listOptionValue value="RUNTIME_SUPPORT_LIBRARY=libc.a"/>
                                 <listOptionValue value="OUTPUT_TYPE=executable"/>
-                                <listOptionValue value="PRODUCTS=motor_control_c2000ware_sdk_software_package:5.4.0.00;"/>
-                                <listOptionValue value="PRODUCT_MACRO_IMPORTS={&quot;motor_control_c2000ware_sdk_software_package&quot;:[&quot;${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_INCLUDE_PATH}&quot;,&quot;${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_LIBRARY_PATH}&quot;,&quot;${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_LIBRARIES}&quot;,&quot;${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_SYMBOLS}&quot;,&quot;${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_SYSCONFIG_MANIFEST}&quot;]}"/>
+                                <listOptionValue value="PRODUCTS="/>
+                                <listOptionValue value="PRODUCT_MACRO_IMPORTS={}"/>
                             </option>
                             <option id="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION.1592725060" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION" value="22.6.3.LTS" valueType="string"/>
                             <targetPlatform id="com.ti.ccstudio.buildDefinitions.C2000_22.6.exe.targetPlatformDebug.1678322477" name="Platform" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.exe.targetPlatformDebug"/>
