@@ -121,7 +121,7 @@
                         </toolChain>
                     </folderInfo>
                     <sourceEntries>
-                        <entry excluding="sources/endat/endat.c|sources/endat/endat_commands.c|include/sfra/lib|include/sfra/lib/sfra_f32_tmu_coff.lib|include/driverlib/ccs/Release|include/driverlib/ccs/Debug|src_device/F2837xD_Headers_nonBIOS_cpu1_eabi.cmd|src_driver/xbar.c|src_driver/sysctl.c|src_driver/sdfm.c|src_driver/spi.c|src_driver/sci.c|src_driver/memcfg.c|src_driver/interrupt.c|src_driver/gpio.c|src_driver/flash.c|src_driver/eqep.c|src_driver/cputimer.c|src_driver/cmpss.c|src_driver/cla.c|src_driver/adc.c|src_device/dual_axis_f2837x_flash_lnk_cpu1.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="include/sfra/lib|include/sfra/lib/sfra_f32_tmu_coff.lib|include/driverlib/ccs/Release|include/driverlib/ccs/Debug|src_device/F2837xD_Headers_nonBIOS_cpu1_eabi.cmd|src_driver/xbar.c|src_driver/sysctl.c|src_driver/sdfm.c|src_driver/spi.c|src_driver/sci.c|src_driver/memcfg.c|src_driver/interrupt.c|src_driver/gpio.c|src_driver/flash.c|src_driver/eqep.c|src_driver/cputimer.c|src_driver/cmpss.c|src_driver/cla.c|src_driver/adc.c|src_device/dual_axis_f2837x_flash_lnk_cpu1.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>
