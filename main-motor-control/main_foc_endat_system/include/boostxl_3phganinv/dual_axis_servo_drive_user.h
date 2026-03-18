@@ -53,6 +53,8 @@
 #define DISABLE_MOTOR_FAULTS
 #define DISABLE_ENDAT
 
+#define FIX_EPWM
+
 //
 // PWM, SAMPLING FREQUENCY and Current Loop Band width definitions for motor 1
 // motor 2, can be set separately

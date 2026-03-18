@@ -233,29 +233,61 @@ HAL_Handle HAL_init(void *pMemory, const size_t numBytes)
 
 //
 
-void HAL_fixPWMPinSwap(void)
+void HAL_fixPWMPinSwap(HAL_MTR_Handle handle)
 
 {
 
+    HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
+
+    uint16_t cnt;
+ 
     EALLOW;
  
     //------------------------------------------------------------------
 
-    // Step 1: Release GPIO1, GPIO3, GPIO5 from their ePWM peripheral
+    // Step 1: Tristate GPIO1, GPIO3, GPIO5 BEFORE doing anything else.
 
-    //         mux so Output X-BAR can drive them instead.
+    // Setting GPyDIR=0 (input) on these pins disables the output pad
 
-    //         MUX value 3 = Output X-BAR on these pins (see pin mux table)
+    // driver entirely, so even though EPWMxB peripheral mux is still
+
+    // active, it cannot drive current onto the pin. This eliminates
+
+    // contention without touching the deadband module at all.
 
     //------------------------------------------------------------------
 
-    GpioCtrlRegs.GPAMUX1.bit.GPIO1 = 3;   // GPIO1  → OUTPUTXBAR1
+    GpioCtrlRegs.GPADIR.bit.GPIO1 = 0;    // tristate → kills pad driver
 
-    GpioCtrlRegs.GPAMUX1.bit.GPIO3 = 3;   // GPIO3  → OUTPUTXBAR2
+    GpioCtrlRegs.GPADIR.bit.GPIO3 = 0;
 
-    GpioCtrlRegs.GPAMUX1.bit.GPIO5 = 3;   // GPIO5  → OUTPUTXBAR3
+    GpioCtrlRegs.GPADIR.bit.GPIO5 = 0;
  
-    // Make sure they are outputs (should already be, belt-and-suspenders)
+    //------------------------------------------------------------------
+
+    // Step 2: NOW safely reassign mux to Output X-BAR.
+
+    // No contention possible since pad driver is tristated above.
+
+    //------------------------------------------------------------------
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO1 = 3;   // OUTPUTXBAR1
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO3 = 3;   // OUTPUTXBAR2
+
+    GpioCtrlRegs.GPAMUX1.bit.GPIO5 = 3;   // OUTPUTXBAR3
+ 
+    //------------------------------------------------------------------
+
+    // Step 3: Re-enable as outputs AFTER mux is switched to X-BAR.
+
+    // Now only X-BAR drives these pins — ePWM peripheral mux is gone.
+
+    // The deadband module B signal is preserved internally and routed
+
+    // cleanly through X-BAR with zero pad driver conflict.
+
+    //------------------------------------------------------------------
 
     GpioCtrlRegs.GPADIR.bit.GPIO1 = 1;
 
@@ -265,53 +297,32 @@ void HAL_fixPWMPinSwap(void)
  
     //------------------------------------------------------------------
 
-    // Step 2: Configure Output X-BAR
-
-    //
-
-    //   OUTPUTXBAR1 → carry EPWM1B → out on GPIO1
-
-    //   OUTPUTXBAR2 → carry EPWM2B → out on GPIO3
-
-    //   OUTPUTXBAR3 → carry EPWM3B → out on GPIO5
-
-    //
-
-    // Each OUTPUTXBARn has a MUX0TO15CFG register.
-
-    // For EPWMxB signals (from F2837xD Output X-BAR mux table):
-
-    //   EPWM1B = MUX1  (bits [3:2] of MUX0TO15CFG)
-
-    //   EPWM2B = MUX3  (bits [7:6])
-
-    //   EPWM3B = MUX5  (bits [11:10])
-
-    // Value 0x1 in each mux field selects the EPWMxB source.
+    // Step 4: X-BAR routing — deadband B signals fully intact
 
     //------------------------------------------------------------------
  
-    // OUTPUTXBAR1 → EPWM1B
+    // OUTPUTXBAR1 → EPWM1B → GPIO1
 
-    OutputXbarRegs.OUTPUT1MUX0TO15CFG.bit.MUX1  = 1;   // select EPWM1B
+    OutputXbarRegs.OUTPUT1MUX0TO15CFG.bit.MUX1  = 1;
 
-    OutputXbarRegs.OUTPUT1MUXENABLE.bit.MUX1     = 1;   // enable it
+    OutputXbarRegs.OUTPUT1MUXENABLE.bit.MUX1     = 1;
  
-    // OUTPUTXBAR2 → EPWM2B
+    // OUTPUTXBAR2 → EPWM2B → GPIO3
 
-    OutputXbarRegs.OUTPUT2MUX0TO15CFG.bit.MUX3  = 1;   // select EPWM2B
+    OutputXbarRegs.OUTPUT2MUX0TO15CFG.bit.MUX3  = 1;
 
     OutputXbarRegs.OUTPUT2MUXENABLE.bit.MUX3     = 1;
  
-    // OUTPUTXBAR3 → EPWM3B
+    // OUTPUTXBAR3 → EPWM3B → GPIO5
 
-    OutputXbarRegs.OUTPUT3MUX0TO15CFG.bit.MUX5  = 1;   // select EPWM3B
+    OutputXbarRegs.OUTPUT3MUX0TO15CFG.bit.MUX5  = 1;
 
     OutputXbarRegs.OUTPUT3MUXENABLE.bit.MUX5     = 1;
  
     EDIS;
 
 }
+ 
  
 
 //
@@ -404,7 +415,7 @@ void HAL_setMotorParams(HAL_MTR_Handle handle)
     HAL_setupMotorPWMs(handle);
 
     #ifdef FIX_EPWM
-    HAL_fixPWMPinSwap();
+    HAL_fixPWMPinSwap(handle);
     #endif
 
     //
