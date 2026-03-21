@@ -240,32 +240,6 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
         //
         obj->qepHandle = M1_QEP_BASE;
     }
-    else if(handle == &halMtr[MTR_2])
-    {
-        //
-        // initialize SPI handle
-        //
-        obj->spiHandle = M2_SPI_BASE;
-
-        //
-        // initialize PWM handles for motor_2
-        //
-        obj->pwmHandle[0] = M2_U_PWM_BASE;
-        obj->pwmHandle[1] = M2_V_PWM_BASE;
-        obj->pwmHandle[2] = M2_W_PWM_BASE;
-
-        //
-        // initialize CMPSS handle for motor_2
-        //
-        obj->cmpssHandle[0] = M2_U_CMPSS_BASE;
-        obj->cmpssHandle[1] = M2_V_CMPSS_BASE;
-        obj->cmpssHandle[2] = M2_W_CMPSS_BASE;
-
-        //
-        // initialize QEP driver
-        //
-        obj->qepHandle = M2_QEP_BASE;
-    }
 
      return(handle);
 } // end of HAL_MTR_init() function
@@ -453,61 +427,6 @@ void HAL_setupADCs(HAL_Handle handle)
 
     // Write zero to this for now till offset ISR is run
     ADC_setPPBCalibrationOffset(M1_VDC_ADC_BASE, M1_VDC_ADC_PPB_NUM, 0);
-
-    //-------------------------------------------------------------------------
-    // For motor 2
-    //-------------------------------------------------------------------------
-    // Shunt Motor Currents (M2-Iu) @ C4
-    // SOC2 will convert pin C2, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_IU_ADC_BASE, M2_IU_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_IU_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC2
-    ADC_setupPPB(M2_IU_ADC_BASE, M2_IU_ADC_PPB_NUM, M2_IU_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_IU_ADC_BASE, M2_IU_ADC_PPB_NUM, 0);
-
-    // Shunt Motor Currents (M2-Iv) @ B4
-    // SOC2 will convert pin B2, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_IV_ADC_BASE, M2_IV_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_IV_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC2
-    ADC_setupPPB(M2_IV_ADC_BASE, M2_IV_ADC_PPB_NUM, M2_IV_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_IV_ADC_BASE, M2_IV_ADC_PPB_NUM, 0);
-
-    // Shunt Motor Currents (M2-Iw) @ A4
-    // SOC2 will convert pin A2, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_IW_ADC_BASE, M2_IW_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_IW_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC2
-    ADC_setupPPB(M2_IW_ADC_BASE, M2_IW_ADC_PPB_NUM, M2_IW_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_IW_ADC_BASE, M2_IW_ADC_PPB_NUM, 0);
-
-    // Phase Voltage (M2-Vfb-dc) @ D15
-    // SOC3 will convert pin D15, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_VDC_ADC_BASE, M2_VDC_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_VDC_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC3
-    ADC_setupPPB(M2_VDC_ADC_BASE, M2_VDC_ADC_PPB_NUM, M2_VDC_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_VDC_ADC_BASE, M2_VDC_ADC_PPB_NUM, 0);
 
     return;
 }
@@ -1237,18 +1156,7 @@ void HAL_setupMotorPWMs(HAL_MTR_Handle handle)
         EPWM_setTimeBasePeriod(obj->pwmHandle[1], halfPeriod);
         EPWM_setTimeBasePeriod(obj->pwmHandle[2], halfPeriod);
     }
-    else if(handle == &halMtr[MTR_2])
-    {
-        halfPeriod = M2_INV_PWM_TICKS/2;     // 100MHz EPWMCLK
-
-        EPWM_setPhaseShift(obj->pwmHandle[0], ((halfPeriod>>1) + 0));
-        EPWM_setPhaseShift(obj->pwmHandle[1], ((halfPeriod>>1) + 2));
-        EPWM_setPhaseShift(obj->pwmHandle[2], ((halfPeriod>>1) + 4));
-
-        EPWM_setTimeBasePeriod(obj->pwmHandle[0], halfPeriod);
-        EPWM_setTimeBasePeriod(obj->pwmHandle[1], halfPeriod);
-        EPWM_setTimeBasePeriod(obj->pwmHandle[2], halfPeriod);
-    }
+    
 
     // Setting up link from EPWM to ADC
     // EPWM1/EPWM4 - Inverter currents at sampling frequency
@@ -1325,45 +1233,7 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
         XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX00 | XBAR_MUX04 | XBAR_MUX10 |
                                        XBAR_MUX01);
     }
-    else if(handle == &halMtr[MTR_2])
-    {
-        curHi = 2048 + M2_CURRENT_SCALE(currentLimit);
-        curLo = 2048 - M2_CURRENT_SCALE(currentLimit);
-
-        tripInSet = EPWM_DC_TRIP_TRIPIN5;
-
-        //Select GPIO14 as INPUTXBAR3
-        XBAR_setInputPin(M2_XBAR_INPUT_NUM, M2_XBAR_INPUT_GPIO);
-
-        // Configure TRIP 5 to OR the High and Low trips from both
-        // comparator 5, 5, and 2, clear everything first
-        EALLOW;
-        HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP5MUX0TO15CFG) = 0;
-        HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP5MUX16TO31CFG) = 0;
-        EDIS;
-
-        // Enable Muxes for ored input of CMPSS1H and 1L, mux for Mux0x
-        //cmpss5 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX08_CMPSS5_CTRIPH_OR_L);
-
-        //cmpss5 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX08_CMPSS5_CTRIPH_OR_L);
-
-        //cmpss2 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX02_CMPSS2_CTRIPH_OR_L);
-
-        //inputxbar2 trip
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX03_INPUTXBAR2);
-
-        // Disable all the muxes first
-        XBAR_disableEPWMMux(XBAR_TRIP5, 0xFFFF);
-
-        // Enable Mux 0  OR Mux 4 to generate TRIP5
-        XBAR_enableEPWMMux(XBAR_TRIP5, XBAR_MUX08 | XBAR_MUX08 | XBAR_MUX02 |
-                                       XBAR_MUX03);
-    }
-
-
+    
     //
     // Configure TRIP for motor inverter phases
     //
@@ -1462,15 +1332,6 @@ void HAL_setupQEP(HAL_MTR_Handle handle)
 
         // Enable the unit timer, setting the frequency to 10KHz
         EQEP_enableUnitTimer(obj->qepHandle, M1_QEP_UNIT_TIMER_TICKS - 1);
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
-        EQEP_setPositionCounterConfig(obj->qepHandle,
-                                      EQEP_POSITION_RESET_MAX_POS,
-                                      ((4 * M2_ENCODER_LINES) - 1) );
-
-        // Enable the unit timer, setting the frequency to 10KHz
-        EQEP_enableUnitTimer(obj->qepHandle, M2_QEP_UNIT_TIMER_TICKS - 1);
     }
 
     // Disables the eQEP module position-compare unit

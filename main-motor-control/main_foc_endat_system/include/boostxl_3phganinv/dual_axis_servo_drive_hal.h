@@ -97,15 +97,7 @@
 #define M1_XBAR_INPUT_GPIO      24          // NC: Set up based board
 #define M1_XBAR_INPUT_NUM       XBAR_INPUT1
 #define M1_CLR_FAULT_GPIO       61
-//
-// define EN_GATE and SPI_CS pin for DRV device for Motor 2
-//
-#define M2_EN_GATE_GPIO         26          // NC: Set up based board
-#define M2_SPI_SCS_GPIO         66          // NC: Set up based board
-#define M2_nFAULT_GPIO          14          // NC: Set up based board
-#define M2_XBAR_INPUT_GPIO      14          // NC: Set up based board
-#define M2_XBAR_INPUT_NUM       XBAR_INPUT2
-#define M2_CLR_FAULT_GPIO       66
+
 //
 // define deadband delay cout for rising edge
 //
@@ -206,30 +198,6 @@ static inline void HAL_ackInt_M1(HAL_MTR_Handle handle)
     //
     Interrupt_clearACKGroup( INTERRUPT_ACK_GROUP3 |
                              INTERRUPT_ACK_GROUP11 );
-    return;
-}
-
-//! \brief     Acknowledges an interrupt so that another INT can happen again.
-//! \param[in] handle     The hardware abstraction layer (HAL) handle
-static inline void HAL_ackInt_M2(HAL_MTR_Handle handle)
-{
-    HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
-
-    EPWM_clearEventTriggerInterruptFlag(obj->pwmHandle[0]);
-
-    //
-    // clear ADCINT1 INT and ack PIE INT
-    //
-    ADC_clearInterruptStatus(M2_IW_ADC_BASE, ADC_INT_NUMBER2);
-
-    //
-    // ACK PIE for CLA INT GROUP
-    // FCL is not clearing the ACK bit for CLA group
-    // because the example might have other CLA Tasks
-    // ACK the PWM, ADC and CLA interrupts
-    //
-    Interrupt_clearACKGroup( INTERRUPT_ACK_GROUP3  |
-                             INTERRUPT_ACK_GROUP11);
     return;
 }
 
