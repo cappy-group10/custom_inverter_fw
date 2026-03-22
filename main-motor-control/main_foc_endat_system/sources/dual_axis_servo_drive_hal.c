@@ -236,9 +236,13 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
         obj->cmpssHandle[2] = M1_W_CMPSS_BASE;
 
         //
-        // initialize QEP driver
+        // initialize position-feedback hardware that is specific to QEP
         //
+#if(POSITION_ENCODER_IS_QEP)
         obj->qepHandle = M1_QEP_BASE;
+#else
+        obj->qepHandle = 0U;
+#endif
     }
 
      return(handle);
@@ -260,9 +264,11 @@ void HAL_setMotorParams(HAL_MTR_Handle handle)
     HAL_setupCMPSS(handle);
 
     //
-    // setup the eqep
+    // setup the eqep only when the selected position sensor needs it
     //
+#if(POSITION_ENCODER_IS_QEP)
     HAL_setupQEP(handle);
+#endif
 
     return;
 }

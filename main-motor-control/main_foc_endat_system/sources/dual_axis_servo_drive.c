@@ -94,6 +94,8 @@ static inline void getFCLTime(MOTOR_Num_e motorNum);
 static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
 #endif
 
+static inline ENC_Status_e getPostAlignmentEncoderState(void);
+
 //
 // SFRA utility functions
 //
@@ -661,6 +663,9 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
             pMotor->posMechTheta = mechThetaPu;
             pMotor->posElecTheta = elecThetaPu;
             pMotor->speed.ElecTheta = pMotor->posElecTheta;
+            pMotor->ptrFCL->qep.MechTheta = mechThetaPu;
+            pMotor->ptrFCL->qep.ElecTheta = elecThetaPu;
+            pMotor->ptrFCL->pangle = elecThetaPu;
             endatPosRaw = rawPosition;
             return;
         }
@@ -672,6 +677,15 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
     // sample is not valid yet (for example CRC failure or no fresh frame).
 }
 #endif
+
+static inline ENC_Status_e getPostAlignmentEncoderState(void)
+{
+#if(POSITION_ENCODER_NEEDS_INDEX)
+    return ENC_WAIT_FOR_INDEX;
+#else
+    return ENC_CALIBRATION_DONE;
+#endif
+}
 
 //****************************************************************************
 // INCRBUILD 1
@@ -801,8 +815,9 @@ static inline void buildLevel2_M1(void)
         motorVars[0].rc.TargetValue = 0;
         motorVars[0].rc.SetpointValue = 0;
 
-        // for QEP, spin the motor to find the index pulse
-        motorVars[0].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
+        // absolute encoders can proceed immediately after alignment, while
+        // incremental encoders still need the index-search state.
+        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
 
         motorVars[0].ipark.Ds = VdTesting;
         motorVars[0].ipark.Qs = VqTesting;
@@ -994,8 +1009,9 @@ static inline void buildLevel3_M1(void)
             {
                 motorVars[0].alignCntr  = 0;
 
-                // for QEP, spin the motor to find the index pulse
-                motorVars[0].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
+                // absolute encoders can proceed immediately after alignment,
+                // while incremental encoders still need the index-search state.
+                motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
             }
         }
 
@@ -1149,8 +1165,10 @@ static inline void buildLevel46_M1(void)
                 {
                     motorVars[0].alignCntr  = 0;
 
-                    // for QEP, spin the motor to find the index pulse
-                    motorVars[0].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
+                    // absolute encoders can proceed immediately after
+                    // alignment, while incremental encoders still need the
+                    // index-search state.
+                    motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
                 }
             }
         } // end else if(lsw == ENC_ALIGNMENT)
@@ -1352,8 +1370,9 @@ static inline void buildLevel5_M1(void)
             {
                 motorVars[0].alignCntr  = 0;
 
-                // for QEP, spin the motor to find the index pulse
-                motorVars[0].ptrFCL->lsw = ENC_WAIT_FOR_INDEX;
+                // absolute encoders can proceed immediately after alignment,
+                // while incremental encoders still need the index-search state.
+                motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
             }
         }
     } // end else if(lsw == ENC_ALIGNMENT)

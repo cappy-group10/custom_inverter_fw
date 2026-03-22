@@ -70,6 +70,26 @@ __interrupt void Cla1Task1(void)
 //  __mdebugstop();
 //  __meallow();
 
+    if(fclVars[0].ptrQEP == 0)
+    {
+        if(fclVars[0].lsw == ENC_ALIGNMENT)
+        {
+            fclVars[0].pangle = 0.0F;
+        }
+        else
+        {
+            fclVars[0].pangle = fclVars[0].qep.ElecTheta;
+        }
+
+#if CLA_DEBUG   // only for debugging
+        SETGPIOTEST1_LOW; // set LOW
+
+        fclVars[0].taskCount[0]++;
+#endif
+
+        return;
+    }
+
     if(fclVars[0].lsw == ENC_CALIBRATION_DONE)
     {
         //
@@ -233,6 +253,17 @@ __interrupt void Cla1Task4 ( void )
     SETGPIOTEST1_HIGH; // set LOW
 #endif
 
+    if(fclVars[0].ptrQEP == 0)
+    {
+#if CLA_DEBUG   // only for debugging
+        SETGPIOTEST1_LOW; // set LOW
+
+        fclVars[0].taskCount[3]++;
+#endif
+
+        return;
+    }
+
     if(fclVars[0].lsw != ENC_ALIGNMENT)
     {
         //
@@ -301,6 +332,26 @@ __interrupt void Cla1Task5 ( void )
 
 //  __mdebugstop();
 //  __meallow();
+    if(fclVars[1].ptrQEP == 0)
+    {
+        if(fclVars[1].lsw == ENC_ALIGNMENT)
+        {
+            fclVars[1].pangle = 0.0F;
+        }
+        else
+        {
+            fclVars[1].pangle = fclVars[1].qep.ElecTheta;
+        }
+
+#if CLA_DEBUG   // only for debugging
+        SETGPIOTEST2_LOW; // set LOW
+
+        fclVars[1].taskCount[0]++;
+#endif
+
+        return;
+    }
+
     if(fclVars[1].lsw == ENC_CALIBRATION_DONE)
     {
         //
@@ -462,6 +513,17 @@ __interrupt void Cla1Task8(void)
 #if CLA_DEBUG   // only for debugging
     SETGPIOTEST2_HIGH;      // set LOW
 #endif
+
+    if(fclVars[1].ptrQEP == 0)
+    {
+#if CLA_DEBUG   // only for debugging
+        SETGPIOTEST2_LOW;           // set LOW
+
+        fclVars[1].taskCount[3]++;
+#endif
+
+        return;
+    }
 
     if(fclVars[1].lsw != ENC_ALIGNMENT)
     {

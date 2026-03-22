@@ -104,13 +104,19 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->FCL_params.wccD  = M1_CUR_LOOP_BANDWIDTH;
         pMotor->FCL_params.wccQ  = M1_CUR_LOOP_BANDWIDTH;
 
-        // set the number of slots in the encoder
-        pMotor->ptrFCL->qep.LineEncoder = M1_ENCODER_LINES;
-        pMotor->ptrFCL->qep.MechScaler = 0.25 / pMotor->ptrFCL->qep.LineEncoder;
-
         // set the number of pole pairs of the motor
         pMotor->ptrFCL->qep.PolePairs = M1_POLES / 2;
         pMotor->ptrFCL->qep.CalibratedAngle = 0;
+
+#if(POSITION_ENCODER_IS_QEP)
+        // set the number of slots in the incremental encoder
+        pMotor->ptrFCL->qep.LineEncoder = M1_ENCODER_LINES;
+        pMotor->ptrFCL->qep.MechScaler = 0.25 / pMotor->ptrFCL->qep.LineEncoder;
+#else
+        pMotor->ptrFCL->qep.LineEncoder = 0U;
+        pMotor->ptrFCL->qep.MechScaler = 0.0F;
+        pMotor->ptrFCL->ptrQEP = 0;
+#endif
 
         // Initialize the Speed module for speed calculation from QEP/RESOLVER
         pMotor->speed.K1 = 1 / (M1_BASE_FREQ * pMotor->Ts);
@@ -168,8 +174,10 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     FCL_initPWM(pMotor,
                 obj->pwmHandle[0], obj->pwmHandle[1], obj->pwmHandle[2]);
 
-    // ensure the correct QEP base is being passed
+    // ensure the correct QEP base is passed only for incremental encoders
+#if(POSITION_ENCODER_IS_QEP)
     FCL_initQEP(pMotor, obj->qepHandle);
+#endif
 
     pMotor->ptrFCL->taskCount[0] = 0;
     pMotor->ptrFCL->taskCount[1] = 0;
