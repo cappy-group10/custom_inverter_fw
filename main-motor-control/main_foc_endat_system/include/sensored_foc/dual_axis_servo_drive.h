@@ -173,6 +173,21 @@ static inline uint16_t scaleVoltageValue(float32_t voltage, float32_t voltageSF)
     return((uint16_t)(voltage * voltageSF));
 }
 
+// ****************************************************************************
+// Position Reading Functions - EnDat
+// ****************************************************************************
+static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+
+static inline void serviceEndatPositionAcquisition(void);
+
+static inline ENC_Status_e getPostAlignmentEncoderState(void)
+{
+#if(POSITION_ENCODER_NEEDS_INDEX)
+    return ENC_WAIT_FOR_INDEX;
+#else
+    return ENC_CALIBRATION_DONE;
+#endif
+}
 
 // ****************************************************************************
 // Get FCL timing details - time stamp taken in library after PWM update

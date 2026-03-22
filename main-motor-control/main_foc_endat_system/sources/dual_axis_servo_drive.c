@@ -90,12 +90,7 @@ __interrupt void motor1ControlISR(void);
 static inline void getFCLTime(MOTOR_Num_e motorNum);
 #endif
 
-#if(BUILDLEVEL > FCL_LEVEL1)
-static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
-#endif
 
-static inline ENC_Status_e getPostAlignmentEncoderState(void);
-static inline void serviceEndatPositionAcquisition(void);
 
 //
 // SFRA utility functions
@@ -639,8 +634,7 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
-#if(BUILDLEVEL > FCL_LEVEL1)
-static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
+static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
     MOTOR_Vars_t *pMotor = &motorVars[motorNum];
 
@@ -649,6 +643,9 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
         float32_t mechThetaPu = 0.0F;
         float32_t elecThetaPu = 0.0F;
         uint32_t rawPosition = 0U;
+
+        endat21_servicePositionRead();
+        endatCrcFailCount = gEndatCrcFailCount;
 
         if(endat21_getPositionFeedback(&mechThetaPu, &elecThetaPu, &rawPosition,
                                        pMotor->ptrFCL->qep.PolePairs))
@@ -660,25 +657,15 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum)
             pMotor->ptrFCL->qep.ElecTheta = elecThetaPu;
             pMotor->ptrFCL->pangle = elecThetaPu;
             endatPosRaw = rawPosition;
-            return;
+            return true;
         }
-
-        endatCrcFailCount = gEndatCrcFailCount;
     }
 
     // EnDat-only mode: keep previous valid position feedback when the latest
     // sample is not valid yet (for example CRC failure or no fresh frame).
+    return false;
 }
-#endif
 
-static inline ENC_Status_e getPostAlignmentEncoderState(void)
-{
-#if(POSITION_ENCODER_NEEDS_INDEX)
-    return ENC_WAIT_FOR_INDEX;
-#else
-    return ENC_CALIBRATION_DONE;
-#endif
-}
 
 static inline void serviceEndatPositionAcquisition(void)
 {
@@ -688,9 +675,9 @@ static inline void serviceEndatPositionAcquisition(void)
         return;
     }
 
-    // Launch one EnDat transaction at a fixed PWM-ISR cadence. The received
-    // frame is unpacked in the SPI RX ISR so the next motor ISR sees a fresh,
-    // phase-locked position sample.
+    // Launch one EnDat transaction at a fixed PWM-ISR cadence. The SPI RX ISR
+    // only marks frame completion; decode/CRC happens at the start of the next
+    // motor ISR when updateMotorPositionFeedback() runs.
     endat21_schedulePositionRead();
     endatCrcFailCount = gEndatCrcFailCount;
 #endif
