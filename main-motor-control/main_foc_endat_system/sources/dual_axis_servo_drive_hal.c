@@ -677,13 +677,13 @@ void HAL_setupInterrupts(HAL_MTR_Handle handle)
 }
 
 //
-// Configure the independent EPWM7-based EnDat producer scheduler.
+// Configure the independent ePWM-based EnDat producer scheduler.
 // This PWM is used only as an internal time base and is intentionally not
 // pinned out on GPIO when DAC debug outputs are disabled.
 //
 static void HAL_setupEndatProducerPWM(void)
 {
-    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_EPWM7);
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_EPWM9);
 
     EPWM_disableInterrupt(ENDAT_PRODUCER_PWM_BASE);
     EPWM_disableADCTrigger(ENDAT_PRODUCER_PWM_BASE, EPWM_SOC_A);

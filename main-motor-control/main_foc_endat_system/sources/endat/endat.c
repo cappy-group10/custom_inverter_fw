@@ -49,8 +49,8 @@ __interrupt void spiRxFifoIsr(void)
 }
 
 //
-// endatProducerISR - EPWM7-driven scheduler for the independent EnDat producer.
-// Runs the non-blocking producer state machine, then clears only the EPWM7
+// endatProducerISR - ePWM-driven scheduler for the independent EnDat producer.
+// Runs the non-blocking producer state machine, then clears only the producer
 // interrupt source so the motor ISR remains independently scheduled by EPWM1.
 //
 __interrupt void endatProducerISR(void)

@@ -15,7 +15,7 @@ The EnDat stack is split into a blocking init path and a fast runtime producer:
 |---|---|---|
 | `endat_init.c` | Hardware init, GPIO/XBAR/EPWM config, power-on sequence, delay compensation | `EnDat_Init()`, `EnDat_initDelayComp()` |
 | `endat_ops.c` | Blocking reads plus the independent producer state machine and published snapshot helpers | `endat21_readPosition()`, `endat21_initProducer()`, `endat21_startProducer()`, `endat21_runProducerTick()`, `endat21_getPublishedPosition()`, `endat21_getPositionFeedback()`, `endat22_setupAddlData()`, `endat22_readPositionWithAddlData()` |
-| `endat.c` | SPI-B RX FIFO ISR plus the EPWM7-driven producer scheduler ISR | `spiRxFifoIsr()`, `endatProducerISR()` |
+| `endat.c` | SPI-B RX FIFO ISR plus the EPWM9-driven producer scheduler ISR | `spiRxFifoIsr()`, `endatProducerISR()` |
 | `endat_globals.c` | Shared variable definitions, runtime buffers, CRC and timeout counters | — |
 | `endat_utils.c` | CRC comparison helper | `CheckCRC()` |
 | `endat_commands.c` | EnDat 2.1/2.2 command set validation helpers | `endat21_runCommandSet()` |
@@ -110,7 +110,7 @@ Notes:
 
 Runtime EnDat is now a producer/consumer pipeline:
 
-- `EPWM7` drives a `40 kHz` producer ISR.
+- `EPWM9` drives a `40 kHz` producer ISR.
 - `spiRxFifoIsr()` stays lean and only captures the completed frame.
 - `Cla1Task1()` performs the PWM-edge handoff into FCL state.
 - `motor1ControlISR()` mirrors the already-published sample into CPU-side variables for speed estimation, debug, and UI.
@@ -118,7 +118,7 @@ Runtime EnDat is now a producer/consumer pipeline:
 ### Producer flow
 
 ```text
-EPWM7 interrupt:
+EPWM9 interrupt:
     endatProducerISR()
         -> endat21_runProducerTick()
              if readPending == 0:
@@ -179,7 +179,7 @@ For the current build:
 - `SAMPLING_METHOD = SINGLE_SAMPLING`
 - `ENDAT_PRODUCER_RATE_RATIO = 4`
 
-That yields a `40 kHz` EnDat producer while FCL remains `10 kHz` and PWM-synchronous. The producer therefore attempts up to four EnDat transactions per PWM period, but FCL still consumes exactly one latched position at each PWM edge.
+That yields a `40 kHz` EnDat producer on `EPWM9` while FCL remains `10 kHz` and PWM-synchronous. The producer therefore attempts up to four EnDat transactions per PWM period, but FCL still consumes exactly one latched position at each PWM edge.
 
 If `SAMPLING_METHOD` is changed to `DOUBLE_SAMPLING`, the producer will still run at `4x` the PWM carrier frequency, not `4x` the CPU ISR rate, until the scheduler constants are revisited.
 
@@ -205,7 +205,7 @@ If `SAMPLING_METHOD` is changed to `DOUBLE_SAMPLING`, the producer will still ru
 | `endat21_schedulePositionRead()` | `endat_ops.c` | No | Compatibility helper that directly arms one non-blocking read |
 | `endat21_servicePositionRead()` | `endat_ops.c` | No | Compatibility helper that services one completed read |
 | `spiRxFifoIsr()` | `endat.c` | ISR | Drains SPI-B RX FIFO and flags a completed frame |
-| `endatProducerISR()` | `endat.c` | ISR | Runs the EPWM7-driven producer tick |
+| `endatProducerISR()` | `endat.c` | ISR | Runs the EPWM9-driven producer tick |
 
 ### Private helpers (`endat_ops.c`)
 
@@ -277,12 +277,12 @@ Runtime:
 | EPWM4B | GPIO7 | SPI clock slave output |
 | TZ action | OST -> force high | Idle clock state during reset / bring-up |
 
-### EPWM7 (runtime producer scheduler)
+### EPWM9 (runtime producer scheduler)
 
 | Resource | Assignment | Notes |
 |---|---|---|
-| Peripheral | EPWM7 | Internal EnDat runtime scheduler |
-| Interrupt | PIE Group 3, INT7 | `ENDAT_PRODUCER_INT` -> `endatProducerISR()` |
+| Peripheral | EPWM9 | Internal EnDat runtime scheduler |
+| Interrupt | PIE Group 3, INT9 | `ENDAT_PRODUCER_INT` -> `endatProducerISR()` |
 | Rate | `40 kHz` | Derived from `M1_INV_PWM_TICKS / 4` in this build |
 | Phase offset | `ENDAT_PRODUCER_PHASE_TICKS` | Starts away from the EPWM1 PWM edge |
 | GPIO output | None by default | GPIO157/158 are only muxed when `DACOUT_EN` is enabled |
@@ -365,10 +365,10 @@ The fast runtime path is multi-consumer. CPU and CLA both read the same publishe
 
 The fast producer intentionally uses `ENCODER_SEND_POSITION_VALUES` only. This keeps runtime latency low and avoids pushing additional-data decode work into the published-angle path.
 
-### EPWM7 resource ownership
+### EPWM9 resource ownership
 
-This build reserves `EPWM7` for EnDat scheduling. `DACOUT_EN` is compile-time blocked because the prior DAC debug muxing reused EPWM7 outputs.
+This build reserves `EPWM9` for EnDat scheduling. `EPWM7` and `EPWM8` remain available for DAC debug muxing.
 
 ### Producer rate assumption
 
-The current implementation is tuned for the present build settings: `10 kHz` PWM, `SINGLE_SAMPLING`, and a `4x` EnDat producer ratio. If those assumptions change, re-check both the EPWM7 period macros and the expected producer-to-consumer timing.
+The current implementation is tuned for the present build settings: `10 kHz` PWM, `SINGLE_SAMPLING`, and a `4x` EnDat producer ratio. If those assumptions change, re-check both the producer-period macros and the expected producer-to-consumer timing.

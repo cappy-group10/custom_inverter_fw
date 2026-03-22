@@ -52,10 +52,6 @@
 #define ENDAT_HACK
 #define DISABLE_MOTOR_FAULTS
 
-#ifdef DACOUT_EN
-#error  Critical: DACOUT_EN conflicts with the EPWM7-based EnDat producer scheduler
-#endif
-
 //
 // PWM, SAMPLING FREQUENCY and Current Loop Band width definitions for motor 1
 // motor 2, can be set separately
@@ -157,8 +153,8 @@
 #define M1_QEP_UNIT_TIMER_TICKS  (SYSTEM_FREQUENCY/(2*M1_PWM_FREQUENCY) * 1000)
 
 #define ENDAT_POSITION_UPDATE_FREQ      (ENDAT_PRODUCER_RATE_RATIO * M1_PWM_FREQUENCY)
-#define ENDAT_PRODUCER_PWM_BASE         EPWM7_BASE
-#define ENDAT_PRODUCER_INT              INT_EPWM7
+#define ENDAT_PRODUCER_PWM_BASE         EPWM9_BASE
+#define ENDAT_PRODUCER_INT              INT_EPWM9
 #define ENDAT_PRODUCER_PWM_TICKS        (M1_INV_PWM_TICKS / ENDAT_PRODUCER_RATE_RATIO)
 #define ENDAT_PRODUCER_PHASE_TICKS      (ENDAT_PRODUCER_PWM_TICKS / 4U)
 
