@@ -37,6 +37,7 @@
 #include "RAMP_GEN_CLA.h"
 
 #include "dual_axis_servo_drive_user.h"
+#include "endat_shared.h"
 
 #ifdef __cplusplus
 extern "C" {

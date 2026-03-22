@@ -394,12 +394,15 @@ void main(void)
     // EnDat encoder initialization test
     EnDat_Init();
     endat21_runCommandSet();      // exercises basic EnDat 2.1 command set
+#if(ENCODER_TYPE == 22)
     endat22_setupAddlData();      // configure 2 additional data words
+#endif
     EnDat_initDelayComp();        // cable propagation delay calibration
     PM_endat22_setFreq(ENDAT_RUNTIME_FREQ_DIVIDER);
     DELAY_US(800L);
+    endat21_initProducer(motorVars[0].ptrFCL->qep.PolePairs);
     endatInitDone = 1;
-    endat21_schedulePositionRead();
+    endat21_startProducer();
 
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
@@ -636,51 +639,23 @@ void C3(void) // SPARE
 
 static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
+    EndatPositionSample sample = {0};
     MOTOR_Vars_t *pMotor = &motorVars[motorNum];
 
-    if(endatInitDone)
-    {
-        float32_t mechThetaPu = 0.0F;
-        float32_t elecThetaPu = 0.0F;
-        uint32_t rawPosition = 0U;
-
-        endat21_servicePositionRead();
-        endatCrcFailCount = gEndatCrcFailCount;
-
-        if(endat21_getPositionFeedback(&mechThetaPu, &elecThetaPu, &rawPosition,
-                                       pMotor->ptrFCL->qep.PolePairs))
-        {
-            pMotor->posMechTheta = mechThetaPu;
-            pMotor->posElecTheta = elecThetaPu;
-            pMotor->speed.ElecTheta = pMotor->posElecTheta;
-            pMotor->ptrFCL->qep.MechTheta = mechThetaPu;
-            pMotor->ptrFCL->qep.ElecTheta = elecThetaPu;
-            pMotor->ptrFCL->pangle = elecThetaPu;
-            endatPosRaw = rawPosition;
-            return true;
-        }
-    }
-
-    // EnDat-only mode: keep previous valid position feedback when the latest
-    // sample is not valid yet (for example CRC failure or no fresh frame).
-    return false;
-}
-
-
-static inline void serviceEndatPositionAcquisition(void)
-{
-#if(POSITION_ENCODER_IS_ENDAT)
-    if(endatInitDone == 0U)
-    {
-        return;
-    }
-
-    // Launch one EnDat transaction at a fixed PWM-ISR cadence. The SPI RX ISR
-    // only marks frame completion; decode/CRC happens at the start of the next
-    // motor ISR when updateMotorPositionFeedback() runs.
-    endat21_schedulePositionRead();
     endatCrcFailCount = gEndatCrcFailCount;
-#endif
+
+    if((endatInitDone == 0U) || !endat21_getPublishedPosition(&sample))
+    {
+        // Keep the previous valid position until a new published snapshot exists.
+        return false;
+    }
+
+    pMotor->posMechTheta = sample.mechThetaPu;
+    pMotor->posElecTheta = sample.elecThetaPu;
+    pMotor->speed.ElecTheta = sample.elecThetaPu;
+    endatPosRaw = sample.rawPosition;
+
+    return true;
 }
 
 //****************************************************************************
@@ -697,9 +672,6 @@ static inline void serviceEndatPositionAcquisition(void)
 #pragma FUNC_ALWAYS_INLINE(buildLevel1_M1)
 static inline void buildLevel1_M1(void)
 {
-    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
-    updateMotorPositionFeedback(MTR_1);
-    #endif
 // -------------------------------------------------------------------------
 // control force angle generation based on 'runMotor'
 // -------------------------------------------------------------------------
@@ -792,10 +764,6 @@ static inline void buildLevel1_M1(void)
 
 static inline void buildLevel2_M1(void)
 {
-    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
-    updateMotorPositionFeedback(MTR_1);
-    #endif
-
     // -------------------------------------------------------------------------
     // Alignment Routine: this routine aligns the motor to zero electrical
     // angle and in case of QEP also finds the index location and initializes
@@ -955,9 +923,6 @@ static inline void buildLevel2_M1(void)
 
 static inline void buildLevel3_M1(void)
 {
-    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
-    updateMotorPositionFeedback(MTR_1);
-    #endif
 #if(FCL_CNTLR ==  PI_CNTLR)
     FCL_runPICtrl_M1(&motorVars[0]);
 #endif
@@ -1099,10 +1064,6 @@ static inline void buildLevel3_M1(void)
 
 static inline void buildLevel46_M1(void)
 {
-    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
-    updateMotorPositionFeedback(MTR_1);
-    #endif
-
 #if(FCL_CNTLR ==  PI_CNTLR)
     FCL_runPICtrl_M1(&motorVars[0]);
 #endif
@@ -1316,10 +1277,6 @@ static inline void buildLevel46_M1(void)
 
 static inline void buildLevel5_M1(void)
 {
-    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
-    updateMotorPositionFeedback(MTR_1);
-    #endif
-
 #if(FCL_CNTLR ==  PI_CNTLR)
     FCL_runPICtrl_M1(&motorVars[0]);
 #endif
@@ -1505,6 +1462,9 @@ static inline void buildLevel5_M1(void)
 // motor1ControlISR
 __interrupt void motor1ControlISR(void)
 {
+#if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    updateMotorPositionFeedback(MTR_1);
+#endif
 
 #if(BUILDLEVEL == FCL_LEVEL1)
     buildLevel1_M1();
@@ -1639,11 +1599,6 @@ __interrupt void motor1ControlISR(void)
 //    Call the DATALOG update function.
 // ----------------------------------------------------------------------------
     DLOG_4CH_F_FUNC(&dlog_4ch1);
-
-    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
-    serviceEndatPositionAcquisition();
-    #endif
-
 
     // Acknowledges an interrupt
     HAL_ackInt_M1(halMtrHandle[MTR_1]);

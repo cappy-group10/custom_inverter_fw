@@ -70,10 +70,13 @@ extern uint32_t Cla1ConstRunStart;
 extern uint32_t Cla1ConstLoadStart;
 extern uint32_t Cla1ConstLoadSize;
 
+static void HAL_setupEndatProducerPWM(void);
+
 //
 // interrupt routines for CPU
 //
 extern __interrupt void motor1ControlISR(void);
+extern __interrupt void endatProducerISR(void);
 
 //
 // tasks 1-4 are owned by the FCL for motor 1
@@ -109,6 +112,12 @@ void HAL_enableInterrupts(HAL_MTR_Handle handle)
         // Enable PWM1INT in PIE group 3
         //
         Interrupt_enable(M1_INT_PWM);
+
+        //
+        // Enable the independent EnDat producer interrupt in PIE group 3.
+        //
+        EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
+        Interrupt_enable(ENDAT_PRODUCER_INT);
     }
 
     //
@@ -650,6 +659,12 @@ void HAL_setupInterrupts(HAL_MTR_Handle handle)
     if(handle == &halMtr[MTR_1])
     {
         Interrupt_register(M1_INT_PWM, &motor1ControlISR);
+        Interrupt_register(ENDAT_PRODUCER_INT, &endatProducerISR);
+
+        EPWM_setInterruptSource(ENDAT_PRODUCER_PWM_BASE, EPWM_INT_TBCTR_ZERO);
+        EPWM_enableInterrupt(ENDAT_PRODUCER_PWM_BASE);
+        EPWM_setInterruptEventCount(ENDAT_PRODUCER_PWM_BASE, 1);
+        EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
 
         // Enable AdcA-ADCINT1- to help verify EoC before result data read
         ADC_setInterruptSource(M1_IW_ADC_BASE,
@@ -659,6 +674,34 @@ void HAL_setupInterrupts(HAL_MTR_Handle handle)
     }
 
     return;
+}
+
+//
+// Configure the independent EPWM7-based EnDat producer scheduler.
+// This PWM is used only as an internal time base and is intentionally not
+// pinned out on GPIO when DAC debug outputs are disabled.
+//
+static void HAL_setupEndatProducerPWM(void)
+{
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_EPWM7);
+
+    EPWM_disableInterrupt(ENDAT_PRODUCER_PWM_BASE);
+    EPWM_disableADCTrigger(ENDAT_PRODUCER_PWM_BASE, EPWM_SOC_A);
+    EPWM_disableADCTrigger(ENDAT_PRODUCER_PWM_BASE, EPWM_SOC_B);
+    EPWM_setEmulationMode(ENDAT_PRODUCER_PWM_BASE, EPWM_EMULATION_FREE_RUN);
+    EPWM_setPeriodLoadMode(ENDAT_PRODUCER_PWM_BASE, EPWM_PERIOD_DIRECT_LOAD);
+    EPWM_setClockPrescaler(ENDAT_PRODUCER_PWM_BASE, EPWM_CLOCK_DIVIDER_1,
+                           EPWM_HSCLOCK_DIVIDER_1);
+    EPWM_setPhaseShift(ENDAT_PRODUCER_PWM_BASE, 0U);
+    EPWM_disablePhaseShiftLoad(ENDAT_PRODUCER_PWM_BASE);
+    EPWM_setTimeBasePeriod(ENDAT_PRODUCER_PWM_BASE, ENDAT_PRODUCER_PWM_TICKS);
+    EPWM_setTimeBaseCounter(ENDAT_PRODUCER_PWM_BASE, ENDAT_PRODUCER_PHASE_TICKS);
+    EPWM_setTimeBaseCounterMode(ENDAT_PRODUCER_PWM_BASE, EPWM_COUNTER_MODE_UP);
+    EPWM_setCountModeAfterSync(ENDAT_PRODUCER_PWM_BASE,
+                               EPWM_COUNT_MODE_UP_AFTER_SYNC);
+    EPWM_setSyncOutPulseMode(ENDAT_PRODUCER_PWM_BASE,
+                             EPWM_SYNC_OUT_PULSE_DISABLED);
+    EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
 }
 
 //
@@ -1045,6 +1088,7 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(139, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(139, GPIO_PIN_TYPE_STD);
 
+#ifdef DACOUT_EN
     // GPIO157->EPWM7A-DAC1
     GPIO_setMasterCore(157, GPIO_CORE_CPU1);
     GPIO_setPinConfig(GPIO_157_EPWM7A);
@@ -1068,6 +1112,7 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setPinConfig(GPIO_160_EPWM8B);
     GPIO_setDirectionMode(160, GPIO_DIR_MODE_OUT);
     GPIO_setPadConfig(160, GPIO_PIN_TYPE_STD);
+#endif
 
     return;
 }
@@ -1161,6 +1206,8 @@ void HAL_setupMotorPWMs(HAL_MTR_Handle handle)
         EPWM_setTimeBasePeriod(obj->pwmHandle[0], halfPeriod);
         EPWM_setTimeBasePeriod(obj->pwmHandle[1], halfPeriod);
         EPWM_setTimeBasePeriod(obj->pwmHandle[2], halfPeriod);
+
+        HAL_setupEndatProducerPWM();
     }
     
 

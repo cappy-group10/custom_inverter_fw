@@ -52,6 +52,10 @@
 #define ENDAT_HACK
 #define DISABLE_MOTOR_FAULTS
 
+#ifdef DACOUT_EN
+#error  Critical: DACOUT_EN conflicts with the EPWM7-based EnDat producer scheduler
+#endif
+
 //
 // PWM, SAMPLING FREQUENCY and Current Loop Band width definitions for motor 1
 // motor 2, can be set separately
@@ -139,10 +143,10 @@
 #endif
 
 //
-// EnDat position-update definitions. (UNUSED)
-// This implementation launches one EnDat read per Motor ISR.
+// EnDat position-update definitions.
+// The dedicated EnDat producer runs independently at 4x the motor PWM rate.
 //
-#define ENDAT_POSITION_UPDATE_FREQ      (M1_ISR_FREQUENCY)   // in KHz
+#define ENDAT_PRODUCER_RATE_RATIO       4U
 
 
 //
@@ -151,6 +155,12 @@
 #define M1_INV_PWM_TICKS        (((SYSTEM_FREQUENCY/2.0)/M1_PWM_FREQUENCY)*1000)
 #define M1_INV_PWM_DB            (200.0)
 #define M1_QEP_UNIT_TIMER_TICKS  (SYSTEM_FREQUENCY/(2*M1_PWM_FREQUENCY) * 1000)
+
+#define ENDAT_POSITION_UPDATE_FREQ      (ENDAT_PRODUCER_RATE_RATIO * M1_PWM_FREQUENCY)
+#define ENDAT_PRODUCER_PWM_BASE         EPWM7_BASE
+#define ENDAT_PRODUCER_INT              INT_EPWM7
+#define ENDAT_PRODUCER_PWM_TICKS        (M1_INV_PWM_TICKS / ENDAT_PRODUCER_RATE_RATIO)
+#define ENDAT_PRODUCER_PHASE_TICKS      (ENDAT_PRODUCER_PWM_TICKS / 4U)
 
 #define M1_INV_PWM_TBPRD         (M1_INV_PWM_TICKS / 2)
 #define M1_INV_PWM_HALF_TBPRD    (M1_INV_PWM_TBPRD / 2)
@@ -244,4 +254,3 @@
 #define M1_VOLTAGE_INV_SF               (4096.0 / M1_MAXIMUM_SCALE_VOLATGE)
 
 #endif  // end of DUAL_AXIS_SERVO_DRIVE_USER_H definition
-

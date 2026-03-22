@@ -1,238 +1,187 @@
-# EnDat Encoder Interface — Architecture & Execution Map
+# EnDat Encoder Interface - Architecture & Execution Map
 
-**Files:** `endat_init.c`, `endat_ops.c`, `endat.c` (+ `endat_globals.c`, `endat_utils.c`, `endat_commands.c`)  
+**Files:** `endat_init.c`, `endat_ops.c`, `endat.c`, `endat_globals.c`, `endat_utils.c`, `endat_commands.c`, `endat_shared.h`
 **Target:** TMS320F28379D (C2000 F2837x)  
 **Protocol:** EnDat 2.1 / EnDat 2.2  
-**Last reviewed:** 2025
-
----
-
-## Table of Contents
-
-1. [Module Structure](#1-module-structure)
-2. [Data Flow & State Model](#2-data-flow--state-model)
-3. [Initialization Sequence](#3-initialization-sequence)
-4. [Runtime Execution Model](#4-runtime-execution-model)
-5. [Function Reference](#5-function-reference)
-6. [Dependency Graph](#6-dependency-graph)
-7. [Hardware Resource Map](#7-hardware-resource-map)
-8. [Command Sequence Reference](#8-command-sequence-reference)
-9. [Integration with Motor Control ISR](#9-integration-with-motor-control-isr)
-10. [Known Issues / Notes](#10-known-issues--notes)
+**Last reviewed:** 2026
 
 ---
 
 ## 1. Module Structure
 
-The EnDat driver is split across six source files. Each file has a single responsibility:
+The EnDat stack is split into a blocking init path and a fast runtime producer:
 
 | File | Responsibility | Public API |
 |---|---|---|
 | `endat_init.c` | Hardware init, GPIO/XBAR/EPWM config, power-on sequence, delay compensation | `EnDat_Init()`, `EnDat_initDelayComp()` |
-| `endat_ops.c` | Position read operations (blocking, scheduled, feedback retrieval) | `endat21_readPosition()`, `endat21_schedulePositionRead()`, `endat21_servicePositionRead()`, `endat21_getPositionFeedback()`, `endat22_setupAddlData()`, `endat22_readPositionWithAddlData()` |
-| `endat.c` | SPI-B RX FIFO interrupt service routine | `spiRxFifoIsr()` (registered, not called directly) |
-| `endat_globals.c` | Shared variable definitions (`endat22Data`, `endat22CRCtable`, `gEndatCrcFailCount`) | — |
-| `endat_utils.c` | CRC comparison helper (`CheckCRC`) | `CheckCRC()` |
-| `endat_commands.c` | EnDat 2.1/2.2 command set templates | `endat21_runCommandSet()` |
-
-> Static helpers in `endat_init.c` (`EPWM4_Config`, `Endat_setup_GPIO`, `Endat_config_XBAR`) are private to that file and are not part of the public API.
+| `endat_ops.c` | Blocking reads plus the independent producer state machine and published snapshot helpers | `endat21_readPosition()`, `endat21_initProducer()`, `endat21_startProducer()`, `endat21_runProducerTick()`, `endat21_getPublishedPosition()`, `endat21_getPositionFeedback()`, `endat22_setupAddlData()`, `endat22_readPositionWithAddlData()` |
+| `endat.c` | SPI-B RX FIFO ISR plus the EPWM7-driven producer scheduler ISR | `spiRxFifoIsr()`, `endatProducerISR()` |
+| `endat_globals.c` | Shared variable definitions, runtime buffers, CRC and timeout counters | — |
+| `endat_utils.c` | CRC comparison helper | `CheckCRC()` |
+| `endat_commands.c` | EnDat 2.1/2.2 command set validation helpers | `endat21_runCommandSet()` |
+| `endat_shared.h` | CLA-visible runtime snapshot types | `EndatPositionSample`, `EndatRuntimeState` |
 
 ---
 
 ## 2. Data Flow & State Model
 
-### Shared Data Structures
+### Library-owned state
 
+`endat22Data` is still the raw exchange buffer shared with the TI PM EnDat library. It carries:
+
+- SPI handle, FIFO level, raw `rdata[]`
+- unpacked `position_lo` / `position_hi`
+- `position_clocks`, `error1`, `error2`, `data_crc`
+- parameter-read state and optional EnDat 2.2 additional data fields
+- `delay_comp`
+
+### Published runtime state
+
+The fast path no longer exposes a single-consumer latch. Instead it publishes decoded samples into a CLA-visible double buffer:
+
+```text
+gEndatPositionSamples[2]   (ClaData)
+|
++- rawPosition    -> decoded absolute position count
++- mechThetaPu    -> mechanical angle in per-unit [0, 1)
++- elecThetaPu    -> electrical angle in per-unit [0, 1)
++- sampleCounter  -> monotonically increasing publish counter
+\- valid          -> sample contains a CRC-validated position
+
+gEndatRuntimeState (ClaData)
+|
++- activeIndex    -> currently published slot (0 or 1)
++- readPending    -> producer has a position transaction in flight
++- frameReady     -> SPI RX ISR has captured a complete frame
++- timeoutTicks   -> producer-side stall watchdog
++- publishCount   -> number of published samples
++- crcFailCount   -> mirrored runtime CRC failure counter
+\- timeoutCount   -> mirrored runtime timeout recovery counter
 ```
-endat22Data  (global struct, defined in endat_globals.c)
-│
-├── spi              → pointer to SpibRegs
-├── dataReady        → set to 1 by spiRxFifoIsr, consumed by service/receive functions
-├── fifo_level       → number of SPI words to drain from FIFO
-├── rdata[]          → raw SPI RX buffer (filled by ISR)
-├── position_lo/hi   → raw position word (unpacked from rdata by PM_endat22_receiveData)
-├── position_clocks  → encoder bit-width, read from encoder address 0xD during init
-├── error1 / error2  → encoder error/warning bits
-├── data_crc         → received CRC from position frame
-├── address / data   → parameter read results (used during init)
-├── additional_data1/2       → additional data channels (EnDat 2.2 only)
-├── additional_data1/2_crc   → CRC for additional data channels
-└── delay_comp       → propagation delay (set by EnDat_initDelayComp)
 
-endat22CRCtable[32]  → CRC-5 lookup table (POLY1, built during EnDat_Init)
-gEndatCrcFailCount   → rolling CRC failure counter (global, readable by application)
-```
-
-### File-Private State (`endat_ops.c`)
-
-```
-sRawPosition    (uint32_t)   → most recent valid raw position count
-sMechThetaPu    (float32_t)  → mechanical angle in per-unit [0, 1)
-sElecThetaPu    (float32_t)  → electrical angle in per-unit [0, 1)
-sDataValid      (uint16_t)   → 1 = fresh data available; cleared on read by getPositionFeedback()
-sReadPending    (uint16_t)   → 1 = a scheduled transaction is in flight
-```
-
-> `sDataValid` acts as a single-sample latch — it is set after a successful CRC and cleared when `endat21_getPositionFeedback()` consumes the data. Back-to-back calls to `getPositionFeedback()` without a new read will return `false`.
+The producer always writes the inactive slot first and flips `activeIndex` only after the new sample is fully valid. CPU and CLA readers treat `activeIndex` as the commit point.
 
 ---
 
 ## 3. Initialization Sequence
 
-Called once from `main()` before interrupts are enabled. The sequence has hard timing constraints specified by the EnDat protocol.
+Called once from `main()` before the motor control loop is enabled:
 
-```
+```text
 main()
-│
-├─[1]  EnDat_Init()
-│       │
-│       ├── Enable EPWM1–4 clocks (CpuSysRegs.PCLKCR2)
-│       │
-│       ├── EPWM4_Config()
-│       │     └── Force EPWM4A/B outputs high (idle CLK state for EnDat)
-│       │
-│       ├── PM_endat22_generateCRCTable(NBITS_POLY1, POLY1, endat22CRCtable)
-│       │     └── Builds 32-entry CRC-5 lookup table
-│       │
-│       ├── Endat_setup_GPIO()
-│       │     ├── GPIO6  → EPWM4A (EnDat CLK master)
-│       │     ├── GPIO7  → EPWM4B (SPI CLK slave)
-│       │     ├── GPIO63 → SPISIMOB  (GMUX=3 + MUX=3, async qual)
-│       │     ├── GPIO64 → SPISOMIB  (GMUX=3 + MUX=3, async qual)
-│       │     ├── GPIO65 → SPICLKB   (GMUX=3 + MUX=3, async qual)
-│       │     ├── GPIO66 → SPISTEB   (GMUX=3 + MUX=3, async qual)
-│       │     ├── GPIO9  → EnDat TxEN (MUX=3)
-│       │     └── GPIO139→ EnDat 5V power control (output)
-│       │
-│       ├── Endat_config_XBAR()
-│       │     └── InputXBAR Input1 ← GPIO63 (SPISIMOB → GPTRIP TRIP1)
-│       │
-│       ├── endat22Data.spi = &SpibRegs
-│       ├── PM_endat22_setupPeriph()          ← configure SPI-B peripheral
-│       │
-│       ├── Register spiRxFifoIsr in PIE vector table
-│       │     ├── PieVectTable.SPIB_RX_INT = &spiRxFifoIsr
-│       │     ├── Enable PIE group 6 INT3 (SPI-B RX)
-│       │     └── Enable CPU INT6
-│       │
-│       ├── ── Power-on timing sequence ──────────────────────────────
-│       ├── GPIO139 = 1  (5V supply ON)
-│       ├── DELAY_US(10000)                   10 ms  — supply ramp
-│       │
-│       ├── GPIO6 → plain output, set high    (CLK idle high)
-│       ├── DELAY_US(100000)                  100 ms
-│       ├── GPIO6 = 0                         (CLK pulse low, >125 ns)
-│       ├── DELAY_US(425000)                  425 ms — encoder reset
-│       ├── GPIO6 → restore EPWM4A mux
-│       ├── DELAY_US(425000)                  425 ms — encoder ready (>381 ms)
-│       │
-│       ├── Assert GPIO63 (EncData) == 0      ← ESTOP0 if still high
-│       │
-│       ├── PM_endat22_setFreq(ENDAT_INIT_FREQ_DIVIDER)
-│       │
-│       ├── ── EnDat command sequence ───────────────────────────────
-│       ├── ENCODER_RECEIVE_RESET (×2)        per EnDat spec requirement
-│       │     DELAY_US(1000000) after 1st     1 s
-│       │     DELAY_US(2000) after 2nd
-│       │
-│       ├── SELECTION_OF_MEMORY_AREA (MRS=0xA1)
-│       │     └── CRC check → ESTOP0 on fail
-│       │     DELAY_US(200)
-│       │
-│       └── ENCODER_SEND_PARAMETER (addr=0xD) — read position bit-width
-│             └── endat22Data.position_clocks = endat22Data.data & 0xFF
-│             DELAY_US(200)
-│
-├─[2]  endat21_runCommandSet()
-│       └── Exercises basic EnDat 2.1 command set (diagnostics/validation)
-│
-├─[3]  endat22_setupAddlData()
-│       ├── SEND_POSITION + SELECT_MEMORY_AREA  (MRS=0xA1, addl=0)  → CRC check
-│       ├── SEND_POSITION + SEND_PARAMETER      (addr=0xD, addl=0)  → CRC check
-│       ├── SEND_POSITION + SELECT_MEMORY_AREA  (MRS=0x45, addl=0)  → CRC check (enable addl data 1)
-│       └── SEND_POSITION + SELECT_MEMORY_AREA  (MRS=0x59, addl=1)  → CRC check (enable addl data 2)
-│             DELAY_US(2000) final
-│
-├─[4]  EnDat_initDelayComp()               ← must run at low freq (~200 kHz)
-│       ├── Two blocking ENCODER_SEND_POSITION_VALUES reads
-│       ├── CRC check each → ESTOP0 on fail
-│       └── endat22Data.delay_comp = (delay1 + delay2) >> 1
-│
-├─[5]  PM_endat22_setFreq(ENDAT_RUNTIME_FREQ_DIVIDER)
-│             ← switch to higher runtime frequency after delay cal
-│
-├─[6]  DELAY_US(800)
-│
-├─[7]  endatInitDone = 1                   ← gate flag released
-│
-└─[8]  endat21_schedulePositionRead()      ← prime first non-blocking read
+|
++-[1]  EnDat_Init()
+|       |
+|       +- Enable EPWM1-4 clocks and configure EPWM4 idle clock generation
+|       +- Build CRC table
+|       +- Configure GPIOs and InputXBAR
+|       +- Configure SPI-B and register spiRxFifoIsr()
+|       +- Run the EnDat power-up and reset timing sequence
+|       \- Read encoder position bit-width into endat22Data.position_clocks
+|
++-[2]  endat21_runCommandSet()
+|
++-[3]  [EnDat 2.2 only] endat22_setupAddlData()
+|
++-[4]  EnDat_initDelayComp()
+|
++-[5]  PM_endat22_setFreq(ENDAT_RUNTIME_FREQ_DIVIDER)
+|
++-[6]  DELAY_US(800)
+|
++-[7]  endat21_initProducer(polePairs)
+|       \- clears the published buffers, counters, and runtime flags
+|
++-[8]  endatInitDone = 1
+|
+\-[9]  endat21_startProducer()
+        \- the first EPWM7 tick launches runtime acquisition
 ```
 
-**Total blocking time at startup:** approximately 2 × 1000 ms reset + 2 × 425 ms power-on = ~2.85 s minimum, before any control loop runs.
+Notes:
+
+- `endat22_setupAddlData()` is now conditional on `ENCODER_TYPE == 22`.
+- No runtime read is primed from `motor1ControlISR()` anymore.
+- Startup behavior remains conservative: FCL sees no EnDat angle until the first valid published sample exists.
 
 ---
 
 ## 4. Runtime Execution Model
 
-EnDat uses a **split-phase, non-blocking** model at runtime. The transaction is split across two motor ISR cycles to avoid blocking the control loop:
+Runtime EnDat is now a producer/consumer pipeline:
 
-```
-PWM ISR cycle N:
-    serviceEndatPositionAcquisition()
-        └── endat21_schedulePositionRead()
-              ├── Guard: return early if sReadPending != 0
-              ├── endat22Data.dataReady = 0
-              ├── PM_endat22_setupCommand(ENCODER_SEND_POSITION_VALUES, ...)
-              └── PM_endat22_startOperation()   ← kicks off SPI-B DMA/FIFO TX
-                        sReadPending = 1
+- `EPWM7` drives a `40 kHz` producer ISR.
+- `spiRxFifoIsr()` stays lean and only captures the completed frame.
+- `Cla1Task1()` performs the PWM-edge handoff into FCL state.
+- `motor1ControlISR()` mirrors the already-published sample into CPU-side variables for speed estimation, debug, and UI.
 
-        [SPI transaction in progress — SPI-B clocks out request to encoder]
+### Producer flow
 
-SPI-B RX FIFO fills → spiRxFifoIsr() fires (PIE group 6, INT3):
-    ├── Drain FIFO: rdata[0..fifo_level] = SPIRXBUF
-    ├── Clear RXFFOVF + RXFFINT flags
-    ├── endat22Data.dataReady = 1
-    └── PIE ACK group 6
+```text
+EPWM7 interrupt:
+    endatProducerISR()
+        -> endat21_runProducerTick()
+             if readPending == 0:
+                 setup ENCODER_SEND_POSITION_VALUES
+                 PM_endat22_startOperation()
+                 readPending = 1
 
-PWM ISR cycle N+1:
-    updateMotorPositionFeedback()
-        └── endat21_servicePositionRead()
-              ├── Guard: return if sReadPending==0 or dataReady!=1
-              ├── PM_endat22_receiveData(ENCODER_SEND_POSITION_VALUES, 0)
-              │     └── Unpacks rdata[] → position_lo/hi, error1/2, data_crc
-              ├── endatValidatePositionCrc()
-              │     └── PM_endat22_getCrcPos() → CheckCRC()
-              │           on fail: gEndatCrcFailCount++, sReadPending=0, return
-              ├── endatGetPositionRaw()
-              │     └── raw = (position_hi<<16 | position_lo) & bitmask
-              ├── sMechThetaPu = raw / (1 << position_clocks)
-              ├── sDataValid = 1
-              └── sReadPending = 0
+             else if frameReady == 1:
+                 PM_endat22_receiveData()
+                 CRC validate
+                 decode rawPosition / mechThetaPu / elecThetaPu
+                 write inactive ClaData slot
+                 publish by flipping activeIndex
 
-        endat21_getPositionFeedback(mechTheta, elecTheta, rawPos, polePairs)
-              ├── Guard: return false if sDataValid==0 or position_clocks==0
-              ├── *mechThetaPu = sMechThetaPu
-              ├── *rawPosition = sRawPosition
-              ├── sElecThetaPu = fmodf(sMechThetaPu * polePairs)
-              ├── *elecThetaPu = sElecThetaPu
-              ├── sDataValid = 0                ← latch consumed
-              └── return true
-
-        → writes to pMotor->posMechTheta, posElecTheta, ptrFCL->qep.*, ptrFCL->pangle
+             else:
+                 increment timeoutTicks
+                 if timeoutTicks reaches ENDAT_PRODUCER_TIMEOUT_TICKS:
+                     drop stalled read
+                     increment gEndatTimeoutCount
 ```
 
-### Timing Diagram
+### SPI RX ISR flow
 
-```
-ISR cycle:  |    N    |   N+1   |   N+2   |   N+3   |
-            |---------|---------|---------|---------|
-Schedule:   | ▶ TX    |         | ▶ TX    |         |
-SPI ISR:    |    [RX] |         |    [RX] |         |
-Service:    |         | ▶ unpack|         | ▶ unpack|
-Feedback:   |         | ▶ valid |         | ▶ valid |
+```text
+spiRxFifoIsr():
+    drain FIFO into endat22Data.rdata[]
+    clear RX FIFO flags
+    endat22Data.dataReady = 1
+    gEndatRuntimeState.frameReady = 1
+    ACK PIE group 6
 ```
 
-One complete position update is available every **2 PWM ISR cycles**. If a CRC failure occurs in cycle N+1, the previous valid position is retained (motor ISR returns `false`, prior `pMotor` values unchanged).
+### Consumer flow
+
+```text
+EPWM1 -> Cla1Task1():
+    if ptrQEP == 0 and lsw != ENC_ALIGNMENT:
+        latch the active EnDat slot
+        copy mech/electrical theta into fclVars[0].qep.*
+        set pangle = qep.ElecTheta
+    else if lsw == ENC_ALIGNMENT:
+        force qep and pangle to zero
+    else:
+        keep the previous FCL angle state
+
+EPWM1 -> motor1ControlISR():
+    updateMotorPositionFeedback(MTR_1)
+        -> endat21_getPublishedPosition()
+        -> mirror mech/electrical theta into motorVars[0]
+        -> update endatPosRaw and endatCrcFailCount
+```
+
+### Timing relationship
+
+For the current build:
+
+- `M1_PWM_FREQUENCY = 10 kHz`
+- `SAMPLING_METHOD = SINGLE_SAMPLING`
+- `ENDAT_PRODUCER_RATE_RATIO = 4`
+
+That yields a `40 kHz` EnDat producer while FCL remains `10 kHz` and PWM-synchronous. The producer therefore attempts up to four EnDat transactions per PWM period, but FCL still consumes exactly one latched position at each PWM edge.
+
+If `SAMPLING_METHOD` is changed to `DOUBLE_SAMPLING`, the producer will still run at `4x` the PWM carrier frequency, not `4x` the CPU ISR rate, until the scheduler constants are revisited.
 
 ---
 
@@ -242,60 +191,67 @@ One complete position update is available every **2 PWM ISR cycles**. If a CRC f
 
 | Function | File | Blocking? | Purpose |
 |---|---|---|---|
-| `EnDat_Init()` | `endat_init.c` | Yes (~2.85 s) | Full hardware init, power-on sequence, encoder reset, read position bit-width |
-| `EnDat_initDelayComp()` | `endat_init.c` | Yes | 2-sample propagation delay measurement; sets `endat22Data.delay_comp` |
-| `endat21_runCommandSet()` | `endat_commands.c` | Yes | Exercises EnDat 2.1 command set for validation |
-| `endat22_setupAddlData()` | `endat_ops.c` | Yes | Configures encoder to send 2 additional data words with each position frame |
-| `endat22_readPositionWithAddlData()` | `endat_ops.c` | Yes | Single blocking read of position + 2 additional data channels with CRC check |
-| `endat21_readPosition()` | `endat_ops.c` | Yes | Single blocking position read, updates `sRawPosition` / `sMechThetaPu` |
-| `endat21_schedulePositionRead()` | `endat_ops.c` | No | Starts SPI transaction; returns immediately. Re-entrant guard via `sReadPending` |
-| `endat21_servicePositionRead()` | `endat_ops.c` | No | If `dataReady`, unpacks and CRC-validates the pending frame |
-| `endat21_getPositionFeedback()` | `endat_ops.c` | No | Returns latest valid `mechTheta`, `elecTheta`, `rawPosition`; clears `sDataValid` |
-| `spiRxFifoIsr()` | `endat.c` | ISR | Drains SPI-B RX FIFO, sets `dataReady = 1` |
+| `EnDat_Init()` | `endat_init.c` | Yes | Full hardware init, power-on sequence, encoder reset, read position bit-width |
+| `EnDat_initDelayComp()` | `endat_init.c` | Yes | Two-sample propagation delay measurement |
+| `endat21_runCommandSet()` | `endat_commands.c` | Yes | EnDat command-set validation during bring-up |
+| `endat22_setupAddlData()` | `endat_ops.c` | Yes | Enables the two EnDat 2.2 additional data channels |
+| `endat22_readPositionWithAddlData()` | `endat_ops.c` | Yes | Single blocking read of position plus additional data |
+| `endat21_readPosition()` | `endat_ops.c` | Yes | Single blocking position read, then publishes one snapshot |
+| `endat21_initProducer()` | `endat_ops.c` | No | Clears shared buffers, counters, and runtime state |
+| `endat21_startProducer()` | `endat_ops.c` | No | Arms runtime acquisition after init |
+| `endat21_runProducerTick()` | `endat_ops.c` | No | One producer scheduler step |
+| `endat21_getPublishedPosition()` | `endat_ops.c` | No | Returns a stable copy of the active published sample |
+| `endat21_getPositionFeedback()` | `endat_ops.c` | No | Compatibility wrapper around the published-sample API |
+| `endat21_schedulePositionRead()` | `endat_ops.c` | No | Compatibility helper that directly arms one non-blocking read |
+| `endat21_servicePositionRead()` | `endat_ops.c` | No | Compatibility helper that services one completed read |
+| `spiRxFifoIsr()` | `endat.c` | ISR | Drains SPI-B RX FIFO and flags a completed frame |
+| `endatProducerISR()` | `endat.c` | ISR | Runs the EPWM7-driven producer tick |
 
-### Private Helpers (`endat_init.c`)
+### Private helpers (`endat_ops.c`)
 
-| Function | Purpose |
+| Helper | Purpose |
 |---|---|
-| `EPWM4_Config()` | Forces EPWM4A/B high via TZ OST — idle CLK state |
-| `Endat_setup_GPIO()` | GPIO mux assignments for CLK, SPI-B, TxEN, power control |
-| `Endat_config_XBAR()` | Routes GPIO63 (SPISIMOB) to InputXBAR Input1 |
-
-### Private Helpers (`endat_ops.c`)
-
-| Function | Purpose |
-|---|---|
-| `endatGetType()` | Returns `ENDAT22` or `ENDAT21` based on `ENCODER_TYPE` define |
-| `endatGetPositionRaw()` | Reconstructs and masks raw position from `position_lo/hi` |
-| `endatValidatePositionCrc()` | Calls `PM_endat22_getCrcPos()` + `CheckCRC()`; returns 1 on pass |
+| `endatGetType()` | Returns `ENDAT21` or `ENDAT22` from `ENCODER_TYPE` |
+| `endatGetPositionRaw()` | Reconstructs and masks the raw position from `position_lo/hi` |
+| `endatValidatePositionCrc()` | Computes the expected CRC for the current position frame |
+| `endatDecodePositionSample()` | Converts the current library frame into a decoded runtime sample |
+| `endatPublishPositionSample()` | Writes the inactive slot and flips `activeIndex` last |
+| `endatHandleReadTimeout()` | Drops a stalled read and increments the timeout counter |
 
 ---
 
 ## 6. Dependency Graph
 
-```
+```text
 EnDat_Init()
-    ├── EPWM4_Config()
-    ├── PM_endat22_generateCRCTable()     ← must precede any CRC operations
-    ├── Endat_setup_GPIO()
-    ├── Endat_config_XBAR()
-    └── PM_endat22_setupPeriph()          ← SPI-B peripheral config
+    +- EPWM4_Config()
+    +- PM_endat22_generateCRCTable()
+    +- Endat_setup_GPIO()
+    +- Endat_config_XBAR()
+    \- PM_endat22_setupPeriph()
 
-        ──── EnDat_Init() must complete before any ops ────
+endat21_runCommandSet()        depends on: EnDat_Init()
+endat22_setupAddlData()        depends on: EnDat_Init(), ENCODER_TYPE == 22
+EnDat_initDelayComp()          depends on: EnDat_Init(), position_clocks set
+PM_endat22_setFreq(RUNTIME)    depends on: EnDat_initDelayComp()
+endat21_initProducer()         depends on: runtime frequency selected, polePairs configured
+endat21_startProducer()        depends on: endat21_initProducer()
 
-endat21_runCommandSet()                   depends on: EnDat_Init()
-endat22_setupAddlData()                   depends on: EnDat_Init()
-EnDat_initDelayComp()                     depends on: EnDat_Init(), position_clocks set
-PM_endat22_setFreq(RUNTIME)               depends on: EnDat_initDelayComp()
+Runtime:
+    EPWM7 -> endatProducerISR()
+          -> endat21_runProducerTick()
+          -> PM_endat22_startOperation()
+          -> spiRxFifoIsr()
+          -> PM_endat22_receiveData()
+          -> endatValidatePositionCrc()
+          -> endatPublishPositionSample()
 
-        ──── Runtime (ISR context) ────────────────────────
+    EPWM1 -> Cla1Task1()
+          -> consume published ClaData snapshot for FCL
 
-endat21_schedulePositionRead()            depends on: endatInitDone==1, PM_endat22_setFreq(RUNTIME)
-    └── [SPI transaction] ──► spiRxFifoIsr()
-endat21_servicePositionRead()             depends on: dataReady==1 (set by ISR)
-    └── endatValidatePositionCrc()
-          └── endatGetPositionRaw()
-endat21_getPositionFeedback()             depends on: sDataValid==1 (set by servicePositionRead)
+    EPWM1 -> motor1ControlISR()
+          -> endat21_getPublishedPosition()
+          -> mirror published snapshot into motorVars[0]
 ```
 
 ---
@@ -306,148 +262,113 @@ endat21_getPositionFeedback()             depends on: sDataValid==1 (set by serv
 
 | Resource | Assignment | Notes |
 |---|---|---|
-| Peripheral | SPI-B (`SpibRegs`) | Full-duplex; RX FIFO interrupt driven |
-| MOSI (TX) | GPIO63 | SPISIMOB, GMUX=3/MUX=3, async qual |
-| MISO (RX) | GPIO64 | SPISOMIB, async qual |
-| CLK | GPIO65 | SPICLKB, async qual |
-| CS | GPIO66 | SPISTEB, async qual |
-| PIE interrupt | Group 6, INT3 | `SPIB_RX_INT` → `spiRxFifoIsr` |
-| CPU interrupt | INT6 (`IER |= 0x20`) | Enabled in `EnDat_Init()` |
+| Peripheral | SPI-B (`SpibRegs`) | RX FIFO interrupt driven |
+| MOSI (TX) | GPIO63 | `SPISIMOB`; also monitored through InputXBAR |
+| MISO (RX) | GPIO64 | `SPISOMIB` |
+| CLK | GPIO65 | `SPICLKB` |
+| CS | GPIO66 | `SPISTEB` |
+| PIE interrupt | Group 6, INT3 | `SPIB_RX_INT` -> `spiRxFifoIsr()` |
 
-### EPWM4 (EnDat CLK generation)
+### EPWM4 (EnDat clock generation)
 
 | Resource | Assignment | Notes |
 |---|---|---|
-| EPWM4A | GPIO6 | EnDat CLK master output |
-| EPWM4B | GPIO7 | SPI CLK slave output |
-| TZ action | OST → force high | Idle CLK state; configured in `EPWM4_Config()` |
+| EPWM4A | GPIO6 | EnDat clock master output |
+| EPWM4B | GPIO7 | SPI clock slave output |
+| TZ action | OST -> force high | Idle clock state during reset / bring-up |
 
-> EPWM4 is also used as the PWM basis for Motor 2 inverter control (GPIO6–7 = UH/UL_M2 in the HAL). At runtime the EPWM mux takes over from GPIO mode. See HAL_ARCHITECTURE.md for the full PWM assignment table.
+### EPWM7 (runtime producer scheduler)
+
+| Resource | Assignment | Notes |
+|---|---|---|
+| Peripheral | EPWM7 | Internal EnDat runtime scheduler |
+| Interrupt | PIE Group 3, INT7 | `ENDAT_PRODUCER_INT` -> `endatProducerISR()` |
+| Rate | `40 kHz` | Derived from `M1_INV_PWM_TICKS / 4` in this build |
+| Phase offset | `ENDAT_PRODUCER_PHASE_TICKS` | Starts away from the EPWM1 PWM edge |
+| GPIO output | None by default | GPIO157/158 are only muxed when `DACOUT_EN` is enabled |
 
 ### Other GPIO
 
 | GPIO | Signal | Direction | Notes |
 |---|---|---|---|
-| GPIO9 | EnDat TxEN | OUT | Enables RS-485 driver transmit direction |
-| GPIO63 | EncData / SPISIMOB | IN | Also routed to InputXBAR Input1 for TRIP logic |
-| GPIO139 | EnDat 5V power | OUT | Set high in `EnDat_Init()` to power encoder supply |
-
-### InputXBAR
-
-| XBAR Input | Source | Used for |
-|---|---|---|
-| Input1 | GPIO63 (SPISIMOB) | GPTRIP XBAR TRIP1 (encoder data line monitoring) |
-
-### Frequency Settings
-
-| Constant | Usage | Notes |
-|---|---|---|
-| `ENDAT_INIT_FREQ_DIVIDER` | Set before reset/init commands | Low frequency for reliable init |
-| `ENDAT_RUNTIME_FREQ_DIVIDER` | Set after `EnDat_initDelayComp()` | Higher frequency for control loop |
-
-Both constants are defined in `endat.h`. The switch from init to runtime frequency must happen **after** delay compensation, since `delay_comp` is measured at the low init frequency.
+| GPIO9 | EnDat TxEN | OUT | RS-485 direction control |
+| GPIO63 | EncData / SPISIMOB | IN | Also routed to InputXBAR Input1 |
+| GPIO139 | EnDat 5V power | OUT | Powered during `EnDat_Init()` |
 
 ---
 
-## 8. Command Sequence Reference
+## 8. Command Usage
 
-### Initialization Commands (in order, all blocking)
+### Initialization commands
 
-| Step | Command | MRS/Addr | Purpose | Delay after |
-|---|---|---|---|---|
-| 1 | `ENCODER_RECEIVE_RESET` | 0xAA | Reset encoder (1st) | 1 s |
-| 2 | `ENCODER_RECEIVE_RESET` | 0xAA | Reset encoder (2nd, per spec) | 2 ms |
-| 3 | `SELECTION_OF_MEMORY_AREA` | 0xA1 | Select encoder manufacturer params | 200 µs |
-| 4 | `ENCODER_SEND_PARAMETER` | 0xD | Read position bit-width → `position_clocks` | 200 µs |
+The blocking init sequence still uses:
 
-### Additional Data Setup Commands (EnDat 2.2, `endat22_setupAddlData`)
+- `ENCODER_RECEIVE_RESET`
+- `SELECTION_OF_MEMORY_AREA`
+- `ENCODER_SEND_PARAMETER`
 
-| Step | Command | MRS | Purpose | addl count | Delay after |
-|---|---|---|---|---|---|
-| 1 | `SEND_POSITION + SELECT_MEM` | 0xA1 | Manufacturer params | 0 | 200 µs |
-| 2 | `SEND_POSITION + SEND_PARAM` | 0xD | Re-read position clocks | 0 | 200 µs |
-| 3 | `SEND_POSITION + SELECT_MEM` | 0x45 | Acknowledge memory LSB (addl data 1) | 0 | 200 µs |
-| 4 | `SEND_POSITION + SELECT_MEM` | 0x59 | Operating status (addl data 2) | 1→2 | 2 ms |
+### Runtime command
 
-### Runtime Command
-
-| Command | addl count | Used by |
+| Command | Additional data count | Used by |
 |---|---|---|
-| `ENCODER_SEND_POSITION_VALUES` | 0 | All runtime reads (`schedulePositionRead`, `readPosition`, `initDelayComp`) |
+| `ENCODER_SEND_POSITION_VALUES` | 0 | Producer runtime reads, blocking reads, delay compensation |
 | `ENCODER_SEND_POSITION_VALUES_WITH_ADDITIONAL_DATA` | 2 | `endat22_readPositionWithAddlData()` |
 
+The fast runtime producer is position-only. The additional-data path remains diagnostic / bring-up functionality.
+
 ---
 
-## 9. Integration with Motor Control ISR
+## 9. Integration With Motor Control & FCL
 
-The following shows how the EnDat driver integrates with the motor control ISR in `dual_axis_servo_drive.c`:
+The runtime responsibilities are intentionally split:
 
-```
-motor1ControlISR()  (every PWM period)
-│
-├── serviceEndatPositionAcquisition()
-│     ├── Guard: return if endatInitDone == 0
-│     └── endat21_schedulePositionRead()
-│           └── starts SPI-B transaction (non-blocking)
-│
-├── [FCL current control runs here]
-│
-└── updateMotorPositionFeedback(MTR_1)
-      ├── Guard: return false if endatInitDone == 0
-      ├── endat21_servicePositionRead()
-      │     └── unpacks + CRC validates completed SPI frame (if ready)
-      └── endat21_getPositionFeedback(&mechTheta, &elecTheta, &raw, polePairs)
-            └── on success, writes to:
-                  pMotor->posMechTheta
-                  pMotor->posElecTheta
-                  pMotor->speed.ElecTheta
-                  pMotor->ptrFCL->qep.MechTheta
-                  pMotor->ptrFCL->qep.ElecTheta
-                  pMotor->ptrFCL->pangle
-                  endatPosRaw  (global, for debug)
-```
-
-### Position Calculation
-
-```
-raw = (position_hi << 16 | position_lo) & ((1 << position_clocks) - 1)
-
-mechThetaPu = raw / (1 << position_clocks)        // [0.0, 1.0)
-
-elecThetaPu = fmod(mechThetaPu * polePairs, 1.0)  // wraps each electrical cycle
-```
-
-### Failure Behaviour
-
-| Condition | Result |
+| Context | Responsibility |
 |---|---|
-| `endatInitDone == 0` | `updateMotorPositionFeedback()` returns `false`; previous `pMotor` values held |
-| CRC failure | `gEndatCrcFailCount++`, `sReadPending` cleared, `sDataValid` not set, previous values held |
-| `sReadPending != 0` when scheduling | New schedule silently skipped; in-flight transaction completes normally |
-| `dataReady != 1` when servicing | `servicePositionRead()` exits immediately; position not updated this cycle |
-| `position_clocks == 0` | `getPositionFeedback()` returns `false` — encoder bit-width was never read |
+| `endatProducerISR()` | Acquire EnDat frames, CRC-check, decode, publish |
+| `Cla1Task1()` | Latch the latest published EnDat angle into `fclVars[0].qep.*` and `pangle` at the PWM edge |
+| `motor1ControlISR()` | Mirror the same published sample into `motorVars[0]` for speed estimation and observability |
+
+Important consequences:
+
+- No EnDat CRC or decode work remains on the FCL critical CPU path.
+- FCL still sees a PWM-synchronous position handoff because `Cla1Task1()` runs from `EPWM1INT`.
+- The CPU speed estimator uses the same angle stream as FCL, but without being responsible for publishing it.
+- Outside alignment, the CLA keeps the previous angle if no valid EnDat sample is available yet.
 
 ---
 
-## 10. Known Issues / Notes
+## 10. Failure Behaviour
 
-### GPIO139 conflict with HAL
-`endat_init.c` configures GPIO139 as an output for EnDat 5V power control. The HAL (`dual_axis_servo_drive_hal.c`) also configures GPIO139 as `nFault_M2` input. These are mutually exclusive functions on the same pin. Review hardware board revision to confirm which function is wired, and ensure only one driver configures this pin.
+| Condition | Runtime result |
+|---|---|
+| `endatInitDone == 0` | CPU mirror path returns early; CLA continues using prior state |
+| CRC failure | `gEndatCrcFailCount++`; no new snapshot is published |
+| Producer timeout | `gEndatTimeoutCount++`; stalled read is dropped and the next EPWM7 tick re-arms a new read |
+| No valid published sample yet | CLA leaves the previous FCL position intact outside alignment |
+| `position_clocks == 0` | Decode fails and publishing is skipped until init fixes encoder configuration |
 
-### `ESTOP0` on CRC failure during init
-All blocking init and setup functions (`EnDat_Init`, `endat22_setupAddlData`, `EnDat_initDelayComp`) call `ESTOP0` on CRC failure. At runtime, `endat21_servicePositionRead()` increments `gEndatCrcFailCount` instead and allows the motor control loop to continue with the previous valid position. This asymmetry is intentional — init failures are fatal, runtime failures are recoverable.
+Init-time CRC failures remain fatal and still hit `ESTOP0`.
 
-### `endatInitDone` gate flag
-The flag is set to `1` in `main()` after the full init sequence, and checked at the top of both `serviceEndatPositionAcquisition()` and `updateMotorPositionFeedback()`. Any reordering of the init steps in `main()` that sets this flag early will allow the ISR to run EnDat reads before the encoder is ready.
+---
 
-### `ENDAT_HACK` bypasses calibration wait
-When `ENDAT_HACK` is defined, the `while(enableFlag == false)` spin-wait in `main()` is skipped. This also skips the full blocking init delay. Do not use in production.
+## 11. Notes & Constraints
 
-### Blocking reads are interrupt-unsafe
-`endat21_readPosition()` and `endat22_readPositionWithAddlData()` use `while(dataReady != 1)` spin-waits. They must not be called from ISR context or after the motor control ISR has been enabled, as they will compete with `spiRxFifoIsr()` for the `dataReady` flag. These functions are intended for use during startup only.
+### Shared snapshot model
 
-### Single-consumer design
-`sDataValid` is a single-latch flag — `getPositionFeedback()` clears it on read. Only one consumer (the motor ISR) should call `getPositionFeedback()`. Calling it from a background task as well will cause one caller to always see stale or invalid data.
+The fast runtime path is multi-consumer. CPU and CLA both read the same published snapshot from `ClaData`, so readers must not assume they are the only consumer.
 
-### EnDat 2.2 additional data not used in runtime loop
-`endat22_setupAddlData()` and `endat22_readPositionWithAddlData()` configure and exercise the two additional data channels, but the runtime non-blocking path (`schedulePositionRead` / `servicePositionRead`) uses `ENCODER_SEND_POSITION_VALUES` only (no additional data). The additional data setup is currently init-time validation only.
+### Blocking reads remain startup-only
+
+`endat21_readPosition()` and `endat22_readPositionWithAddlData()` still spin on `dataReady` and are not appropriate for ISR context once the fast runtime producer is active.
+
+### EnDat 2.2 additional data remains off the fast path
+
+The fast producer intentionally uses `ENCODER_SEND_POSITION_VALUES` only. This keeps runtime latency low and avoids pushing additional-data decode work into the published-angle path.
+
+### EPWM7 resource ownership
+
+This build reserves `EPWM7` for EnDat scheduling. `DACOUT_EN` is compile-time blocked because the prior DAC debug muxing reused EPWM7 outputs.
+
+### Producer rate assumption
+
+The current implementation is tuned for the present build settings: `10 kHz` PWM, `SINGLE_SAMPLING`, and a `4x` EnDat producer ratio. If those assumptions change, re-check both the EPWM7 period macros and the expected producer-to-consumer timing.

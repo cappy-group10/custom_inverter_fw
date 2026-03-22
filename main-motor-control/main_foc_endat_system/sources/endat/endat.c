@@ -25,6 +25,7 @@
 //----------------------------------------------------------------------------------
 
 #include "F28x_Project.h"
+#include "dual_axis_servo_drive_user.h"
 #include "endat.h"
 
 //
@@ -43,7 +44,21 @@ __interrupt void spiRxFifoIsr(void)
     endat22Data.spi->SPIFFRX.bit.RXFFOVFCLR = 1;  // Clear overflow flag
     endat22Data.spi->SPIFFRX.bit.RXFFINTCLR = 1;  // Clear interrupt flag
     endat22Data.dataReady = 1U;
+    gEndatRuntimeState.frameReady = 1U;
     PieCtrlRegs.PIEACK.all |= 0x20;               // Issue PIE ACK for group 6
+}
+
+//
+// endatProducerISR - EPWM7-driven scheduler for the independent EnDat producer.
+// Runs the non-blocking producer state machine, then clears only the EPWM7
+// interrupt source so the motor ISR remains independently scheduled by EPWM1.
+//
+__interrupt void endatProducerISR(void)
+{
+    endat21_runProducerTick();
+
+    EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP3);
 }
 
 //***************************************************************************

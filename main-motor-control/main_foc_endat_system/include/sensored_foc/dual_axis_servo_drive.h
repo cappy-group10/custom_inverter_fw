@@ -178,8 +178,6 @@ static inline uint16_t scaleVoltageValue(float32_t voltage, float32_t voltageSF)
 // ****************************************************************************
 static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum);
 
-static inline void serviceEndatPositionAcquisition(void);
-
 static inline ENC_Status_e getPostAlignmentEncoderState(void)
 {
 #if(POSITION_ENCODER_NEEDS_INDEX)

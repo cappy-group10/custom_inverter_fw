@@ -63,6 +63,12 @@
 //
 __interrupt void Cla1Task1(void)
 {
+    uint16_t activeIndex = 0U;
+    uint16_t verifyIndex = 0U;
+    uint16_t sampleValid = 0U;
+    float32_t mechThetaPu = 0.0F;
+    float32_t elecThetaPu = 0.0F;
+
 #if CLA_DEBUG   // only for debugging
     SETGPIOTEST1_HIGH;      // set HIGH
 #endif
@@ -74,11 +80,31 @@ __interrupt void Cla1Task1(void)
     {
         if(fclVars[0].lsw == ENC_ALIGNMENT)
         {
+            fclVars[0].qep.MechTheta = 0.0F;
+            fclVars[0].qep.ElecTheta = 0.0F;
             fclVars[0].pangle = 0.0F;
         }
         else
         {
-            fclVars[0].pangle = fclVars[0].qep.ElecTheta;
+            do
+            {
+                activeIndex = gEndatRuntimeState.activeIndex;
+                mechThetaPu = gEndatPositionSamples[activeIndex].mechThetaPu;
+                elecThetaPu = gEndatPositionSamples[activeIndex].elecThetaPu;
+                sampleValid = gEndatPositionSamples[activeIndex].valid;
+                verifyIndex = gEndatRuntimeState.activeIndex;
+            } while(activeIndex != verifyIndex);
+
+            if(sampleValid != 0U)
+            {
+                fclVars[0].qep.MechTheta = mechThetaPu;
+                fclVars[0].qep.ElecTheta = elecThetaPu;
+                fclVars[0].pangle = fclVars[0].qep.ElecTheta;
+            }
+            else
+            {
+                fclVars[0].pangle = fclVars[0].qep.ElecTheta;
+            }
         }
 
 #if CLA_DEBUG   // only for debugging
