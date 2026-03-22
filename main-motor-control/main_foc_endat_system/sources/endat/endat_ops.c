@@ -279,6 +279,7 @@ bool endat21_getPositionFeedback(float32_t *mechThetaPu,
     sElecThetaPu = sMechThetaPu * (float32_t)polePairs;
     sElecThetaPu = sElecThetaPu - floorf(sElecThetaPu);
     *elecThetaPu = sElecThetaPu;
+    sDataValid = 0U;
 
     return true;
 }

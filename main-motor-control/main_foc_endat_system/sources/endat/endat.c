@@ -29,8 +29,9 @@
 
 //
 // spiRxFifoIsr - SPI-B RX FIFO interrupt.
-// Drains the RX FIFO into endat22Data.rdata[], clears interrupt flags, issues
-// the PIE ACK, and sets endat22Data.dataReady so foreground code can proceed.
+// Drains the RX FIFO into endat22Data.rdata[], clears interrupt flags, and
+// immediately unpacks any pending position frame so the next PWM ISR sees a
+// fresh EnDat sample without waiting for a background poll.
 //
 __interrupt void spiRxFifoIsr(void)
 {
@@ -41,8 +42,9 @@ __interrupt void spiRxFifoIsr(void)
     }
     endat22Data.spi->SPIFFRX.bit.RXFFOVFCLR = 1;  // Clear overflow flag
     endat22Data.spi->SPIFFRX.bit.RXFFINTCLR = 1;  // Clear interrupt flag
-    PieCtrlRegs.PIEACK.all |= 0x20;               // Issue PIE ACK for group 6
     endat22Data.dataReady = 1U;
+    endat21_servicePositionRead();
+    PieCtrlRegs.PIEACK.all |= 0x20;               // Issue PIE ACK for group 6
 }
 
 //***************************************************************************

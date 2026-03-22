@@ -95,6 +95,7 @@ static inline void updateMotorPositionFeedback(MOTOR_Num_e motorNum);
 #endif
 
 static inline ENC_Status_e getPostAlignmentEncoderState(void);
+static inline void serviceEndatPositionAcquisition(void);
 
 //
 // SFRA utility functions
@@ -568,14 +569,6 @@ void B1(void) // Toggle GPIO-00
 void B2(void) // SPARE
 //----------------------------------------
 {
-    // EnDat service loop runs in B-task (100us) to avoid blocking ISR cycles.
-    // At ENDAT_RUNTIME_FREQ_DIVIDER = 6, the line runs near 8.33 MHz.
-    if(endatInitDone)
-    {
-        endat21_servicePositionRead();
-        endat21_schedulePositionRead();
-        endatCrcFailCount = gEndatCrcFailCount;
-    }
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
     B_Task_Ptr = &B3;
@@ -687,6 +680,22 @@ static inline ENC_Status_e getPostAlignmentEncoderState(void)
 #endif
 }
 
+static inline void serviceEndatPositionAcquisition(void)
+{
+#if(POSITION_ENCODER_IS_ENDAT)
+    if(endatInitDone == 0U)
+    {
+        return;
+    }
+
+    // Launch one EnDat transaction at a fixed PWM-ISR cadence. The received
+    // frame is unpacked in the SPI RX ISR so the next motor ISR sees a fresh,
+    // phase-locked position sample.
+    endat21_schedulePositionRead();
+    endatCrcFailCount = gEndatCrcFailCount;
+#endif
+}
+
 //****************************************************************************
 // INCRBUILD 1
 //****************************************************************************
@@ -701,6 +710,9 @@ static inline ENC_Status_e getPostAlignmentEncoderState(void)
 #pragma FUNC_ALWAYS_INLINE(buildLevel1_M1)
 static inline void buildLevel1_M1(void)
 {
+    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    updateMotorPositionFeedback(MTR_1);
+    #endif
 // -------------------------------------------------------------------------
 // control force angle generation based on 'runMotor'
 // -------------------------------------------------------------------------
@@ -793,6 +805,10 @@ static inline void buildLevel1_M1(void)
 
 static inline void buildLevel2_M1(void)
 {
+    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    updateMotorPositionFeedback(MTR_1);
+    #endif
+
     // -------------------------------------------------------------------------
     // Alignment Routine: this routine aligns the motor to zero electrical
     // angle and in case of QEP also finds the index location and initializes
@@ -889,10 +905,10 @@ static inline void buildLevel2_M1(void)
 // ----------------------------------------------------------------------------
 #if(POSITION_ENCODER == QEP_POS_ENCODER)
     FCL_runQEPWrap_M1();
-#endif
 
     // Position Sensing is performed in CLA
     updateMotorPositionFeedback(MTR_1);
+#endif
 
 // ----------------------------------------------------------------------------
 // Connect inputs of the SPEED_FR module and call the speed calculation module
@@ -952,7 +968,9 @@ static inline void buildLevel2_M1(void)
 
 static inline void buildLevel3_M1(void)
 {
-
+    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    updateMotorPositionFeedback(MTR_1);
+    #endif
 #if(FCL_CNTLR ==  PI_CNTLR)
     FCL_runPICtrl_M1(&motorVars[0]);
 #endif
@@ -1041,8 +1059,9 @@ static inline void buildLevel3_M1(void)
 // ----------------------------------------------------------------------------
     motorVars[0].ptrFCL->rg.Freq = motorVars[0].rc.SetpointValue;
     fclRampGen((RAMPGEN *)&motorVars[0].ptrFCL->rg);
-
+    #if(POSITION_ENCODER == QEP_POS_ENCODER)
     updateMotorPositionFeedback(MTR_1);
+    #endif
 
     runSpeedFR(&motorVars[0].speed);
 
@@ -1093,6 +1112,9 @@ static inline void buildLevel3_M1(void)
 
 static inline void buildLevel46_M1(void)
 {
+    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    updateMotorPositionFeedback(MTR_1);
+    #endif
 
 #if(FCL_CNTLR ==  PI_CNTLR)
     FCL_runPICtrl_M1(&motorVars[0]);
@@ -1191,7 +1213,9 @@ static inline void buildLevel46_M1(void)
 // -----------------------------------------------------------------------------
 //  Connect inputs of the SPEED_FR module and call the speed calculation module
 // -----------------------------------------------------------------------------
+    #if(POSITION_ENCODER == QEP_POS_ENCODER)
     updateMotorPositionFeedback(MTR_1);
+    #endif
     runSpeedFR(&motorVars[0].speed);
 
 #if((BUILDLEVEL == FCL_LEVEL6) && (SFRA_MOTOR == MOTOR_1))
@@ -1305,6 +1329,9 @@ static inline void buildLevel46_M1(void)
 
 static inline void buildLevel5_M1(void)
 {
+    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    updateMotorPositionFeedback(MTR_1);
+    #endif
 
 #if(FCL_CNTLR ==  PI_CNTLR)
     FCL_runPICtrl_M1(&motorVars[0]);
@@ -1390,7 +1417,9 @@ static inline void buildLevel5_M1(void)
 // -----------------------------------------------------------------------------
 //   Connect inputs of the SPEED_FR module and call the speed calculation module
 // -----------------------------------------------------------------------------
+    #if(POSITION_ENCODER == QEP_POS_ENCODER)
     updateMotorPositionFeedback(MTR_1);
+    #endif
     runSpeedFR(&motorVars[0].speed);
 
 // -----------------------------------------------------------------------------
@@ -1623,6 +1652,11 @@ __interrupt void motor1ControlISR(void)
 //    Call the DATALOG update function.
 // ----------------------------------------------------------------------------
     DLOG_4CH_F_FUNC(&dlog_4ch1);
+
+    #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
+    serviceEndatPositionAcquisition();
+    #endif
+
 
     // Acknowledges an interrupt
     HAL_ackInt_M1(halMtrHandle[MTR_1]);

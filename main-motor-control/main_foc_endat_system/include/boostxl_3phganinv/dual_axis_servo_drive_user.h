@@ -139,6 +139,13 @@
 #endif
 
 //
+// EnDat position-update definitions. (UNUSED)
+// This implementation launches one EnDat read per Motor ISR.
+//
+#define ENDAT_POSITION_UPDATE_FREQ      (M1_ISR_FREQUENCY)   // in KHz
+
+
+//
 // Keep PWM Period same between single sampling and double sampling
 //
 #define M1_INV_PWM_TICKS        (((SYSTEM_FREQUENCY/2.0)/M1_PWM_FREQUENCY)*1000)
