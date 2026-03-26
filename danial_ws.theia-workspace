@@ -5,6 +5,9 @@
     },
     {
       "path": "main-motor-control/main_foc_endat_system"
+    },
+    {
+      "path": "file:///Users/danialnoorizadeh/workspace_ccstheia/manual_test"
     }
   ],
   "settings": {}

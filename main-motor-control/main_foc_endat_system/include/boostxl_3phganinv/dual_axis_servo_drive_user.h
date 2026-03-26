@@ -48,10 +48,6 @@
 // Include project specific include files.
 //
 
-// Uncomment to disable all fault protection for bench EnDat testing (NO INVERTER)
-#define ENDAT_HACK
-#define DISABLE_MOTOR_FAULTS
-
 //
 // PWM, SAMPLING FREQUENCY and Current Loop Band width definitions for motor 1
 // motor 2, can be set separately

@@ -130,7 +130,7 @@ typedef float _iq;
 // User can select choices from available control configurations
 //
 #define  CGND                COLD
-#define  BUILDLEVEL          FCL_LEVEL4
+#define  BUILDLEVEL          FCL_LEVEL2
 #define  SAMPLING_METHOD     SINGLE_SAMPLING   // DOUBLE_SAMPLING   // SINGLE_SAMPLING
 #define  FCL_CNTLR           PI_CNTLR          // CMPLX_CNTLR       //
 #define  CURRENT_SENSE       LEM_CURRENT_SENSE
@@ -141,6 +141,18 @@ typedef float _iq;
 #define POSITION_ENCODER_IS_QEP      (POSITION_ENCODER == QEP_POS_ENCODER)
 #define POSITION_ENCODER_IS_ENDAT    (POSITION_ENCODER == ENDAT_POS_ENCODER)
 #define POSITION_ENCODER_NEEDS_INDEX (POSITION_ENCODER_IS_QEP)
+
+
+// Uncomment to disable all fault protection for bench EnDat testing (NO INVERTER)
+#define ENDAT_HACK
+
+#define DISABLE_MOTOR_FAULTS
+// #define DISABLE_BUS_VOLTAGE_CHECK
+// #define DISABLE_OVERCURRENT_CHECK
+
+// #define DISABLE_ENDAT
+// #define DACOUT_EN
+
 
 //
 // Generate error if

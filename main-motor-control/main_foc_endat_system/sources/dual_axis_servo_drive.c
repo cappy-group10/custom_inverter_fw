@@ -392,6 +392,8 @@ void main(void)
 
 
     // EnDat encoder initialization test
+
+#ifndef DISABLE_ENDAT
     EnDat_Init();
     endat21_runCommandSet();      // exercises basic EnDat 2.1 command set
 #if(ENCODER_TYPE == 22)
@@ -403,6 +405,7 @@ void main(void)
     endat21_initProducer(motorVars[0].ptrFCL->qep.PolePairs);
     endatInitDone = 1;
     endat21_startProducer();
+#endif
 
     // Configure interrupt for motor_1
     HAL_enableInterrupts(halMtrHandle[MTR_1]);
@@ -601,6 +604,8 @@ void C1(void)   // Toggle GPIO-34
         led2Cnt = 0;
 
         GPIO_togglePin(LPD_BLUE_LED2);   // LED
+        // GPIO_togglePin(motorVars[0].drvEnableGateGPIO);   // LED
+        // GPIO_writePin(motorVars[0].drvEnableGateGPIO, 1);
     }
 
     //-----------------
@@ -1462,8 +1467,10 @@ static inline void buildLevel5_M1(void)
 // motor1ControlISR
 __interrupt void motor1ControlISR(void)
 {
+#ifndef DISABLE_ENDAT
 #if(POSITION_ENCODER == ENDAT_POS_ENCODER)
     updateMotorPositionFeedback(MTR_1);
+#endif
 #endif
 
 #if(BUILDLEVEL == FCL_LEVEL1)
@@ -1671,20 +1678,22 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)mtrHandle;
     (void)obj;
 
-    #ifndef DISABLE_MOTOR_FAULTS
     // *******************************************************
     // Current limit setting / tuning in Debug environment
     // *******************************************************
     pMotor->currentThreshHi = 2048 +
-            scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
+    scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
     pMotor->currentThreshLo = 2048 -
-            scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
-
+    scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
+    
     HAL_setupCMPSS_DACValue(mtrHandle,
-                            pMotor->currentThreshHi, pMotor->currentThreshLo);
-
-    pMotor->Vdcbus = (pMotor->Vdcbus * 0.8) + (pMotor->FCL_params.Vdcbus * 0.2);
-
+        pMotor->currentThreshHi, pMotor->currentThreshLo);
+        
+        pMotor->Vdcbus = (pMotor->Vdcbus * 0.8) + (pMotor->FCL_params.Vdcbus * 0.2);
+        
+    #ifndef DISABLE_MOTOR_FAULTS
+    
+    #ifndef DISABLE_BUS_VOLTAGE_CHECK
     if( (pMotor->Vdcbus > pMotor->VdcbusMax) ||
             (pMotor->Vdcbus < pMotor->VdcbusMin) )
     {
@@ -1694,12 +1703,30 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     {
         pMotor->tripFlagDMC &= (0xFFFF - 0x0002);
     }
+    #endif // DISABLE_BUS_VOLTAGE_CHECK
+
+    #ifndef DISABLE_OVERCURRENT_CHECK
+    static uint16_t dbg_tzFlag[3];
+    static uint16_t dbg_cmpssStatus[3];
+    static uint32_t dbg_gpio24;
 
     // Check for PWM trip due to over current
     if((EPWM_getTripZoneFlagStatus(obj->pwmHandle[0]) & EPWM_TZ_FLAG_OST) ||
        (EPWM_getTripZoneFlagStatus(obj->pwmHandle[1]) & EPWM_TZ_FLAG_OST) ||
        (EPWM_getTripZoneFlagStatus(obj->pwmHandle[2]) & EPWM_TZ_FLAG_OST))
     {
+        // ---- CAPTURE BEFORE ANYTHING IS CLEARED ----
+        dbg_tzFlag[0] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[0]);
+        dbg_tzFlag[1] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[1]);
+        dbg_tzFlag[2] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[2]);
+
+        dbg_cmpssStatus[0] = CMPSS_getStatus(obj->cmpssHandle[0]); // CMPSS1
+        dbg_cmpssStatus[1] = CMPSS_getStatus(obj->cmpssHandle[1]); // CMPSS3
+        dbg_cmpssStatus[2] = CMPSS_getStatus(obj->cmpssHandle[2]); // CMPSS6
+
+        dbg_gpio24 = GPIO_readPin(M1_XBAR_INPUT_GPIO);             // GPIO24
+        // -------------------------------------------------
+
         // if any EPwm's OST is set, force OST on all three to DISABLE inverter
         EPWM_forceTripZoneEvent(obj->pwmHandle[0], EPWM_TZ_FORCE_EVENT_OST);
         EPWM_forceTripZoneEvent(obj->pwmHandle[1], EPWM_TZ_FORCE_EVENT_OST);
@@ -1710,6 +1737,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
 
         pMotor->tripFlagDMC |= 0x0001;      // over current fault trip
     }
+    #endif // DISABLE_OVERCURRENT_CHECK
 
     pMotor->tripFlagPrev |= pMotor->tripFlagDMC;
 
@@ -1771,7 +1799,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         {
             pMotor->runMotor = MOTOR_RUN;
 
-            // Enable Driver Gate
+            // Enable Driver Gate (Active Low)
             GPIO_writePin(pMotor->drvEnableGateGPIO, 0);
         }
     }
