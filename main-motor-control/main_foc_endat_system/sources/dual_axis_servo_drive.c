@@ -36,7 +36,7 @@
 //
 // FILE:    dual_axis_servo_dirve.c
 //
-// TITLE:   dual-axis motor drive on the related kits
+// TITLE:   dual-axis motor drive on the related kits (not dual-axis anymore tho)
 //
 // Group:   C2000
 //
