@@ -101,12 +101,12 @@
 //
 // define deadband delay cout for rising edge
 //
-#define EPWM_DB_DELAY_RISE  50      // 50*10ns=0.5us, EPWMCLK=100MHz
+#define EPWM_DB_DELAY_RISE  200      // 50*10ns=0.5us, EPWMCLK=100MHz
 
 //
 // define deadband delay cout for falling edge
 //
-#define EPWM_DB_DELAY_FALL  50      // 50*10ns=0.5us, EPWMCLK=100MHz
+#define EPWM_DB_DELAY_FALL  200      // 50*10ns=0.5us, EPWMCLK=100MHz
 
 //! \brief Enumeration for the Motor numbers
 //!
