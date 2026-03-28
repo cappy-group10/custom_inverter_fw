@@ -170,20 +170,37 @@
 //
 // set the motor parameters to the one available
 //
-#define M1_ENCODER_LINES         1000 // Encoder lines for Tekic
+#define M1_ENCODER_LINES         262144 // Encoder lines for AMK
+// #define M1_ENCODER_LINES         1000 // Encoder lines for Tekic
 
 //
 // Define the electrical motor parameters
 //
-#define M1_RS      0.381334811     // Stator resistance (ohm)
+
+// AMK Motor parameters (BE CAREFUL WITH UNITS)
+#define M1_RS      0.0675          // Stator resistance (ohm)
 #define M1_RR      NULL            // Rotor resistance (ohm)
-#define M1_LS      0.000169791776  // Stator inductance (H)
-#define M1_LD      M1_LS           // Stator d-axis inductance (H)
-#define M1_LQ      M1_LS           // Stator q-axis inductance (H)
+#define M1_LS      (M1_LD + M1_LQ) / 2.0  // Stator inductance (H)
+#define M1_LD      0.00024         // Stator d-axis inductance (H)
+#define M1_LQ      0.00012         // Stator q-axis inductance (H)
 #define M1_LR      NULL            // Rotor inductance (H)
 #define M1_LM      NULL            // Magnetizing inductance (H)
-#define M1_KB      0.8             // BEMF Constant (V/Hz)
-#define M1_POLES   10               // Number of poles
+#define M1_KE      18.8            // V/kU/min, Back EMF constant
+// #define M1_KB      (M1_KE * 1000.0) / (60.0 * M1_POLES/2.0)  // BEMF Constant (V/Hz)
+#define M1_KB      0.2256          // BEMF Constant (V/Hz)
+#define M1_POLES   10              // Number of poles
+
+// // Tekic motor parameters
+// #define M1_RS      0.381334811     // Stator resistance (ohm)
+// #define M1_RR      NULL            // Rotor resistance (ohm)
+// #define M1_LS      0.000169791776  // Stator inductance (H)
+// #define M1_LD      M1_LS           // Stator d-axis inductance (H)
+// #define M1_LQ      M1_LS           // Stator q-axis inductance (H)
+// #define M1_LR      NULL            // Rotor inductance (H)
+// #define M1_LM      NULL            // Magnetizing inductance (H)
+// #define M1_KB      0.8             // BEMF Constant (V/Hz)
+// #define M1_POLES   10               // Number of poles
+
 
 //
 // NOTE:-
@@ -205,19 +222,20 @@
 //
 // Define the base quantites
 //
-#define M1_BASE_VOLTAGE     42.78 // Base peak phase voltage (volt), Vdc/sqrt(3)
-#define M1_BASE_CURRENT     13.5  // Base peak phase current (amp),
+#define M1_BASE_VOLTAGE     346.4 // Base peak phase voltage (volt), Vdc/sqrt(3)
+#define M1_BASE_CURRENT     5.0  // Base peak phase current (amp),
                                   // the maximum measurable peak current
+                                  // FIXME the new daughter board allows for higher current measurement.
 #define M1_BASE_TORQUE      NULL  // Base torque (N.m)
 #define M1_BASE_FLUX        NULL  // Base flux linkage (volt.sec/rad)
-#define M1_BASE_FREQ        250   // Base electrical frequency (Hz)
+#define M1_BASE_FREQ        1000  // Base electrical frequency (Hz)
 #define M1_MAXIMUM_CURRENT  5.0   // Motor maximum torque current (amp)
 
-#define M1_MAXIMUM_VOLTAGE  36.0    // DC bus maximum voltage (V)
+#define M1_MAXIMUM_VOLTAGE  600.0   // DC bus maximum voltage (V)
 #define M1_MINIMUM_VOLTAGE  5.0     // DC bus minimum voltage (V)
 
-#define M1_VDCBUS_MAX       50.0    // maximum dc bus voltage for motor
-#define M1_VDCBUS_MIN       10.0    // minimum dc bus voltage for motor
+#define M1_VDCBUS_MAX       600.0   // maximum dc bus voltage for motor
+#define M1_VDCBUS_MIN       24.0    // minimum dc bus voltage for motor
 
 //
 // Current sensors scaling
