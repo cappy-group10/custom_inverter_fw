@@ -141,10 +141,10 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->drvFaultTripGPIO = M1_nFAULT_GPIO;
         pMotor->drvClearFaultGPIO = M1_CLR_FAULT_GPIO;
 
-        pMotor->currentThreshHi = 2048 +
+        pMotor->currentThreshHi = M1_CMPSS_ZERO_COUNT +
                        scaleCurrentValue(M1_MAXIMUM_CURRENT, M1_CURRENT_INV_SF);
 
-        pMotor->currentThreshLo = 2048 -
+        pMotor->currentThreshLo = M1_CMPSS_ZERO_COUNT -
                        scaleCurrentValue(M1_MAXIMUM_CURRENT, M1_CURRENT_INV_SF);
 
         //
@@ -157,10 +157,16 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         // passed corresponds to the ADC base used to sample phase W on the
         // HW board
         //
+        #ifdef IS_TWO_SHUNT_DRIVE
+        FCL_initADC_2I(pMotor, M1_IW_ADC_BASE,
+                       M1_IV_ADCRESULT_BASE, M1_IV_ADC_PPB_NUM,
+                       M1_IW_ADCRESULT_BASE, M1_IW_ADC_PPB_NUM);
+        #else
         FCL_initADC_3I(pMotor, M1_IW_ADC_BASE,
                        M1_IV_ADCRESULT_BASE, M1_IV_ADC_PPB_NUM,
                        M1_IW_ADCRESULT_BASE, M1_IW_ADC_PPB_NUM,
                        M1_IU_ADCRESULT_BASE, M1_IU_ADC_PPB_NUM);
+        #endif
 
         pMotor->volDC_PPBRESULT = M1_VDC_ADCRESULT_BASE +
                 ADC_PPBxRESULT_OFFSET_BASE + M1_VDC_ADC_PPB_NUM * 2;
@@ -304,7 +310,7 @@ void resetControlVars(MOTOR_Vars_t *pMotor)
 void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
 {
     // Feedbacks OFFSET Calibration
-    pMotor->offset_currentAs = 0;
+    pMotor->offset_currentAs = 0; // Only used in 3-shunt configuration, remains 0 in 2-shunt configuration
     pMotor->offset_currentBs = 0;
     pMotor->offset_currentCs = 0;
 
@@ -319,12 +325,13 @@ void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
             if(offsetCalCounter > 1000)
             {
                 // Offsets in phase current sensing
+                #ifndef IS_TWO_SHUNT_DRIVE
                 pMotor->offset_currentAs  = (K1 * pMotor->offset_currentAs) +
                         (K2 * (M1_IFB_U) * pMotor->adcScale);
+                #endif
 
                 pMotor->offset_currentBs  = (K1 * pMotor->offset_currentBs) +
                         (K2 * (M1_IFB_V) * pMotor->adcScale);
-
                 pMotor->offset_currentCs  = (K1 * pMotor->offset_currentCs) +
                         (K2 * (M1_IFB_W) * pMotor->adcScale);
             }
@@ -339,9 +346,12 @@ void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
         // Init OFFSET regs with identified values
         //
 
+        #ifndef IS_TWO_SHUNT_DRIVE
         // setting Iu offset
         ADC_setPPBReferenceOffset(M1_IU_ADC_BASE, M1_IU_ADC_PPB_NUM,
                                  (uint16_t)(pMotor->offset_currentAs * 4096.0));
+        #endif
+
         // setting Iv offset
         ADC_setPPBReferenceOffset(M1_IV_ADC_BASE, M1_IV_ADC_PPB_NUM,
                                  (uint16_t)(pMotor->offset_currentBs * 4096.0));

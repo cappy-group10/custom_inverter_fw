@@ -142,7 +142,7 @@ uint16_t serialCommsTimer = 0;
 //
 // Global variables used in this system
 //
-MOTOR_Vars_t motorVars[2] = {MOTOR1_DEFAULTS};
+MOTOR_Vars_t motorVars[2] = {MOTOR1_DEFAULTS_NO_IU};
 
 #pragma DATA_SECTION(motorVars, "ClaData");
 
@@ -415,7 +415,7 @@ void main(void)
     motorVars[0].clearTripFlagDMC = 1;
 
     // Disable Driver Gate
-    GPIO_writePin(motorVars[0].drvEnableGateGPIO, 1);
+    GPIO_writePin(motorVars[0].drvEnableGateGPIO, DISABLE_GATE);
 
 
     // enable global interrupt
@@ -605,7 +605,6 @@ void C1(void)   // Toggle GPIO-34
 
         GPIO_togglePin(LPD_BLUE_LED2);   // LED
         // GPIO_togglePin(motorVars[0].drvEnableGateGPIO);   // LED
-        // GPIO_writePin(motorVars[0].drvEnableGateGPIO, 1);
     }
 
     //-----------------
@@ -1681,9 +1680,9 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     // *******************************************************
     // Current limit setting / tuning in Debug environment
     // *******************************************************
-    pMotor->currentThreshHi = 2048 +
+    pMotor->currentThreshHi = M1_CMPSS_ZERO_COUNT +
     scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
-    pMotor->currentThreshLo = 2048 -
+    pMotor->currentThreshLo = M1_CMPSS_ZERO_COUNT -
     scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
     
     HAL_setupCMPSS_DACValue(mtrHandle,
@@ -1733,7 +1732,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         EPWM_forceTripZoneEvent(obj->pwmHandle[2], EPWM_TZ_FORCE_EVENT_OST);
 
         // Disable Driver Gate
-        GPIO_writePin(pMotor->drvEnableGateGPIO, 1);
+        GPIO_writePin(pMotor->drvEnableGateGPIO, DISABLE_GATE);
 
         pMotor->tripFlagDMC |= 0x0001;      // over current fault trip
     }
@@ -1747,7 +1746,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->ctrlState = CTRL_FAULT;
 
         // Disable Driver Gate
-        GPIO_writePin(pMotor->drvEnableGateGPIO, 1);
+        GPIO_writePin(pMotor->drvEnableGateGPIO, DISABLE_GATE);
     }
 
     if((pMotor->tripFlagDMC != 0) && (pMotor->clearTripFlagDMC == true))
@@ -1799,8 +1798,8 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         {
             pMotor->runMotor = MOTOR_RUN;
 
-            // Enable Driver Gate (Active Low)
-            GPIO_writePin(pMotor->drvEnableGateGPIO, 0);
+            // Enable Driver Gate
+            GPIO_writePin(pMotor->drvEnableGateGPIO, ENABLE_GATE);
         }
     }
     else
@@ -1810,7 +1809,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
             pMotor->runMotor = MOTOR_STOP;
 
             // Disable Driver Gate
-            GPIO_writePin(pMotor->drvEnableGateGPIO, 1);
+            GPIO_writePin(pMotor->drvEnableGateGPIO, DISABLE_GATE);
         }
     }
 

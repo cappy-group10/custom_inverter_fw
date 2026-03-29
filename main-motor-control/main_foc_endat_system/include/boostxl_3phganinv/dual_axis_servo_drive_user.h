@@ -58,42 +58,65 @@
 //
 // Analog scaling with ADC
 //
+#define TWO_CURRENT_SENSORS         2              
+#define THREE_CURRENT_SENSORS       3               
+#define COUNT_CURRENT_SENSORS       TWO_CURRENT_SENSORS
+
+#if (COUNT_CURRENT_SENSORS == TWO_CURRENT_SENSORS)
+#define IS_TWO_SHUNT_DRIVE         
+#endif
+
+// HO 50-S: Uref = 2.5V, ADC ref = 3.0V
+// Zero current ADC count = (2.5 / 3.0) * 4096 = 3413
+#define M1_CMPSS_ZERO_COUNT     3413
+
 #define ADC_PU_SCALE_FACTOR         0.000244140625     // 1/2^12, 12bits ADC
 #define ADC_PU_PPB_SCALE_FACTOR     0.000488281250     // 1/2^11, 12bits ADC
 
 //
 // ADC and PWM Related defines for M1
 //
-#define M1_IU_ADC_BASE         ADCC_BASE           //C2, NC: Set up based board
-#define M1_IV_ADC_BASE         ADCB_BASE           //B2, NC: Set up based board
-#define M1_IW_ADC_BASE         ADCA_BASE           //A2, NC: Set up based board
-#define M1_VDC_ADC_BASE        ADCD_BASE           //D14, NC: Set up based board
-
+#ifndef IS_TWO_SHUNT_DRIVE // Only in 3-shunt configuration
+// Phase U
+#define M1_IU_ADC_BASE         ADCC_BASE           //C2, 
 #define M1_IU_ADCRESULT_BASE   ADCCRESULT_BASE     //C2, NC: Set up based board
-#define M1_IV_ADCRESULT_BASE   ADCBRESULT_BASE     //B2, NC: Set up based board
-#define M1_IW_ADCRESULT_BASE   ADCARESULT_BASE     //A2, NC: Set up based board
-#define M1_VDC_ADCRESULT_BASE  ADCDRESULT_BASE     //D14, NC: Set up based board
-
 #define M1_IU_ADC_CH_NUM       ADC_CH_ADCIN2       //C2, NC: Set up based board
-#define M1_IV_ADC_CH_NUM       ADC_CH_ADCIN2       //B2, NC: Set up based board
-#define M1_IW_ADC_CH_NUM       ADC_CH_ADCIN2       //A2, NC: Set up based board
-#define M1_VDC_ADC_CH_NUM      ADC_CH_ADCIN14      //D14, NC: Set up based board
-
 #define M1_IU_ADC_SOC_NUM      ADC_SOC_NUMBER0     //C2, NC: Set up based board
-#define M1_IV_ADC_SOC_NUM      ADC_SOC_NUMBER0     //B2, NC: Set up based board
-#define M1_IW_ADC_SOC_NUM      ADC_SOC_NUMBER0     //A2, NC: Set up based board
-#define M1_VDC_ADC_SOC_NUM     ADC_SOC_NUMBER0     //D14, NC: Set up based board
-
 #define M1_IU_ADC_PPB_NUM      ADC_PPB_NUMBER1     //C2, NC: Set up based board
-#define M1_IV_ADC_PPB_NUM      ADC_PPB_NUMBER1     //B2, NC: Set up based board
-#define M1_IW_ADC_PPB_NUM      ADC_PPB_NUMBER1     //A2, NC: Set up based board
-#define M1_VDC_ADC_PPB_NUM     ADC_PPB_NUMBER1     //D14, NC: Set up based board
 
 #define M1_U_CMPSS_BASE        CMPSS6_BASE         // NC: Set up based board
+
+#endif // !IS_TWO_SHUNT_DRIVE
+
+// Phase V
+#define M1_IV_ADC_BASE         ADCC_BASE           //B2, 
+#define M1_IV_ADCRESULT_BASE   ADCCRESULT_BASE     //B2, NC: Set up based board
+#define M1_IV_ADC_CH_NUM       ADC_CH_ADCIN3       //B2, NC: Set up based board
+#define M1_IV_ADC_SOC_NUM      ADC_SOC_NUMBER0     //B2, NC: Set up based board
+#define M1_IV_ADC_PPB_NUM      ADC_PPB_NUMBER1     //B2, NC: Set up based board
+
 #define M1_V_CMPSS_BASE        CMPSS3_BASE         // NC: Set up based board
+
+// Phase W
+#define M1_IW_ADC_BASE         ADCB_BASE           //A2, NC: Set up based board
+#define M1_IW_ADCRESULT_BASE   ADCBRESULT_BASE     //A2, NC: Set up based board
+#define M1_IW_ADC_CH_NUM       ADC_CH_ADCIN3       //A2, NC: Set up based board
+#define M1_IW_ADC_SOC_NUM      ADC_SOC_NUMBER0     //A2, NC: Set up based board
+#define M1_IW_ADC_PPB_NUM      ADC_PPB_NUMBER1     //A2, NC: Set up based board
+
+// DC Bus voltage
+#define M1_VDC_ADC_BASE        ADCD_BASE           //D14, NC: Set up based board
+#define M1_VDC_ADCRESULT_BASE  ADCDRESULT_BASE     //D14, NC: Set up based board
+#define M1_VDC_ADC_CH_NUM      ADC_CH_ADCIN14      //D14, NC: Set up based board
+#define M1_VDC_ADC_SOC_NUM     ADC_SOC_NUMBER0     //D14, NC: Set up based board
+#define M1_VDC_ADC_PPB_NUM     ADC_PPB_NUMBER1     //D14, NC: Set up based board
+
 #define M1_W_CMPSS_BASE        CMPSS1_BASE         // NC: Set up based board
 
+// ADC trigger for current and voltage sensing
 #define M1_ADC_TRIGGER_SOC     ADC_TRIGGER_EPWM1_SOCA  // NC: Set up based board
+
+// PWM related defines
 
 #define M1_U_PWM_BASE          EPWM1_BASE          // NC: Set up based board
 #define M1_V_PWM_BASE          EPWM2_BASE          // NC: Set up based board
@@ -105,23 +128,24 @@
 
 #define M1_SPI_BASE            SPIA_BASE           // NC: Set up based board
 
+#ifndef IS_TWO_SHUNT_DRIVE // Only in 3-shunt configuration
 #define M1_IFB_U      ADC_readResult(M1_IU_ADCRESULT_BASE, M1_IU_ADC_SOC_NUM)
-#define M1_IFB_V      ADC_readResult(M1_IV_ADCRESULT_BASE, M1_IV_ADC_SOC_NUM)
-#define M1_IFB_W      ADC_readResult(M1_IW_ADCRESULT_BASE, M1_IW_ADC_SOC_NUM)
-
-#define M1_VDC      ADC_readResult(M1_VDC_ADCRESULT_BASE, M1_VDC_ADC_SOC_NUM)
-
 #define M1_IFB_U_PPB  ADC_readPPBResult(M1_IU_ADCRESULT_BASE, M1_IU_ADC_PPB_NUM)
+#endif // !IS_TWO_SHUNT_DRIVE
+
+#define M1_IFB_V      ADC_readResult(M1_IV_ADCRESULT_BASE, M1_IV_ADC_SOC_NUM)
 #define M1_IFB_V_PPB  ADC_readPPBResult(M1_IV_ADCRESULT_BASE, M1_IV_ADC_PPB_NUM)
+
+#define M1_IFB_W      ADC_readResult(M1_IW_ADCRESULT_BASE, M1_IW_ADC_SOC_NUM)
 #define M1_IFB_W_PPB  ADC_readPPBResult(M1_IW_ADCRESULT_BASE, M1_IW_ADC_PPB_NUM)
 
+#define M1_VDC      ADC_readResult(M1_VDC_ADCRESULT_BASE, M1_VDC_ADC_SOC_NUM)
 #define M1_VDC_PPB  ADC_readPPBResult(M1_VDC_ADCRESULT_BASE, M1_VDC_ADC_PPB_NUM)
 
 //
 // Motor_1 Parameters
 //
 
-//
 // PWM, SAMPLING FREQUENCY and Current Loop Band width definitions
 //
 #define M1_PWM_FREQUENCY           10   // in KHz

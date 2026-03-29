@@ -91,6 +91,9 @@
 //
 // define EN_GATE and SPI_CS pin for DRV device for Motor 1
 //
+#define ENABLE_GATE        1           // Active low: 0, Active high: 1
+#define DISABLE_GATE       0
+
 #define M1_EN_GATE_GPIO         124         // NC: Set up based board
 #define M1_SPI_SCS_GPIO         61          // NC: Set up based board
 #define M1_nFAULT_GPIO          24          // NC: Set up based board

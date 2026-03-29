@@ -198,6 +198,111 @@ typedef struct _FCL_Parameters_ {
     0                                   /* sfraEnableFlag */                   \
  }
 
+#define MOTOR1_DEFAULTS_NO_IU  {                                                     \
+    0,                                  /* posCntr */                          \
+    5000,                               /* posCntrMax */                       \
+    0.001,                              /* posSlewRate */                      \
+                                                                               \
+    M1_BASE_FREQ,                       /* baseFreq */                         \
+    M1_POLES,                           /* poles */                            \
+                                                                               \
+    0.001 / M1_ISR_FREQUENCY,           /* T */                                \
+    0,                                  /* maxModIndex */                      \
+                                                                               \
+    0.0f,                               /* voltageLimit */                     \
+    0.0f,                               /* currentLimit */                     \
+                                                                               \
+    0,                                  /* tempIdRef */                        \
+    0.05,                                /* IdRef_start */                     \
+    0.0,                                /* IdRef_run */                        \
+    0.0,                                /* IdRef */                            \
+    0.05,                                /* IqRef */                           \
+                                                                               \
+   0.1,                                /* speedRef */                          \
+   0.0,                                /* positionRef */                       \
+   0.02,                               /* lsw1Speed */                         \
+                                                                               \
+    0,                                  /* offset_currentAs */                 \
+    0,                                  /* offset_currentBs */                 \
+    0,                                  /* offset_currentCs */                 \
+                                                                               \
+    0,                                  /* currentAs */                        \
+    0,                                  /* currentBs */                        \
+    0,                                  /* currentCs */                        \
+                                                                               \
+    0,                                  /* currentScale */                     \
+    0,                                  /* voltageScale */                     \
+    0,                                  /* adcScale */                         \
+    0,                                  /* currentInvSF */                     \
+    0,                                  /* voltageInvSF */                     \
+                                                                               \
+    0.0,                                /* posElecTheta */                     \
+    0.0,                                /* posMechTheta */                     \
+                                                                               \
+    (uint32_t *)(M1_U_PWM_BASE + EPWM_O_CMPA),  /* *pwmCompA */                \
+    (uint32_t *)(M1_V_PWM_BASE + EPWM_O_CMPA),  /* *pwmCompB */                \
+    (uint32_t *)(M1_W_PWM_BASE + EPWM_O_CMPA),  /* *pwmCompC */                \
+                                                                               \
+    0,  /* curA_PPBRESULT */ \
+    (M1_IV_ADCRESULT_BASE + M1_IV_ADC_PPB_NUM + ADC_O_PPB1RESULT),  /* curB_PPBRESULT */ \
+    (M1_IW_ADCRESULT_BASE + M1_IW_ADC_PPB_NUM + ADC_O_PPB1RESULT),  /* curC_PPBRESULT */ \
+    (M1_VDC_ADCRESULT_BASE + M1_VDC_ADC_PPB_NUM + ADC_O_PPB1RESULT), /* volDC_PPBRESULT */ \
+    (union ADCINTFLG_REG *)(M1_IW_ADC_BASE + ADC_INTFLG_ADCINT1), /* *AdcIntFlag */ \
+                                                                               \
+    CMPLXPARS_DEFAULTS,                 /* D_cpu */                            \
+    RMPCNTL_DEFAULTS,                   /* rc */                               \
+                                                                               \
+    CLARKE_DEFAULTS,                    /* clarke */                           \
+    PARK_DEFAULTS,                      /* park */                             \
+    IPARK_DEFAULTS,                     /* ipark */                            \
+    SPEED_MEAS_QEP_DEFAULTS,            /* speed */                            \
+                                                                               \
+    FCL_PI_CONTROLLER_DEFAULTS,         /* pi_id */                            \
+    PI_CONTROLLER_DEFAULTS,             /* pi_pos */                           \
+    {PID_TERM_DEFAULTS, PID_PARAM_DEFAULTS, PID_DATA_DEFAULTS},  /* pid_spd */ \
+                                                                               \
+    FCL_PARS_DEFAULTS,                  /* FCL_params */                       \
+    &fclVars[0],                        /* *ptrFCL */                          \
+                                                                               \
+    SVGEN_DEFAULTS,                     /* svgen */                            \
+                                                                               \
+    0.0,                                /* Vdcbus */                           \
+    0,                                  /* VdcbusMax */                        \
+    0,                                  /* VdcbusMin */                        \
+                                                                               \
+    0,                                  /* isrTicker */                        \
+                                                                               \
+    0.0,                                /* fclLatencyInMicroSec */             \
+    0,                                  /* fclClrCntr */                       \
+    0,                                  /* fclCycleCountMax */                 \
+                                                                               \
+    10,                                 /* speedLoopPrescaler */               \
+    1,                                  /* speedLoopCount */                   \
+    0,                                  /* alignCntr */                        \
+    2000,                               /* alignCnt */                         \
+    2,                                  /* posPtrMax */                        \
+    0,                                  /* posPtr */                           \
+                                                                               \
+    M1_CURRENT_SCALE(8.0),              /* currentThreshHi */                  \
+    M1_CURRENT_SCALE(8.0),              /* currentThreshLo */                  \
+                                                                               \
+    0,                                  /* drvEnableGateGPIO */                \
+    0,                                  /* drvFaultTripGPIO */                 \
+    0,                                  /* drvClearFaultGPIO */                \
+                                                                               \
+    0,                                  /* tripCountDMC */                     \
+    0,                                  /* tripFlagDMC */                      \
+    0,                                  /* tripFlagPrev */                     \
+                                                                               \
+    MOTOR_STOP,                          /* runMotor */                        \
+    CTRL_STOP,                           /* ctrlState */                       \
+                                                                               \
+    0,                                  /* clearTripFlagDMC */                 \
+    0,                                  /* lsw2EntryFlag */                    \
+    0,                                  /* offsetDoneFlag */                   \
+    0                                   /* sfraEnableFlag */                   \
+ }
+
 //
 // default parameters for motor_2
 //
@@ -344,7 +449,7 @@ typedef struct _MOTOR_Vars_t_
 
     float32_t currentScale;         // current scaling cofficient
     float32_t voltageScale;         // voltage scaling cofficient
-    float32_t adcScale;             // ADC scale for current and voltage
+    float32_t v;             // ADC scale for current and voltage
     float32_t currentInvSF;         // current inverse scaling coefficient
     float32_t voltageInvSF;         // voltage inverse scaling coefficient
 

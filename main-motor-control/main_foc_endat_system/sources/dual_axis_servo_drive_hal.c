@@ -238,11 +238,18 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
         obj->pwmHandle[2] = M1_W_PWM_BASE;
 
         //
-        // initialize CMPSS handle
+        // initialize CMPSS handles
+        // In 2-shunt mode only 2 comparators are used (V and W phases).
+        // U-phase CMPSS is excluded as Iu is reconstructed via Kirchhoff.
         //
+#ifdef IS_TWO_SHUNT_DRIVE
+        obj->cmpssHandle[0] = M1_V_CMPSS_BASE;   // Iv — measured
+        obj->cmpssHandle[1] = M1_W_CMPSS_BASE;   // Iw — measured
+#else
         obj->cmpssHandle[0] = M1_U_CMPSS_BASE;
         obj->cmpssHandle[1] = M1_V_CMPSS_BASE;
         obj->cmpssHandle[2] = M1_W_CMPSS_BASE;
+#endif
 
         //
         // initialize position-feedback hardware that is specific to QEP
@@ -391,6 +398,8 @@ void HAL_setupADCs(HAL_Handle handle)
     //-------------------------------------------------------------------------
     // For motor 1
     //-------------------------------------------------------------------------
+
+    #ifndef IS_TWO_SHUNT_DRIVE
     // Shunt Motor Currents (M1-Iu) @ C2
     // SOC0 will convert pin C2, sample window in SYSCLK cycles
     // trigger on ePWM1 SOCA/C
@@ -403,6 +412,8 @@ void HAL_setupADCs(HAL_Handle handle)
 
     // Write zero to this for now till offset ISR is run
     ADC_setPPBCalibrationOffset(M1_IU_ADC_BASE, M1_IU_ADC_PPB_NUM, 0);
+
+    #endif // IS_TWO_SHUNT_DRIVE
 
     // Shunt Motor Currents (M1-Iv) @ B2
     // SOC0 will convert pin B2, sample window in SYSCLK cycles
@@ -544,7 +555,7 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
 
     uint16_t cnt;
 
-    for(cnt = 0; cnt < 3; cnt++)
+    for(cnt = 0; cnt < COUNT_CURRENT_SENSORS; cnt++)
     {
         // Set up COMPCTL register
         // NEG signal from DAC for COMP-H
@@ -615,7 +626,7 @@ void HAL_setupCMPSS_DACValue(HAL_MTR_Handle handle,
 
     uint16_t cnt;
 
-    for(cnt = 0; cnt < 3; cnt++)
+    for(cnt = 0; cnt < COUNT_CURRENT_SENSORS; cnt++)
     {
         // comparator references
         // Set DAC-H to allowed MAX +ve current
@@ -1253,8 +1264,8 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     {
         tripInSet = EPWM_DC_TRIP_TRIPIN4;
 
-        curHi = 2048 + M1_CURRENT_SCALE(currentLimit);
-        curLo = 2048 - M1_CURRENT_SCALE(currentLimit);
+        curHi = M1_CMPSS_ZERO_COUNT + M1_CURRENT_SCALE(currentLimit);
+        curLo = M1_CMPSS_ZERO_COUNT - M1_CURRENT_SCALE(currentLimit);
 
         //Select GPIO24 as INPUTXBAR1
         XBAR_setInputPin(M1_XBAR_INPUT_NUM, M1_XBAR_INPUT_GPIO);
