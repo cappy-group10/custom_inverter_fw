@@ -239,12 +239,13 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
 
         //
         // initialize CMPSS handles
-        // In 2-shunt mode only 2 comparators are used (V and W phases).
-        // U-phase CMPSS is excluded as Iu is reconstructed via Kirchhoff.
+        // The migrated current sensors are used only for ADC sampling on this
+        // pinout, so keep the current-sensor CMPSS handles disabled.
         //
 #ifdef IS_TWO_SHUNT_DRIVE
-        obj->cmpssHandle[0] = M1_V_CMPSS_BASE;   // Iv — measured
-        obj->cmpssHandle[1] = M1_W_CMPSS_BASE;   // Iw — measured
+        obj->cmpssHandle[0] = 0U;
+        obj->cmpssHandle[1] = 0U;
+        obj->cmpssHandle[2] = 0U;
 #else
         obj->cmpssHandle[0] = M1_U_CMPSS_BASE;
         obj->cmpssHandle[1] = M1_V_CMPSS_BASE;
@@ -555,7 +556,7 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
 
     uint16_t cnt;
 
-    for(cnt = 0; cnt < COUNT_CURRENT_SENSORS; cnt++)
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
     {
         // Set up COMPCTL register
         // NEG signal from DAC for COMP-H
@@ -626,7 +627,7 @@ void HAL_setupCMPSS_DACValue(HAL_MTR_Handle handle,
 
     uint16_t cnt;
 
-    for(cnt = 0; cnt < COUNT_CURRENT_SENSORS; cnt++)
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
     {
         // comparator references
         // Set DAC-H to allowed MAX +ve current
@@ -1253,6 +1254,7 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
 
     uint16_t  cnt;
+    float32_t currentLimitClamped = currentLimit;
 
     EPWM_DigitalCompareTripInput tripInSet = EPWM_DC_TRIP_TRIPIN4;
 
@@ -1264,38 +1266,36 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     {
         tripInSet = EPWM_DC_TRIP_TRIPIN4;
 
-        curHi = M1_CMPSS_ZERO_COUNT + M1_CURRENT_SCALE(currentLimit);
-        curLo = M1_CMPSS_ZERO_COUNT - M1_CURRENT_SCALE(currentLimit);
+        if(currentLimitClamped < 0.0f)
+        {
+            currentLimitClamped = 0.0f;
+        }
+        else if(currentLimitClamped > M1_CURRENT_SENSE_MAX_POS_CURRENT)
+        {
+            currentLimitClamped = M1_CURRENT_SENSE_MAX_POS_CURRENT;
+        }
+
+        curHi = M1_CMPSS_ZERO_COUNT + M1_CURRENT_SCALE(currentLimitClamped);
+        curLo = M1_CMPSS_ZERO_COUNT - M1_CURRENT_SCALE(currentLimitClamped);
 
         //Select GPIO24 as INPUTXBAR1
         XBAR_setInputPin(M1_XBAR_INPUT_NUM, M1_XBAR_INPUT_GPIO);
 
-        // Configure TRIP 4 to OR the High and Low trips from both
-        // comparator 1 & 3, clear everything first
+        // Rebuild TRIP4 from scratch, clear everything first.
         EALLOW;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX0TO15CFG) = 0;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX16TO31CFG) = 0;
         EDIS;
 
-        // Enable Muxes for ored input of CMPSS1H and 1L, mux for Mux0x
-        //cmpss1 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX00_CMPSS1_CTRIPH_OR_L);
-
-        //cmpss3 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
-
-        //cmpss6 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
-
-        //inputxbar2 trip
+        // INPUTXBAR1 trip
         XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX01_INPUTXBAR1);
 
         // Disable all the muxes first
         XBAR_disableEPWMMux(XBAR_TRIP4, 0xFFFF);
 
-        // Enable Mux 0  OR Mux 4 to generate TRIP4
-        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX00 | XBAR_MUX04 | XBAR_MUX10 |
-                                       XBAR_MUX01);
+        // The migrated current-sensor pins are not routed as a CMPSS pair.
+        // Keep TRIP4 sourced only from the external gate-driver fault input.
+        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX01);
     }
     
     //
@@ -1305,10 +1305,13 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     {
         // comparator references
         // Set DAC-H to allowed MAX +ve current
-        CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], curHi);
+        if(cnt < COUNT_CURRENT_PROTECTION_CMPSS)
+        {
+            CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], curHi);
 
-        // Set DAC-L to allowed MAX -ve current
-        CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curLo);
+            // Set DAC-L to allowed MAX -ve current
+            CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curLo);
+        }
 
         //Trip 4 is the input to the DCAHCOMPSEL
         EPWM_selectDigitalCompareTripInput(obj->pwmHandle[cnt],
@@ -1358,11 +1361,12 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
                                                      EPWM_TZ_FLAG_DCAEVT1 |
                                                      EPWM_TZ_FLAG_CBC ));
 
-        // clear any spurious  HLATCH - (not in TRIP gen path)
-        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cnt]);
-
-        // clear any spurious  LLATCH - (not in TRIP gen path)
-        CMPSS_clearFilterLatchLow(obj->cmpssHandle[cnt]);
+        if(cnt < COUNT_CURRENT_PROTECTION_CMPSS)
+        {
+            // clear any spurious HLATCH/LLATCH (not in TRIP gen path)
+            CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cnt]);
+            CMPSS_clearFilterLatchLow(obj->cmpssHandle[cnt]);
+        }
     }
 
     DEVICE_DELAY_US(1L);

@@ -58,17 +58,37 @@
 //
 // Analog scaling with ADC
 //
-#define TWO_CURRENT_SENSORS         2              
-#define THREE_CURRENT_SENSORS       3               
+#define TWO_CURRENT_SENSORS         2U
+#define THREE_CURRENT_SENSORS       3U
 #define COUNT_CURRENT_SENSORS       TWO_CURRENT_SENSORS
 
 #if (COUNT_CURRENT_SENSORS == TWO_CURRENT_SENSORS)
-#define IS_TWO_SHUNT_DRIVE         
+#define IS_TWO_SHUNT_DRIVE
 #endif
 
-// HO 50-S: Uref = 2.5V, ADC ref = 3.0V
-// Zero current ADC count = (2.5 / 3.0) * 4096 = 3413
-#define M1_CMPSS_ZERO_COUNT     3413
+// J7 pin64 exposes ADCINC5/CMPIN5N while J7 pin65 exposes ADCINB5 only.
+// Keep current-sensor CMPSS protection disabled until both channels are routed
+// to comparator-capable inputs on the final hardware.
+#define COUNT_CURRENT_PROTECTION_CMPSS  0U
+
+// Current-sensor analog front end: 90mV/A with an approximately 2.5V offset.
+// With a 3.0V ADC reference this gives only about +5.56A of positive headroom,
+// so the software current limits must stay below that unless the signal is
+// level-shifted or attenuated before it reaches the MCU.
+#define M1_ADC_REFERENCE_VOLTAGE            3.0f
+#define M1_ADC_FULL_SCALE_COUNTS            4096.0f
+#define M1_CURRENT_SENSE_SENSITIVITY        0.09f
+#define M1_CURRENT_SENSE_ZERO_VOLTAGE       2.5f
+
+#define M1_CMPSS_ZERO_COUNT                 3413U
+#define M1_CURRENT_COUNTS_PER_AMP           ((M1_CURRENT_SENSE_SENSITIVITY * \
+                                              M1_ADC_FULL_SCALE_COUNTS) / \
+                                             M1_ADC_REFERENCE_VOLTAGE)
+#define M1_CURRENT_SENSE_MAX_POS_CURRENT    ((M1_ADC_REFERENCE_VOLTAGE - \
+                                              M1_CURRENT_SENSE_ZERO_VOLTAGE) / \
+                                             M1_CURRENT_SENSE_SENSITIVITY)
+#define M1_CURRENT_SENSE_MAX_NEG_CURRENT    (M1_CURRENT_SENSE_ZERO_VOLTAGE / \
+                                             M1_CURRENT_SENSE_SENSITIVITY)
 
 #define ADC_PU_SCALE_FACTOR         0.000244140625     // 1/2^12, 12bits ADC
 #define ADC_PU_PPB_SCALE_FACTOR     0.000488281250     // 1/2^11, 12bits ADC
@@ -89,29 +109,25 @@
 #endif // !IS_TWO_SHUNT_DRIVE
 
 // Phase V
-#define M1_IV_ADC_BASE         ADCC_BASE           //B2, 
-#define M1_IV_ADCRESULT_BASE   ADCCRESULT_BASE     //B2, NC: Set up based board
-#define M1_IV_ADC_CH_NUM       ADC_CH_ADCIN3       //B2, NC: Set up based board
-#define M1_IV_ADC_SOC_NUM      ADC_SOC_NUMBER0     //B2, NC: Set up based board
-#define M1_IV_ADC_PPB_NUM      ADC_PPB_NUMBER1     //B2, NC: Set up based board
-
-#define M1_V_CMPSS_BASE        CMPSS3_BASE         // NC: Set up based board
+#define M1_IV_ADC_BASE         ADCC_BASE           // J7 pin64, ADCINC5
+#define M1_IV_ADCRESULT_BASE   ADCCRESULT_BASE
+#define M1_IV_ADC_CH_NUM       ADC_CH_ADCIN5
+#define M1_IV_ADC_SOC_NUM      ADC_SOC_NUMBER0
+#define M1_IV_ADC_PPB_NUM      ADC_PPB_NUMBER1
 
 // Phase W
-#define M1_IW_ADC_BASE         ADCB_BASE           //A2, NC: Set up based board
-#define M1_IW_ADCRESULT_BASE   ADCBRESULT_BASE     //A2, NC: Set up based board
-#define M1_IW_ADC_CH_NUM       ADC_CH_ADCIN3       //A2, NC: Set up based board
-#define M1_IW_ADC_SOC_NUM      ADC_SOC_NUMBER0     //A2, NC: Set up based board
-#define M1_IW_ADC_PPB_NUM      ADC_PPB_NUMBER1     //A2, NC: Set up based board
+#define M1_IW_ADC_BASE         ADCB_BASE           // J7 pin65, ADCINB5
+#define M1_IW_ADCRESULT_BASE   ADCBRESULT_BASE
+#define M1_IW_ADC_CH_NUM       ADC_CH_ADCIN5
+#define M1_IW_ADC_SOC_NUM      ADC_SOC_NUMBER0
+#define M1_IW_ADC_PPB_NUM      ADC_PPB_NUMBER1
 
 // DC Bus voltage
-#define M1_VDC_ADC_BASE        ADCD_BASE           //D14, NC: Set up based board
-#define M1_VDC_ADCRESULT_BASE  ADCDRESULT_BASE     //D14, NC: Set up based board
-#define M1_VDC_ADC_CH_NUM      ADC_CH_ADCIN14      //D14, NC: Set up based board
-#define M1_VDC_ADC_SOC_NUM     ADC_SOC_NUMBER0     //D14, NC: Set up based board
-#define M1_VDC_ADC_PPB_NUM     ADC_PPB_NUMBER1     //D14, NC: Set up based board
-
-#define M1_W_CMPSS_BASE        CMPSS1_BASE         // NC: Set up based board
+#define M1_VDC_ADC_BASE        ADCD_BASE           // J7 pin63, shared ADCIN15
+#define M1_VDC_ADCRESULT_BASE  ADCDRESULT_BASE
+#define M1_VDC_ADC_CH_NUM      ADC_CH_ADCIN15
+#define M1_VDC_ADC_SOC_NUM     ADC_SOC_NUMBER0
+#define M1_VDC_ADC_PPB_NUM     ADC_PPB_NUMBER1
 
 // ADC trigger for current and voltage sensing
 #define M1_ADC_TRIGGER_SOC     ADC_TRIGGER_EPWM1_SOCA  // NC: Set up based board
@@ -247,13 +263,11 @@
 // Define the base quantites
 //
 #define M1_BASE_VOLTAGE     346.4 // Base peak phase voltage (volt), Vdc/sqrt(3)
-#define M1_BASE_CURRENT     5.0  // Base peak phase current (amp),
-                                  // the maximum measurable peak current
-                                  // FIXME the new daughter board allows for higher current measurement.
+#define M1_BASE_CURRENT     5.0  // Conservative positive current range limit (amp)
 #define M1_BASE_TORQUE      NULL  // Base torque (N.m)
 #define M1_BASE_FLUX        NULL  // Base flux linkage (volt.sec/rad)
 #define M1_BASE_FREQ        1000  // Base electrical frequency (Hz)
-#define M1_MAXIMUM_CURRENT  5.0   // Motor maximum torque current (amp)
+#define M1_MAXIMUM_CURRENT  5.0   // Keep below the +5.56A ADC headroom
 
 #define M1_MAXIMUM_VOLTAGE  600.0   // DC bus maximum voltage (V)
 #define M1_MINIMUM_VOLTAGE  5.0     // DC bus minimum voltage (V)
@@ -265,7 +279,7 @@
 // Current sensors scaling
 // 1.0pu current ==> 9.95A -> 2048 counts ==> 8A -> 1647
 //
-#define M1_CURRENT_SCALE(A)            (2048 * A / M1_BASE_CURRENT)
+#define M1_CURRENT_SCALE(A)            ((uint16_t)((A) * M1_CURRENT_COUNTS_PER_AMP))
 
 //
 // Analog scaling with ADC
@@ -276,9 +290,10 @@
 //
 // Current Scale
 //
-#define M1_MAXIMUM_SCALE_CURRENT        27.0
-#define M1_CURRENT_SF                   (M1_MAXIMUM_SCALE_CURRENT / 4096.0)
-#define M1_CURRENT_INV_SF               (4096.0 / M1_MAXIMUM_SCALE_CURRENT)
+#define M1_MAXIMUM_SCALE_CURRENT        (M1_ADC_REFERENCE_VOLTAGE / \
+                                         M1_CURRENT_SENSE_SENSITIVITY)
+#define M1_CURRENT_SF                   (1.0f / M1_CURRENT_COUNTS_PER_AMP)
+#define M1_CURRENT_INV_SF               (M1_CURRENT_COUNTS_PER_AMP)
 
 //
 // Voltage Scale

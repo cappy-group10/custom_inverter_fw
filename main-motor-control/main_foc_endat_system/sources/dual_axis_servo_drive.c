@@ -270,7 +270,7 @@ void main(void)
     initControlVars(&motorVars[0]);
 
 
-    motorVars[0].currentLimit = 9.0;        // 9A
+    motorVars[0].currentLimit = M1_MAXIMUM_CURRENT;
 
 
     #ifndef DISABLE_MOTOR_FAULTS
@@ -1676,19 +1676,30 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
 {
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)mtrHandle;
     (void)obj;
+    float32_t currentLimitClamped = pMotor->currentLimit;
+    uint16_t cmpIdx;
 
     // *******************************************************
     // Current limit setting / tuning in Debug environment
     // *******************************************************
+    if(currentLimitClamped < 0.0f)
+    {
+        currentLimitClamped = 0.0f;
+    }
+    else if(currentLimitClamped > M1_CURRENT_SENSE_MAX_POS_CURRENT)
+    {
+        currentLimitClamped = M1_CURRENT_SENSE_MAX_POS_CURRENT;
+    }
+
     pMotor->currentThreshHi = M1_CMPSS_ZERO_COUNT +
-    scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
+    scaleCurrentValue(currentLimitClamped, pMotor->currentInvSF);
     pMotor->currentThreshLo = M1_CMPSS_ZERO_COUNT -
-    scaleCurrentValue(pMotor->currentLimit, pMotor->currentInvSF);
+    scaleCurrentValue(currentLimitClamped, pMotor->currentInvSF);
     
     HAL_setupCMPSS_DACValue(mtrHandle,
         pMotor->currentThreshHi, pMotor->currentThreshLo);
         
-        pMotor->Vdcbus = (pMotor->Vdcbus * 0.8) + (pMotor->FCL_params.Vdcbus * 0.2);
+    pMotor->Vdcbus = (pMotor->Vdcbus * 0.8) + (pMotor->FCL_params.Vdcbus * 0.2);
         
     #ifndef DISABLE_MOTOR_FAULTS
     
@@ -1719,9 +1730,14 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         dbg_tzFlag[1] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[1]);
         dbg_tzFlag[2] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[2]);
 
-        dbg_cmpssStatus[0] = CMPSS_getStatus(obj->cmpssHandle[0]); // CMPSS1
-        dbg_cmpssStatus[1] = CMPSS_getStatus(obj->cmpssHandle[1]); // CMPSS3
-        dbg_cmpssStatus[2] = CMPSS_getStatus(obj->cmpssHandle[2]); // CMPSS6
+        dbg_cmpssStatus[0] = 0U;
+        dbg_cmpssStatus[1] = 0U;
+        dbg_cmpssStatus[2] = 0U;
+
+        for(cmpIdx = 0; cmpIdx < COUNT_CURRENT_PROTECTION_CMPSS; cmpIdx++)
+        {
+            dbg_cmpssStatus[cmpIdx] = CMPSS_getStatus(obj->cmpssHandle[cmpIdx]);
+        }
 
         dbg_gpio24 = GPIO_readPin(M1_XBAR_INPUT_GPIO);             // GPIO24
         // -------------------------------------------------
@@ -1771,16 +1787,13 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
                                (EPWM_TZ_FLAG_OST | EPWM_TZ_FLAG_DCAEVT1));
 
         //
-        // clear HLATCH - (not in TRIP gen path)
+        // clear HLATCH/LLATCH - (not in TRIP gen path)
         //
-        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[0]);
-        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[1]);
-        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[2]);
-
-        // clear LLATCH - (not in TRIP gen path)
-        CMPSS_clearFilterLatchLow(obj->cmpssHandle[0]);
-        CMPSS_clearFilterLatchLow(obj->cmpssHandle[1]);
-        CMPSS_clearFilterLatchLow(obj->cmpssHandle[2]);
+        for(cmpIdx = 0; cmpIdx < COUNT_CURRENT_PROTECTION_CMPSS; cmpIdx++)
+        {
+            CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cmpIdx]);
+            CMPSS_clearFilterLatchLow(obj->cmpssHandle[cmpIdx]);
+        }
 
         // clear the ocp
         pMotor->tripFlagDMC = 0;

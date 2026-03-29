@@ -209,6 +209,7 @@ static inline void HAL_ackInt_M1(HAL_MTR_Handle handle)
 static inline void HAL_clearTZFlag(HAL_MTR_Handle handle)
 {
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
+    uint16_t cnt;
 
     //
     // clear OST & DCAEVT1 flags
@@ -225,16 +226,18 @@ static inline void HAL_clearTZFlag(HAL_MTR_Handle handle)
     //
     // clear HLATCH - (not in TRIP gen path)
     //
-    CMPSS_clearFilterLatchHigh(obj->cmpssHandle[0]);
-    CMPSS_clearFilterLatchHigh(obj->cmpssHandle[1]);
-    CMPSS_clearFilterLatchHigh(obj->cmpssHandle[2]);
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
+    {
+        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cnt]);
+    }
 
     //
     // clear LLATCH - (not in TRIP gen path)
     //
-    CMPSS_clearFilterLatchLow(obj->cmpssHandle[0]);
-    CMPSS_clearFilterLatchLow(obj->cmpssHandle[1]);
-    CMPSS_clearFilterLatchLow(obj->cmpssHandle[2]);
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
+    {
+        CMPSS_clearFilterLatchLow(obj->cmpssHandle[cnt]);
+    }
 
     return;
 }

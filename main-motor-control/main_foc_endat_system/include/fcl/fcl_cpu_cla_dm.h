@@ -449,7 +449,7 @@ typedef struct _MOTOR_Vars_t_
 
     float32_t currentScale;         // current scaling cofficient
     float32_t voltageScale;         // voltage scaling cofficient
-    float32_t v;             // ADC scale for current and voltage
+    float32_t adcScale;             // ADC scale for current and voltage
     float32_t currentInvSF;         // current inverse scaling coefficient
     float32_t voltageInvSF;         // voltage inverse scaling coefficient
 
