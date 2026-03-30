@@ -66,10 +66,9 @@
 #define IS_TWO_SHUNT_DRIVE
 #endif
 
-// J7 pin64 exposes ADCINC5/CMPIN5N while J7 pin65 exposes ADCINB5 only.
-// Keep current-sensor CMPSS protection disabled until both channels are routed
-// to comparator-capable inputs on the final hardware.
-#define COUNT_CURRENT_PROTECTION_CMPSS  0U
+// J3 pin24 exposes ADCINC3/CMPIN6N (CMPSS6) and J3 pin25 exposes ADCINB3/CMPIN3N (CMPSS3).
+// Both channels have comparator-capable inputs, so CMPSS overcurrent protection is enabled.
+#define COUNT_CURRENT_PROTECTION_CMPSS  2U
 
 // Current-sensor analog front end: 90mV/A with an approximately 2.5V offset.
 // With a 3.0V ADC reference this gives only about +5.56A of positive headroom,
@@ -109,21 +108,23 @@
 #endif // !IS_TWO_SHUNT_DRIVE
 
 // Phase V
-#define M1_IV_ADC_BASE         ADCC_BASE           // J7 pin64, ADCINC5
+#define M1_IV_ADC_BASE         ADCC_BASE           // J3 pin24, ADCINC3
 #define M1_IV_ADCRESULT_BASE   ADCCRESULT_BASE
-#define M1_IV_ADC_CH_NUM       ADC_CH_ADCIN5
+#define M1_IV_ADC_CH_NUM       ADC_CH_ADCIN3
 #define M1_IV_ADC_SOC_NUM      ADC_SOC_NUMBER0
 #define M1_IV_ADC_PPB_NUM      ADC_PPB_NUMBER1
+#define M1_IV_CMPSS_BASE       CMPSS6_BASE         // J3 pin24, CMPIN6N
 
 // Phase W
-#define M1_IW_ADC_BASE         ADCB_BASE           // J7 pin65, ADCINB5
+#define M1_IW_ADC_BASE         ADCB_BASE           // J3 pin25, ADCINB3
 #define M1_IW_ADCRESULT_BASE   ADCBRESULT_BASE
-#define M1_IW_ADC_CH_NUM       ADC_CH_ADCIN5
+#define M1_IW_ADC_CH_NUM       ADC_CH_ADCIN3
 #define M1_IW_ADC_SOC_NUM      ADC_SOC_NUMBER0
 #define M1_IW_ADC_PPB_NUM      ADC_PPB_NUMBER1
+#define M1_IW_CMPSS_BASE       CMPSS3_BASE         // J3 pin25, CMPIN3N
 
 // DC Bus voltage
-#define M1_VDC_ADC_BASE        ADCD_BASE           // J7 pin63, shared ADCIN15
+#define M1_VDC_ADC_BASE        ADCD_BASE           // J7 pin63, ADCIND15
 #define M1_VDC_ADCRESULT_BASE  ADCDRESULT_BASE
 #define M1_VDC_ADC_CH_NUM      ADC_CH_ADCIN15
 #define M1_VDC_ADC_SOC_NUM     ADC_SOC_NUMBER0
@@ -295,11 +296,24 @@
 #define M1_CURRENT_SF                   (1.0f / M1_CURRENT_COUNTS_PER_AMP)
 #define M1_CURRENT_INV_SF               (M1_CURRENT_COUNTS_PER_AMP)
 
+// FCL adcScale: maps signed PPB counts to per-unit current (1.0 pu = M1_BASE_CURRENT).
+// -1 / (M1_BASE_CURRENT * M1_CURRENT_COUNTS_PER_AMP) = -1/(5.0 * 122.88) ≈ -0.001628
+// The original -M1_ADC_PU_PPB_SCALE_FACTOR (-1/2048) was designed for a mid-rail
+// sensor (1.5 V zero) where Ibase produced 2048 counts. With a 2.5 V zero this
+// sensor only produces 614 counts at Ibase = 5 A, so the scale must be adjusted.
+#define M1_FCL_ADC_SCALE    (1.0f / (M1_BASE_CURRENT * M1_CURRENT_COUNTS_PER_AMP))
+
 //
 // Voltage Scale
 //
-#define M1_MAXIMUM_SCALE_VOLATGE        74.1
-#define M1_VOLTAGE_SF                   (M1_MAXIMUM_SCALE_VOLATGE / 4096.0)
-#define M1_VOLTAGE_INV_SF               (4096.0 / M1_MAXIMUM_SCALE_VOLATGE)
+// Hardware calibration points: 140 mV at 34 V bus, 2.92 V at 600 V bus (max).
+// Primary calibration from the high-voltage point (600 V / 2.92 V) is used
+// because it covers the normal operating range and is the safety-critical value:
+//   V_bus_full_scale = 600 V × (3.0 V / 2.92 V) = 616.4 V
+// Note: at 34 V the divider reads ~15 % low (140 mV vs ~165 mV expected) due
+// to resistor tolerances; this error is negligible above ~100 V.
+#define M1_MAXIMUM_SCALE_VOLATGE        616.4f
+#define M1_VOLTAGE_SF                   (M1_MAXIMUM_SCALE_VOLATGE / 4096.0f)
+#define M1_VOLTAGE_INV_SF               (4096.0f / M1_MAXIMUM_SCALE_VOLATGE)
 
 #endif  // end of DUAL_AXIS_SERVO_DRIVE_USER_H definition

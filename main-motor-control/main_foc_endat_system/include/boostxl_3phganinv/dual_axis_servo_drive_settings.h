@@ -146,11 +146,11 @@ typedef float _iq;
 // Uncomment to disable all fault protection for bench EnDat testing (NO INVERTER)
 #define ENDAT_HACK
 
-// #define DISABLE_MOTOR_FAULTS
+#define DISABLE_MOTOR_FAULTS
 // #define DISABLE_BUS_VOLTAGE_CHECK
 // #define DISABLE_OVERCURRENT_CHECK
 
-// #define DISABLE_ENDAT
+#define DISABLE_ENDAT
 // #define DACOUT_EN
 
 

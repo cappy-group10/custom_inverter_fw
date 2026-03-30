@@ -239,13 +239,11 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
 
         //
         // initialize CMPSS handles
-        // The migrated current sensors are used only for ADC sampling on this
-        // pinout, so keep the current-sensor CMPSS handles disabled.
         //
 #ifdef IS_TWO_SHUNT_DRIVE
-        obj->cmpssHandle[0] = 0U;
-        obj->cmpssHandle[1] = 0U;
-        obj->cmpssHandle[2] = 0U;
+        obj->cmpssHandle[0] = M1_IV_CMPSS_BASE;   // Phase V: CMPSS6 (ADCINC3/CMPIN6N)
+        obj->cmpssHandle[1] = M1_IW_CMPSS_BASE;   // Phase W: CMPSS3 (ADCINB3/CMPIN3N)
+        obj->cmpssHandle[2] = 0U;                  // unused in 2-shunt
 #else
         obj->cmpssHandle[0] = M1_U_CMPSS_BASE;
         obj->cmpssHandle[1] = M1_V_CMPSS_BASE;
@@ -1287,15 +1285,18 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX16TO31CFG) = 0;
         EDIS;
 
-        // INPUTXBAR1 trip
+        // MUX01: gate-driver fault signal via INPUTXBAR1 (GPIO24)
         XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX01_INPUTXBAR1);
 
-        // Disable all the muxes first
-        XBAR_disableEPWMMux(XBAR_TRIP4, 0xFFFF);
+        // MUX04: CMPSS3 (Phase W, ADCINB3/CMPIN3N) filtered CTRIPH-OR-L
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
 
-        // The migrated current-sensor pins are not routed as a CMPSS pair.
-        // Keep TRIP4 sourced only from the external gate-driver fault input.
-        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX01);
+        // MUX10: CMPSS6 (Phase V, ADCINC3/CMPIN6N) filtered CTRIPH-OR-L
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
+
+        // Disable all muxes first, then enable the three TRIP4 sources
+        XBAR_disableEPWMMux(XBAR_TRIP4, 0xFFFF);
+        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX01 | XBAR_MUX04 | XBAR_MUX10);
     }
     
     //

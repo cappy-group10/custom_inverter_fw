@@ -88,7 +88,7 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->FCL_params.carrierMid = M1_INV_PWM_HALF_TBPRD * 0x10000L;
         #endif
 
-        pMotor->FCL_params.adcScale = -M1_ADC_PU_PPB_SCALE_FACTOR;
+        pMotor->FCL_params.adcScale = -M1_FCL_ADC_SCALE;
 
         pMotor->FCL_params.cmidsqrt3 =
                 pMotor->FCL_params.carrierMid * sqrtf(3.0);
