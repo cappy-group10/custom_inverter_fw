@@ -22,8 +22,12 @@ HAL_MTR_Obj  (halMtrHandle[2] / halMtr[2])
 |
 +- spiHandle          -> M1_SPI_BASE  (MTR_1 only)
 +- pwmHandle[3]       -> U/V/W phase PWM bases
-+- cmpssHandle[3]     -> U/V/W phase CMPSS bases
++- cmpssHandle[3]     -> CMPSS bases (see note below)
 \- qepHandle          -> M1_QEP_BASE when QEP feedback is used
+
+Note on cmpssHandle[]:
+  - 3-shunt: [0]=M1_U_CMPSS_BASE, [1]=M1_V_CMPSS_BASE, [2]=M1_W_CMPSS_BASE
+  - 2-shunt (IS_TWO_SHUNT_DRIVE): [0]=CMPSS6 (Phase V), [1]=CMPSS3 (Phase W), [2]=0 (unused)
 ```
 
 ---
@@ -77,7 +81,7 @@ main()
 |       +- register motor1ControlISR on EPWM1 INT
 |       +- register endatProducerISR on EPWM9 INT
 |       +- configure EPWM1 interrupt cadence for current control
-|       \- configure EPWM7 interrupt cadence for EnDat runtime scheduling
+|       \- configure EPWM9 interrupt cadence for EnDat runtime scheduling
 |
 +-[14] runOffsetsCalculation()
 |
@@ -166,12 +170,24 @@ Runtime:
 
 ### ADC channels for Motor 1
 
-| Signal | ADC module | Trigger |
-|---|---|---|
-| Phase U current | ADCC | EPWM1 SOCA |
-| Phase V current | ADCB | EPWM1 SOCA |
-| Phase W current | ADCA | EPWM1 SOCA |
-| DC bus voltage | ADCD | EPWM1 SOCA |
+#### 2-shunt configuration (`IS_TWO_SHUNT_DRIVE`, current build)
+
+| Signal | ADC module | Channel | Pin | Trigger |
+|---|---|---|---|---|
+| Phase V current (Iv) | ADCC | ADCIN3 | J3-24 | EPWM1 SOCA |
+| Phase W current (Iw) | ADCB | ADCIN3 | J3-25 | EPWM1 SOCA |
+| DC bus voltage | ADCD | ADCIN15 | J7-63 | EPWM1 SOCA |
+
+Phase U has no ADC channel in 2-shunt mode; Iu is reconstructed via Kirchhoff's law (Iu = -(Iv + Iw)).
+
+#### 3-shunt configuration (original TI reference design)
+
+| Signal | ADC module | Channel | Trigger |
+|---|---|---|---|
+| Phase U current (Iu) | ADCC | ADCIN2 | EPWM1 SOCA |
+| Phase V current (Iv) | ADCC | ADCIN3 | EPWM1 SOCA |
+| Phase W current (Iw) | ADCB | ADCIN3 | EPWM1 SOCA |
+| DC bus voltage | ADCD | ADCIN15 | EPWM1 SOCA |
 
 ### Interrupt ownership
 
