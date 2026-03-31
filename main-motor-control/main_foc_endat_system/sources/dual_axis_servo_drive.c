@@ -1766,9 +1766,39 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     #endif // DISABLE_BUS_VOLTAGE_CHECK
 
     #ifndef DISABLE_OVERCURRENT_CHECK
+    // ---- Persistent debug snapshot (survives past clear, inspect in debugger) ----
+    //
+    // dbg_tzFlag[n] bits:
+    //   0x0002 = TZ_FLAG_CBC    (cycle-by-cycle trip)
+    //   0x0004 = TZ_FLAG_OST    (one-shot trip)
+    //   0x0008 = TZ_FLAG_DCAEVT1 (digital compare A event 1 — XBAR/CMPSS path)
+    //
+    // dbg_cmpssStatus[n] bits:
+    //   0x0001 = COMPHSTS   (high comparator output, real-time)
+    //   0x0002 = COMPHSTSL  (high comparator LATCHED — current exceeded curHi)
+    //   0x0100 = COMPLSTS   (low comparator output, real-time)
+    //   0x0200 = COMPLSTSL  (low comparator LATCHED — current dropped below curLo)
+    //
+    // dbg_cmpssStatus[0] = CMPSS6 (Phase V, ADCINC3)
+    // dbg_cmpssStatus[1] = CMPSS3 (Phase W, ADCINB3)
+    //
+    // dbg_gpio24: 0 = gate-driver nFAULT active, 1 = no fault
+    //
+    // dbg_tripSource: decoded trip origin
+    //   bit 0 = gate-driver fault (GPIO24)
+    //   bit 1 = CMPSS6 high (Phase V over-current positive)
+    //   bit 2 = CMPSS6 low  (Phase V over-current negative)
+    //   bit 3 = CMPSS3 high (Phase W over-current positive)
+    //   bit 4 = CMPSS3 low  (Phase W over-current negative)
+    //
     static uint16_t dbg_tzFlag[3];
     static uint16_t dbg_cmpssStatus[3];
     static uint32_t dbg_gpio24;
+    static uint16_t dbg_tripSource;
+    static uint16_t dbg_adcRawIv;
+    static uint16_t dbg_adcRawIw;
+    static uint16_t dbg_curHi;
+    static uint16_t dbg_curLo;
 
     // Check for PWM trip due to over current
     if((EPWM_getTripZoneFlagStatus(obj->pwmHandle[0]) & EPWM_TZ_FLAG_OST) ||
@@ -1789,7 +1819,26 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
             dbg_cmpssStatus[cmpIdx] = CMPSS_getStatus(obj->cmpssHandle[cmpIdx]);
         }
 
-        dbg_gpio24 = GPIO_readPin(M1_XBAR_INPUT_GPIO);             // GPIO24
+        dbg_gpio24 = GPIO_readPin(M1_XBAR_INPUT_GPIO);
+
+        // Capture raw ADC values at time of trip
+        dbg_adcRawIv = ADC_readResult(M1_IV_ADCRESULT_BASE, M1_IV_ADC_SOC_NUM);
+        dbg_adcRawIw = ADC_readResult(M1_IW_ADCRESULT_BASE, M1_IW_ADC_SOC_NUM);
+        dbg_curHi = pMotor->currentThreshHi;
+        dbg_curLo = pMotor->currentThreshLo;
+
+        // Decode trip source
+        dbg_tripSource = 0;
+        if(dbg_gpio24 == 0U)
+            dbg_tripSource |= 0x0001;                       // gate-driver fault
+        if(dbg_cmpssStatus[0] & 0x0002)
+            dbg_tripSource |= 0x0002;                       // CMPSS6 high (Iv+)
+        if(dbg_cmpssStatus[0] & 0x0200)
+            dbg_tripSource |= 0x0004;                       // CMPSS6 low  (Iv-)
+        if(dbg_cmpssStatus[1] & 0x0002)
+            dbg_tripSource |= 0x0008;                       // CMPSS3 high (Iw+)
+        if(dbg_cmpssStatus[1] & 0x0200)
+            dbg_tripSource |= 0x0010;                       // CMPSS3 low  (Iw-)
         // -------------------------------------------------
 
         // if any EPwm's OST is set, force OST on all three to DISABLE inverter
