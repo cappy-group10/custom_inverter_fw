@@ -171,6 +171,17 @@ uint16_t led2Cnt = 0;
 float32_t VdTesting = 0.0;          // Vd reference (pu)
 float32_t VqTesting = 0.20;         // Vq reference (pu)
 
+// V/f profile variables for open-loop IPM control
+float32_t vfBoost  = 0.03f;   // minimum voltage at zero speed
+float32_t vfSlope  = 0.65f;   // V/f ratio (Vq per unit speed)
+float32_t vfVqMax  = 0.95f;   // maximum Vq clamp
+volatile uint16_t vfEnable = false;  // true = V/f active, false = manual VdTesting/VqTesting
+
+// Desynchronization detection variables
+float32_t desyncAngleError = 0.0f;
+float32_t desyncThreshold  = 0.25f;  // 0.25 = 90 electrical degrees
+volatile uint16_t desyncFlag = false;
+
 // Variables for position reference generation and control
 float32_t posArray[8] = {2.5, -2.5, 3.5, -3.5, 5.0, -5.0, 8.0, -8.0};
 float32_t posPtrMax = 4;
@@ -336,7 +347,7 @@ void main(void)
     // Set up the initialization value for some variables
     motorVars[0].IdRef_start = 0.2;
     motorVars[0].IqRef = 0.1;
-    motorVars[0].speedRef = 0.1;
+    motorVars[0].speedRef = 0.05;  // conservative start for IPM
     motorVars[0].lsw1Speed = 0.02;
 
     motorVars[0].posPtr = 0;
@@ -793,9 +804,6 @@ static inline void buildLevel2_M1(void)
         // absolute encoders can proceed immediately after alignment, while
         // incremental encoders still need the index-search state.
         motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
-
-        motorVars[0].ipark.Ds = VdTesting;
-        motorVars[0].ipark.Qs = VqTesting;
     } // end else if(lsw == ENC_ALIGNMENT)
 
 // ----------------------------------------------------------------------------
@@ -853,6 +861,23 @@ static inline void buildLevel2_M1(void)
     runPark(&motorVars[0].park);
 
 // ----------------------------------------------------------------------------
+//  Apply voltage commands: V/f profile or manual VdTesting/VqTesting
+// ----------------------------------------------------------------------------
+    if(vfEnable)
+    {
+        float32_t absSpeed = fabsf(motorVars[0].rc.SetpointValue);
+        float32_t vqCmd = vfBoost + vfSlope * absSpeed;
+        if(vqCmd > vfVqMax) vqCmd = vfVqMax;
+        motorVars[0].ipark.Qs = vqCmd;
+        motorVars[0].ipark.Ds = VdTesting;
+    }
+    else
+    {
+        motorVars[0].ipark.Ds = VdTesting;
+        motorVars[0].ipark.Qs = VqTesting;
+    }
+
+// ----------------------------------------------------------------------------
 // Connect inputs of the INV_PARK module and call the inverse park module
 // ----------------------------------------------------------------------------
     motorVars[0].ipark.Sine = motorVars[0].park.Sine;
@@ -895,6 +920,24 @@ static inline void buildLevel2_M1(void)
     EPWM_setCounterCompareValue(halMtr[0].pwmHandle[2], EPWM_COUNTER_COMPARE_A,
                    (uint16_t)((M1_INV_PWM_HALF_TBPRD * motorVars[0].svgen.Tb) +
                                M1_INV_PWM_HALF_TBPRD));
+
+// ----------------------------------------------------------------------------
+//  Desynchronization detection (diagnostic only, no automatic trip)
+// ----------------------------------------------------------------------------
+#if !defined(DISABLE_ENDAT)
+    {
+        float32_t openLoopAngle = motorVars[0].ptrFCL->rg.Out;
+        float32_t encoderAngle  = motorVars[0].posElecTheta;
+        // Normalize open-loop angle to [0, 1]
+        float32_t olNorm = openLoopAngle - floorf(openLoopAngle);
+        desyncAngleError = olNorm - encoderAngle;
+        // Wrap to [-0.5, 0.5]
+        if(desyncAngleError > 0.5f)  desyncAngleError -= 1.0f;
+        if(desyncAngleError < -0.5f) desyncAngleError += 1.0f;
+        desyncFlag = (fabsf(desyncAngleError) > desyncThreshold) ? true : false;
+    }
+#endif
+
     return;
 }
 
@@ -972,7 +1015,7 @@ static inline void buildLevel3_M1(void)
     else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
     {
         // alignment current
-        motorVars[0].IdRef = motorVars[0].IdRef_start;  //0.1;
+        motorVars[0].IdRef = motorVars[0].IdRef_start;
 
         // set up an alignment and hold time for shaft to settle down
         if(motorVars[0].pi_id.ref >= motorVars[0].IdRef)
@@ -983,8 +1026,8 @@ static inline void buildLevel3_M1(void)
             {
                 motorVars[0].alignCntr  = 0;
 
-                // absolute encoders can proceed immediately after alignment,
-                // while incremental encoders still need the index-search state.
+                // EnDat (absolute) -> ENC_CALIBRATION_DONE immediately
+                // QEP (incremental) -> ENC_WAIT_FOR_INDEX
                 motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
             }
         }
@@ -992,6 +1035,9 @@ static inline void buildLevel3_M1(void)
     } // end else if(lsw == ENC_ALIGNMENT)
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
     {
+        // IdRef and IqRef are now user-controllable via debugger
+        // (motorVars[0].IdRef_run, motorVars[0].IqRef) or via
+        // the global IdRef/IqRef when flagSyncRun == true.
         motorVars[0].IdRef = motorVars[0].IdRef_run;
     }
 
@@ -1501,8 +1547,10 @@ __interrupt void motor1ControlISR(void)
 // ----------------------------------------------------------------------------
     dlogCh1 = motorVars[0].ptrFCL->rg.Out;
     dlogCh2 = motorVars[0].speed.ElecTheta;
-    dlogCh3 = motorVars[0].clarke.As;
-    dlogCh4 = motorVars[0].clarke.Bs;
+    // dlogCh3 = motorVars[0].clarke.As;
+    // dlogCh4 = motorVars[0].clarke.Bs;
+    dlogCh3 = motorVars[0].park.Ds;
+    dlogCh4 = motorVars[0].park.Qs;
 
 #ifdef DACOUT_EN
 //-----------------------------------------------------------------------------
@@ -1529,8 +1577,10 @@ __interrupt void motor1ControlISR(void)
 //-----------------------------------------------------------------------------
 // Variable display on DACs
 //-----------------------------------------------------------------------------
+    // DAC_setShadowValue(hal.dacHandle[0],
+    //                    DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.ref));
     DAC_setShadowValue(hal.dacHandle[0],
-                       DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.ref));
+                       DAC_MACRO_PU(motorVars[0].posElecTheta));
     DAC_setShadowValue(hal.dacHandle[1],
                        DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.fbk));
 #endif   // DACOUT_EN

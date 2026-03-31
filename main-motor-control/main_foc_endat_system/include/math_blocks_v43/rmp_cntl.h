@@ -48,6 +48,7 @@ typedef struct {
 	float32_t SetpointValue;  // Output: Target output (pu)
 	uint32_t  EqualFlag;	  // Output: Flag output (Q0) - independently with global Q
 	float32_t Tmp;			  // Variable: Temp variable
+	float32_t RampStepSize;   // Parameter: Ramp increment per step (pu)
 } RMPCNTL;
 
 
@@ -62,7 +63,8 @@ Default initalizer for the RMPCNTL object.
     0, /* RampDelayCount */ \
     0, /* SetpointValue */ \
     0, /* EqualFlag */ \
-    0  /* Tmp */ \
+    0, /* Tmp */ \
+    0.00001525f  /* RampStepSize */ \
     }
 
 /*------------------------------------------------------------------------------
@@ -73,11 +75,11 @@ static inline void fclRampControl(RMPCNTL * rc1)
 	rc1->Tmp = (rc1->TargetValue) - (rc1->SetpointValue);
 
 #if defined(__TMS320C28XX_TMU__)
-    if(fabsf(rc1->Tmp) >= 0.00001525f)
+    if(fabsf(rc1->Tmp) >= rc1->RampStepSize)
 #elif defined(__TMS320C28XX_FPU32__)
-    if(fabs(rc1->Tmp) >= 0.00001525f)
+    if(fabs(rc1->Tmp) >= rc1->RampStepSize)
 #else
-    if((rc1->Tmp >= 0.00001525f) && (rc1->Tmp <= -0.00001525f))
+    if((rc1->Tmp >= rc1->RampStepSize) && (rc1->Tmp <= -(rc1->RampStepSize)))
 #endif
 	{
 		rc1->RampDelayCount++;
@@ -86,11 +88,11 @@ static inline void fclRampControl(RMPCNTL * rc1)
 		{
 			if(rc1->TargetValue >= rc1->SetpointValue)
 			{
-				rc1->SetpointValue += 0.00001525f;
+				rc1->SetpointValue += rc1->RampStepSize;
 			}
 			else
 			{
-				rc1->SetpointValue -= 0.00001525f;
+				rc1->SetpointValue -= rc1->RampStepSize;
 			}
 
 			rc1->RampDelayCount = 0;

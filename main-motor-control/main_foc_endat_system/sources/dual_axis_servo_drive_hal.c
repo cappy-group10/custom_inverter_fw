@@ -769,8 +769,8 @@ void HAL_setupDACs(HAL_Handle handle)
     // enable value change only on sync signal
     DAC_setLoadMode(obj->dacHandle[0], DAC_LOAD_PWMSYNC);
 
-    // sync sel 5 means sync from pwm 6
-    DAC_setPWMSyncSignal(obj->dacHandle[0], 5);
+    // sync to EPWM1 (Motor 1 phase U) for debug DAC output
+    DAC_setPWMSyncSignal(obj->dacHandle[0], 1);
 
     return;
 }
