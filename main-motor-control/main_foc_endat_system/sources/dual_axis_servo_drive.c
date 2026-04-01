@@ -228,7 +228,7 @@ uint32_t rampDelayMax = 0;
 
 MotorRunStop_e runMotor = MOTOR_STOP;
 CtrlState_e ctrlState = CTRL_STOP;
-bool flagSyncRun = false;
+bool flagSyncRun = true;
 
 volatile uint32_t endatPosRaw = 0;   // raw position word from EnDat encoder
 volatile uint16_t endatInitDone = 0; // flag: 1 = init succeeded
@@ -1014,6 +1014,7 @@ static inline void buildLevel3_M1(void)
     }
     else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
     {
+#if(POSITION_ENCODER_NEEDS_ALIGNMENT)
         // alignment current
         motorVars[0].IdRef = motorVars[0].IdRef_start;
 
@@ -1031,7 +1032,13 @@ static inline void buildLevel3_M1(void)
                 motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
             }
         }
-
+#else
+        // Absolute encoders already provide rotor position, so skip the
+        // rotor-lock alignment hold and enable the current loop directly.
+        motorVars[0].alignCntr = 0;
+        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+        motorVars[0].IdRef = motorVars[0].IdRef_run;
+#endif
     } // end else if(lsw == ENC_ALIGNMENT)
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
     {
@@ -1170,6 +1177,7 @@ static inline void buildLevel46_M1(void)
         }
         else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
         {
+#if(POSITION_ENCODER_NEEDS_ALIGNMENT)
             motorVars[0].rc.TargetValue = 0;
             motorVars[0].rc.SetpointValue = 0;
 
@@ -1191,6 +1199,12 @@ static inline void buildLevel46_M1(void)
                     motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
                 }
             }
+#else
+            motorVars[0].alignCntr = 0;
+            motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+            motorVars[0].IdRef = motorVars[0].IdRef_run;
+            motorVars[0].rc.TargetValue = motorVars[0].speedRef;
+#endif
         } // end else if(lsw == ENC_ALIGNMENT)
     }
     else
@@ -1375,6 +1389,7 @@ static inline void buildLevel5_M1(void)
     }
     else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
     {
+#if(POSITION_ENCODER_NEEDS_ALIGNMENT)
         // alignment curretnt
         motorVars[0].IdRef = motorVars[0].IdRef_start;  //(0.1);
 
@@ -1396,6 +1411,11 @@ static inline void buildLevel5_M1(void)
                 motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
             }
         }
+#else
+        motorVars[0].alignCntr = 0;
+        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+        motorVars[0].IdRef = motorVars[0].IdRef_run;
+#endif
     } // end else if(lsw == ENC_ALIGNMENT)
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
     {
@@ -1792,9 +1812,11 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     //   bit 4 = CMPSS3 low  (Phase W over-current negative)
     //
     static uint16_t dbg_tzFlag[3];
+    static uint16_t dbg_tzOstFlag[3];
     static uint16_t dbg_cmpssStatus[3];
     static uint32_t dbg_gpio24;
     static uint16_t dbg_tripSource;
+    static uint16_t dbg_xbarFlags;
     static uint16_t dbg_adcRawIv;
     static uint16_t dbg_adcRawIw;
     static uint16_t dbg_curHi;
@@ -1809,6 +1831,9 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         dbg_tzFlag[0] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[0]);
         dbg_tzFlag[1] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[1]);
         dbg_tzFlag[2] = EPWM_getTripZoneFlagStatus(obj->pwmHandle[2]);
+        dbg_tzOstFlag[0] = EPWM_getOneShotTripZoneFlagStatus(obj->pwmHandle[0]);
+        dbg_tzOstFlag[1] = EPWM_getOneShotTripZoneFlagStatus(obj->pwmHandle[1]);
+        dbg_tzOstFlag[2] = EPWM_getOneShotTripZoneFlagStatus(obj->pwmHandle[2]);
 
         dbg_cmpssStatus[0] = 0U;
         dbg_cmpssStatus[1] = 0U;
@@ -1820,6 +1845,17 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         }
 
         dbg_gpio24 = GPIO_readPin(M1_XBAR_INPUT_GPIO);
+        dbg_xbarFlags = 0U;
+        if(XBAR_getInputFlagStatus(XBAR_INPUT_FLG_INPUT1))
+            dbg_xbarFlags |= 0x0001;                        // INPUTXBAR1
+        if(XBAR_getInputFlagStatus(XBAR_INPUT_FLG_CMPSS6_CTRIPH))
+            dbg_xbarFlags |= 0x0002;                        // CMPSS6 high
+        if(XBAR_getInputFlagStatus(XBAR_INPUT_FLG_CMPSS6_CTRIPL))
+            dbg_xbarFlags |= 0x0004;                        // CMPSS6 low
+        if(XBAR_getInputFlagStatus(XBAR_INPUT_FLG_CMPSS3_CTRIPH))
+            dbg_xbarFlags |= 0x0008;                        // CMPSS3 high
+        if(XBAR_getInputFlagStatus(XBAR_INPUT_FLG_CMPSS3_CTRIPL))
+            dbg_xbarFlags |= 0x0010;                        // CMPSS3 low
 
         // Capture raw ADC values at time of trip
         dbg_adcRawIv = ADC_readResult(M1_IV_ADCRESULT_BASE, M1_IV_ADC_SOC_NUM);

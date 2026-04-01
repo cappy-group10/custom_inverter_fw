@@ -898,6 +898,15 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setPadConfig(21, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(21, GPIO_QUAL_3SAMPLE);
 
+#ifdef IS_TWO_SHUNT_DRIVE
+    // In the 2-shunt build, GPIO24/GPIO25 are reused as analog current-sense
+    // inputs:
+    //   GPIO24 -> ADCINC3 / CMPIN6N (phase V)
+    //   GPIO25 -> ADCINB3 / CMPIN3N (phase W)
+    // Keep both pins in analog mode so ADC/CMPSS can see the external signal.
+    GPIO_setAnalogMode(24, GPIO_ANALOG_ENABLED);
+    GPIO_setAnalogMode(25, GPIO_ANALOG_ENABLED);
+#else
     // GPIO24 - OT_M1
     GPIO_setMasterCore(24, GPIO_CORE_CPU1);
     GPIO_setPinConfig(GPIO_24_GPIO24);
@@ -909,6 +918,7 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setPinConfig(GPIO_25_GPIO25);
     GPIO_setDirectionMode(25, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(25, GPIO_PIN_TYPE_STD);
+#endif
 
     // GPIO26 - EN_GATE_M2
     GPIO_setMasterCore(26, GPIO_CORE_CPU1);
