@@ -45,6 +45,8 @@ extern void     endat21_startProducer(void);
 extern void     endat21_runProducerTick(void);
 extern void     endat21_schedulePositionRead(void);
 extern void     endat21_servicePositionRead(void);
+extern void     endat21_setAngleOffsetCounts(int32_t offsetCounts);
+extern void     endat21_clearAngleOffsetCounts(void);
 extern bool     endat21_getPublishedPosition(EndatPositionSample *sample);
 extern bool     endat21_getPositionFeedback(float32_t *mechThetaPu,
                                             float32_t *elecThetaPu,

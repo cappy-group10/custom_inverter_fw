@@ -234,6 +234,32 @@ volatile uint32_t endatPosRaw = 0;   // raw position word from EnDat encoder
 volatile uint16_t endatInitDone = 0; // flag: 1 = init succeeded
 volatile uint32_t endatCrcFailCount = 0;
 
+#define ENDAT_OFFSET_CAL_SAMPLE_COUNT  8U
+
+volatile bool endatOffsetCalEnable = false;
+volatile bool endatOffsetCalInProgress = false;
+volatile bool endatOffsetCalibrated = false;
+volatile bool endatOffsetValid = false;
+volatile uint16_t endatOffsetCalSampleCount = 0U;
+volatile uint32_t endatOffsetCounts = 0U;
+volatile float32_t endatOffsetMechPu = 0.0F;
+volatile float32_t endatOffsetElecPu = 0.0F;
+
+volatile uint16_t dbg_tzFlag[3] = {0U, 0U, 0U};
+volatile uint16_t dbg_tzOstFlag[3] = {0U, 0U, 0U};
+volatile uint16_t dbg_cmpssStatus[3] = {0U, 0U, 0U};
+volatile uint32_t dbg_gpio24 = 0U;
+volatile uint16_t dbg_tripSource = 0U;
+volatile uint16_t dbg_xbarFlags = 0U;
+volatile uint16_t dbg_adcRawIv = 0U;
+volatile uint16_t dbg_adcRawIw = 0U;
+volatile uint16_t dbg_curHi = 0U;
+volatile uint16_t dbg_curLo = 0U;
+
+static uint32_t sEndatOffsetBaseCounts = 0U;
+static uint64_t sEndatOffsetCountSpan = 0ULL;
+static int64_t sEndatOffsetAccumDeltaCounts = 0LL;
+
 //
 // These are defined by the linker file
 //
@@ -652,10 +678,14 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
+static inline void syncEndatAngleOffsetFromMotor(MOTOR_Vars_t *pMotor);
+
 static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
     EndatPositionSample sample = {0};
     MOTOR_Vars_t *pMotor = &motorVars[motorNum];
+
+    syncEndatAngleOffsetFromMotor(pMotor);
 
     endatCrcFailCount = gEndatCrcFailCount;
 
@@ -671,6 +701,214 @@ static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum)
     endatPosRaw = sample.rawPosition;
 
     return true;
+}
+
+static inline float32_t endatCountsToMechThetaPu(uint32_t rawCounts)
+{
+    uint64_t maxCount;
+
+    if(gEndatRuntimeState.positionClocks == 0U)
+    {
+        return 0.0F;
+    }
+
+    maxCount = (gEndatRuntimeState.positionClocks >= 32U) ?
+            4294967296ULL :
+            (1ULL << gEndatRuntimeState.positionClocks);
+
+    return (float32_t)rawCounts / (float32_t)maxCount;
+}
+
+static inline uint64_t endatGetCountSpan(uint16_t positionClocks)
+{
+    if(positionClocks == 0U)
+    {
+        return 0ULL;
+    }
+
+    return (positionClocks >= 32U) ?
+            4294967296ULL :
+            (1ULL << positionClocks);
+}
+
+static inline uint32_t endatWrapCounts(int64_t count, uint64_t span)
+{
+    int64_t wrappedCount;
+
+    if(span == 0ULL)
+    {
+        return 0U;
+    }
+
+    wrappedCount = count % (int64_t)span;
+
+    if(wrappedCount < 0LL)
+    {
+        wrappedCount += (int64_t)span;
+    }
+
+    return (uint32_t)wrappedCount;
+}
+
+static inline int64_t endatShortestDeltaCounts(uint32_t baseCounts,
+                                               uint32_t sampleCounts,
+                                               uint64_t span)
+{
+    uint64_t forwardDistance;
+    uint64_t reverseDistance;
+
+    if(span == 0ULL)
+    {
+        return 0LL;
+    }
+
+    if(sampleCounts >= baseCounts)
+    {
+        forwardDistance = (uint64_t)sampleCounts - (uint64_t)baseCounts;
+        reverseDistance = span - forwardDistance;
+    }
+    else
+    {
+        reverseDistance = (uint64_t)baseCounts - (uint64_t)sampleCounts;
+        forwardDistance = span - reverseDistance;
+    }
+
+    return (forwardDistance <= reverseDistance) ?
+            (int64_t)forwardDistance :
+            -(int64_t)reverseDistance;
+}
+
+static inline void publishEndatAngleOffset(MOTOR_Vars_t *pMotor,
+                                           uint32_t offsetCounts)
+{
+    pMotor->ptrFCL->qep.CalibratedAngle = (int32_t)offsetCounts;
+    endat21_setAngleOffsetCounts((int32_t)offsetCounts);
+
+    endatOffsetValid = true;
+    endatOffsetCounts = offsetCounts;
+    endatOffsetMechPu = endatCountsToMechThetaPu(offsetCounts);
+    endatOffsetElecPu = endatOffsetMechPu *
+            (float32_t)pMotor->ptrFCL->qep.PolePairs;
+    endatOffsetElecPu -= floorf(endatOffsetElecPu);
+}
+
+static inline void syncEndatAngleOffsetFromMotor(MOTOR_Vars_t *pMotor)
+{
+#if defined(DISABLE_ENDAT) || !POSITION_ENCODER_IS_ENDAT
+    (void)pMotor;
+#else
+    if((endatOffsetValid == true) && (gEndatRuntimeState.angleOffsetValid == 0U))
+    {
+        publishEndatAngleOffset(pMotor,
+                (uint32_t)pMotor->ptrFCL->qep.CalibratedAngle);
+    }
+#endif
+}
+
+static inline bool isEndatOffsetCalibrationRequested(void)
+{
+#if defined(DISABLE_ENDAT) || !POSITION_ENCODER_IS_ENDAT
+    return false;
+#else
+    return ((endatInitDone != 0U) &&
+            ((endatOffsetCalEnable == true) || (endatOffsetValid == false)));
+#endif
+}
+
+static inline void resetEndatOffsetCalibrationWork(MOTOR_Vars_t *pMotor)
+{
+    (void)pMotor;
+
+    endatOffsetCalInProgress = false;
+    endatOffsetCalSampleCount = 0U;
+    sEndatOffsetBaseCounts = 0U;
+    sEndatOffsetCountSpan = 0ULL;
+    sEndatOffsetAccumDeltaCounts = 0LL;
+}
+
+static inline void beginEndatOffsetCalibration(MOTOR_Vars_t *pMotor)
+{
+    if((isEndatOffsetCalibrationRequested() == false) ||
+       (endatOffsetCalInProgress == true))
+    {
+        return;
+    }
+
+    endatOffsetCalInProgress = true;
+    endatOffsetCalibrated = false;
+    endatOffsetCalSampleCount = 0U;
+    sEndatOffsetBaseCounts = 0U;
+    sEndatOffsetCountSpan = 0ULL;
+    sEndatOffsetAccumDeltaCounts = 0LL;
+    endatOffsetMechPu = 0.0F;
+    endatOffsetElecPu = 0.0F;
+    pMotor->alignCntr = 0U;
+}
+
+static inline bool runEndatOffsetCalibration(MOTOR_Vars_t *pMotor)
+{
+#if defined(DISABLE_ENDAT) || !POSITION_ENCODER_IS_ENDAT
+    (void)pMotor;
+    return false;
+#else
+    EndatPositionSample sample = {0};
+    uint32_t offsetCounts;
+    int64_t averageDeltaCounts;
+
+    if(endatOffsetCalInProgress == false)
+    {
+        return false;
+    }
+
+    if(pMotor->alignCntr < pMotor->alignCnt)
+    {
+        pMotor->alignCntr++;
+        return false;
+    }
+
+    if(!endat21_getPublishedPosition(&sample))
+    {
+        return false;
+    }
+
+    if(endatOffsetCalSampleCount == 0U)
+    {
+        sEndatOffsetBaseCounts = sample.rawPosition;
+        sEndatOffsetCountSpan = endatGetCountSpan(gEndatRuntimeState.positionClocks);
+
+        if(sEndatOffsetCountSpan == 0ULL)
+        {
+            return false;
+        }
+    }
+
+    sEndatOffsetAccumDeltaCounts += endatShortestDeltaCounts(sEndatOffsetBaseCounts,
+                                                             sample.rawPosition,
+                                                             sEndatOffsetCountSpan);
+    endatOffsetCalSampleCount++;
+
+    if(endatOffsetCalSampleCount < ENDAT_OFFSET_CAL_SAMPLE_COUNT)
+    {
+        return false;
+    }
+
+    averageDeltaCounts = sEndatOffsetAccumDeltaCounts /
+            (int64_t)endatOffsetCalSampleCount;
+    offsetCounts = endatWrapCounts((int64_t)sEndatOffsetBaseCounts +
+            averageDeltaCounts, sEndatOffsetCountSpan);
+
+    publishEndatAngleOffset(pMotor, offsetCounts);
+
+    endatOffsetCalEnable = false;
+    endatOffsetCalInProgress = false;
+    endatOffsetCalibrated = true;
+    pMotor->alignCntr = 0U;
+    sEndatOffsetBaseCounts = 0U;
+    sEndatOffsetCountSpan = 0ULL;
+    sEndatOffsetAccumDeltaCounts = 0LL;
+
+    return true;
+#endif
 }
 
 //****************************************************************************
@@ -1007,6 +1245,7 @@ static inline void buildLevel3_M1(void)
 // ----------------------------------------------------------------------------
     if(motorVars[0].runMotor == MOTOR_STOP)
     {
+        resetEndatOffsetCalibrationWork(&motorVars[0]);
         motorVars[0].ptrFCL->lsw = ENC_ALIGNMENT;
         motorVars[0].pi_id.ref = 0;
         motorVars[0].IdRef = 0;
@@ -1014,6 +1253,7 @@ static inline void buildLevel3_M1(void)
     }
     else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
     {
+        beginEndatOffsetCalibration(&motorVars[0]);
 #if(POSITION_ENCODER_NEEDS_ALIGNMENT)
         // alignment current
         motorVars[0].IdRef = motorVars[0].IdRef_start;
@@ -1033,11 +1273,27 @@ static inline void buildLevel3_M1(void)
             }
         }
 #else
-        // Absolute encoders already provide rotor position, so skip the
-        // rotor-lock alignment hold and enable the current loop directly.
-        motorVars[0].alignCntr = 0;
-        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
-        motorVars[0].IdRef = motorVars[0].IdRef_run;
+        if(endatOffsetCalInProgress == true)
+        {
+            motorVars[0].IdRef = motorVars[0].IdRef_start;
+
+            if(motorVars[0].pi_id.ref >= motorVars[0].IdRef)
+            {
+                if(runEndatOffsetCalibration(&motorVars[0]))
+                {
+                    motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+                    motorVars[0].IdRef = motorVars[0].IdRef_run;
+                }
+            }
+        }
+        else
+        {
+            // Absolute encoders already provide rotor position, so skip the
+            // rotor-lock alignment hold and enable the current loop directly.
+            motorVars[0].alignCntr = 0;
+            motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+            motorVars[0].IdRef = motorVars[0].IdRef_run;
+        }
 #endif
     } // end else if(lsw == ENC_ALIGNMENT)
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
@@ -1177,6 +1433,7 @@ static inline void buildLevel46_M1(void)
         }
         else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
         {
+            beginEndatOffsetCalibration(&motorVars[0]);
 #if(POSITION_ENCODER_NEEDS_ALIGNMENT)
             motorVars[0].rc.TargetValue = 0;
             motorVars[0].rc.SetpointValue = 0;
@@ -1200,15 +1457,37 @@ static inline void buildLevel46_M1(void)
                 }
             }
 #else
-            motorVars[0].alignCntr = 0;
-            motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
-            motorVars[0].IdRef = motorVars[0].IdRef_run;
-            motorVars[0].rc.TargetValue = motorVars[0].speedRef;
+            if(endatOffsetCalInProgress == true)
+            {
+                motorVars[0].rc.TargetValue = 0;
+                motorVars[0].rc.SetpointValue = 0;
+                motorVars[0].IdRef = motorVars[0].IdRef_start;
+
+                if(motorVars[0].tempIdRef >= motorVars[0].IdRef)
+                {
+                    if(runEndatOffsetCalibration(&motorVars[0]))
+                    {
+                        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+                        motorVars[0].IdRef = motorVars[0].IdRef_run;
+                        motorVars[0].rc.TargetValue = motorVars[0].speedRef;
+                    }
+                }
+            }
+            else
+            {
+                motorVars[0].alignCntr = 0;
+                motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+                motorVars[0].IdRef = motorVars[0].IdRef_run;
+                motorVars[0].rc.TargetValue = motorVars[0].speedRef;
+            }
 #endif
         } // end else if(lsw == ENC_ALIGNMENT)
     }
     else
     {
+        resetEndatOffsetCalibrationWork(&motorVars[0]);
+        motorVars[0].ptrFCL->lsw = ENC_ALIGNMENT;
+        motorVars[0].alignCntr = 0U;
         motorVars[0].IdRef = 0;
         motorVars[0].tempIdRef = motorVars[0].IdRef;
 
@@ -1378,6 +1657,7 @@ static inline void buildLevel5_M1(void)
 // -----------------------------------------------------------------------------
     if(motorVars[0].runMotor == MOTOR_STOP)
     {
+        resetEndatOffsetCalibrationWork(&motorVars[0]);
         motorVars[0].ptrFCL->lsw = ENC_ALIGNMENT;
         motorVars[0].lsw2EntryFlag = 0;
         motorVars[0].alignCntr = 0;
@@ -1389,6 +1669,7 @@ static inline void buildLevel5_M1(void)
     }
     else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
     {
+        beginEndatOffsetCalibration(&motorVars[0]);
 #if(POSITION_ENCODER_NEEDS_ALIGNMENT)
         // alignment curretnt
         motorVars[0].IdRef = motorVars[0].IdRef_start;  //(0.1);
@@ -1412,9 +1693,27 @@ static inline void buildLevel5_M1(void)
             }
         }
 #else
-        motorVars[0].alignCntr = 0;
-        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
-        motorVars[0].IdRef = motorVars[0].IdRef_run;
+        if(endatOffsetCalInProgress == true)
+        {
+            motorVars[0].IdRef = motorVars[0].IdRef_start;
+            motorVars[0].rc.TargetValue = 0;
+            motorVars[0].rc.SetpointValue = 0;
+
+            if(motorVars[0].pi_id.ref >= motorVars[0].IdRef)
+            {
+                if(runEndatOffsetCalibration(&motorVars[0]))
+                {
+                    motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+                    motorVars[0].IdRef = motorVars[0].IdRef_run;
+                }
+            }
+        }
+        else
+        {
+            motorVars[0].alignCntr = 0;
+            motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+            motorVars[0].IdRef = motorVars[0].IdRef_run;
+        }
 #endif
     } // end else if(lsw == ENC_ALIGNMENT)
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
@@ -1797,7 +2096,9 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     //   0x0001 = COMPHSTS   (high comparator output, real-time)
     //   0x0002 = COMPHSTSL  (high comparator LATCHED — current exceeded curHi)
     //   0x0100 = COMPLSTS   (low comparator output, real-time)
-    //   0x0200 = COMPLSTSL  (low comparator LATCHED — current dropped below curLo)
+    //   0x0200 = COMPLSTSL  (low comparator LATCHED)
+    //            On this CMPINxN board, COMPL/CTRIPL is the active hardware
+    //            OCP path and is configured as the positive current threshold.
     //
     // dbg_cmpssStatus[0] = CMPSS6 (Phase V, ADCINC3)
     // dbg_cmpssStatus[1] = CMPSS3 (Phase W, ADCINB3)
@@ -1807,21 +2108,10 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     // dbg_tripSource: decoded trip origin
     //   bit 0 = gate-driver fault (GPIO24)
     //   bit 1 = CMPSS6 high (Phase V over-current positive)
-    //   bit 2 = CMPSS6 low  (Phase V over-current negative)
+    //   bit 2 = CMPSS6 low comparator event (active OCP on CMPIN6N board)
     //   bit 3 = CMPSS3 high (Phase W over-current positive)
-    //   bit 4 = CMPSS3 low  (Phase W over-current negative)
+    //   bit 4 = CMPSS3 low comparator event (active OCP on CMPIN3N board)
     //
-    static uint16_t dbg_tzFlag[3];
-    static uint16_t dbg_tzOstFlag[3];
-    static uint16_t dbg_cmpssStatus[3];
-    static uint32_t dbg_gpio24;
-    static uint16_t dbg_tripSource;
-    static uint16_t dbg_xbarFlags;
-    static uint16_t dbg_adcRawIv;
-    static uint16_t dbg_adcRawIw;
-    static uint16_t dbg_curHi;
-    static uint16_t dbg_curLo;
-
     // Check for PWM trip due to over current
     if((EPWM_getTripZoneFlagStatus(obj->pwmHandle[0]) & EPWM_TZ_FLAG_OST) ||
        (EPWM_getTripZoneFlagStatus(obj->pwmHandle[1]) & EPWM_TZ_FLAG_OST) ||
@@ -1870,11 +2160,11 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         if(dbg_cmpssStatus[0] & 0x0002)
             dbg_tripSource |= 0x0002;                       // CMPSS6 high (Iv+)
         if(dbg_cmpssStatus[0] & 0x0200)
-            dbg_tripSource |= 0x0004;                       // CMPSS6 low  (Iv-)
+            dbg_tripSource |= 0x0004;                       // CMPSS6 low comparator
         if(dbg_cmpssStatus[1] & 0x0002)
             dbg_tripSource |= 0x0008;                       // CMPSS3 high (Iw+)
         if(dbg_cmpssStatus[1] & 0x0200)
-            dbg_tripSource |= 0x0010;                       // CMPSS3 low  (Iw-)
+            dbg_tripSource |= 0x0010;                       // CMPSS3 low comparator
         // -------------------------------------------------
 
         // if any EPwm's OST is set, force OST on all three to DISABLE inverter
@@ -1929,6 +2219,14 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
             CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cmpIdx]);
             CMPSS_clearFilterLatchLow(obj->cmpssHandle[cmpIdx]);
         }
+
+        // clear XBAR input latches so the next debug snapshot reflects the next
+        // actual event instead of accumulated sticky flags
+        XBAR_clearInputFlag(XBAR_INPUT_FLG_INPUT1);
+        XBAR_clearInputFlag(XBAR_INPUT_FLG_CMPSS6_CTRIPH);
+        XBAR_clearInputFlag(XBAR_INPUT_FLG_CMPSS6_CTRIPL);
+        XBAR_clearInputFlag(XBAR_INPUT_FLG_CMPSS3_CTRIPH);
+        XBAR_clearInputFlag(XBAR_INPUT_FLG_CMPSS3_CTRIPL);
 
         // clear the ocp
         pMotor->tripFlagDMC = 0;

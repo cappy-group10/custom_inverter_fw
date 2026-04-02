@@ -560,9 +560,16 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
         // NEG signal from DAC for COMP-H
         CMPSS_configHighComparator(obj->cmpssHandle[cnt], CMPSS_INSRC_DAC);
 
+        // On this board the current signals are routed to CMPINxN, so the low
+        // comparator is the active hardware protection path. Configure it as a
+        // non-inverted upper-threshold detector and route CTRIPL into ePWM TZ.
+#if M1_CMPSS_PROTECTION_ON_N_INPUT
+        CMPSS_configLowComparator(obj->cmpssHandle[cnt], CMPSS_INSRC_DAC);
+#else
         // NEG signal from DAC for COMP-L, COMP-L output is inverted
         CMPSS_configLowComparator(obj->cmpssHandle[cnt],
-                                  (CMPSS_INSRC_DAC | CMPSS_INV_INVERTED)) ;
+                                  (CMPSS_INSRC_DAC | CMPSS_INV_INVERTED));
+#endif
 
         // Dig filter output ==> CTRIPH, Dig filter output ==> CTRIPOUTH
         CMPSS_configOutputsHigh(obj->cmpssHandle[cnt],
@@ -585,7 +592,8 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
         // Set DAC-H to allowed MAX +ve current
         CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], 1024);
 
-        // Set DAC-L to allowed MAX -ve current
+        // Set DAC-L to the active low-comparator threshold. For N-input board
+        // protection this is repurposed as the positive OCP threshold.
         CMPSS_setDACValueLow(obj->cmpssHandle[cnt], 1024);
 
         // digital filter settings - HIGH side
@@ -631,8 +639,12 @@ void HAL_setupCMPSS_DACValue(HAL_MTR_Handle handle,
         // Set DAC-H to allowed MAX +ve current
         CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], curHi);
 
-        // Set DAC-L to allowed MAX -ve current
+        // Set DAC-L to the active board-specific threshold.
+#if M1_CMPSS_PROTECTION_ON_N_INPUT
+        CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curHi);
+#else
         CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curLo);
+#endif
     }
 
     return;
@@ -1286,27 +1298,30 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
         curHi = M1_CMPSS_ZERO_COUNT + M1_CURRENT_SCALE(currentLimitClamped);
         curLo = M1_CMPSS_ZERO_COUNT - M1_CURRENT_SCALE(currentLimitClamped);
 
-        //Select GPIO24 as INPUTXBAR1
-        XBAR_setInputPin(M1_XBAR_INPUT_NUM, M1_XBAR_INPUT_GPIO);
-
         // Rebuild TRIP4 from scratch, clear everything first.
         EALLOW;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX0TO15CFG) = 0;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX16TO31CFG) = 0;
         EDIS;
 
-        // MUX01: gate-driver fault signal via INPUTXBAR1 (GPIO24)
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX01_INPUTXBAR1);
-
-        // MUX04: CMPSS3 (Phase W, ADCINB3/CMPIN3N) filtered CTRIPH-OR-L
+        // Rebuild TRIP4 from the board-specific CMPSS sources only.
+#if M1_CMPSS_PROTECTION_ON_N_INPUT
+        // Current signals are on CMPINxN, so use CTRIPL from CMPSS3/CMPSS6.
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX05_CMPSS3_CTRIPL);
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX11_CMPSS6_CTRIPL);
+#else
+        // Reference TI configuration uses CTRIPH_OR_L from both CMPSS blocks.
         XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
-
-        // MUX10: CMPSS6 (Phase V, ADCINC3/CMPIN6N) filtered CTRIPH-OR-L
         XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
+#endif
 
-        // Disable all muxes first, then enable the three TRIP4 sources
+        // Disable all muxes first, then enable the active CMPSS TRIP4 sources.
         XBAR_disableEPWMMux(XBAR_TRIP4, 0xFFFF);
-        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX01 | XBAR_MUX04 | XBAR_MUX10);
+#if M1_CMPSS_PROTECTION_ON_N_INPUT
+        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX05 | XBAR_MUX11);
+#else
+        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX04 | XBAR_MUX10);
+#endif
     }
     
     //

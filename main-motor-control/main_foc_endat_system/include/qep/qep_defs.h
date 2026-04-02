@@ -35,8 +35,9 @@ typedef struct {
     float32_t MechScaler;      // Parameter: 0.9999/total count
     uint16_t  LineEncoder;     // Parameter: Number of line encoder
     uint16_t  PolePairs;       // Parameter: Number of pole pairs
-    int32_t   CalibratedAngle; // Parameter: Raw angular offset
-                               //            between encoder index and phase A
+    int32_t   CalibratedAngle; // Parameter: sensor offset
+                               //            QEP: raw count offset between index and phase A
+                               //            absolute encoders: raw single-turn count offset
     uint16_t  IndexSyncFlag;   // Output: Index sync status
 } QEP;
 

@@ -92,6 +92,46 @@ static inline float32_t endatComputeElecThetaPu(float32_t mechThetaPu)
 }
 
 //
+// endatApplyAngleOffset - Applies the configured single-turn mechanical offset
+// in raw encoder counts before converting to per-unit angles.
+//
+static inline uint32_t endatApplyAngleOffset(uint32_t rawPosition,
+                                             uint16_t positionClocks)
+{
+    uint32_t offsetCounts;
+
+    if(gEndatRuntimeState.angleOffsetValid == 0U)
+    {
+        return rawPosition;
+    }
+
+    offsetCounts = (uint32_t)gEndatRuntimeState.angleOffsetCounts;
+
+    if(positionClocks >= 32U)
+    {
+        return rawPosition - offsetCounts;
+    }
+
+    if(positionClocks == 0U)
+    {
+        return rawPosition;
+    }
+
+    {
+        const uint32_t maxCount = (1UL << positionClocks);
+
+        offsetCounts %= maxCount;
+
+        if(rawPosition >= offsetCounts)
+        {
+            return rawPosition - offsetCounts;
+        }
+
+        return rawPosition + maxCount - offsetCounts;
+    }
+}
+
+//
 // endatClearPublishedPosition - Clears the shared EnDat position buffers.
 //
 static inline void endatClearPublishedPosition(void)
@@ -118,6 +158,7 @@ static inline void endatResetProducerState(void)
     gEndatRuntimeState.readPending = 0U;
     gEndatRuntimeState.frameReady = 0U;
     gEndatRuntimeState.timeoutTicks = 0U;
+    gEndatRuntimeState.positionClocks = 0U;
     gEndatRuntimeState.publishCount = 0U;
     gEndatRuntimeState.crcFailCount = 0U;
     gEndatRuntimeState.timeoutCount = 0U;
@@ -130,6 +171,7 @@ static inline void endatResetProducerState(void)
 //
 static inline bool endatDecodePositionSample(EndatPositionSample *sample)
 {
+    uint32_t correctedPosition;
     uint32_t rawPosition;
     float32_t maxCount;
 
@@ -146,12 +188,16 @@ static inline bool endatDecodePositionSample(EndatPositionSample *sample)
     }
 
     rawPosition = endatGetPositionRaw();
+    gEndatRuntimeState.positionClocks = endat22Data.position_clocks;
+    correctedPosition = endatApplyAngleOffset(rawPosition,
+                                              endat22Data.position_clocks);
     maxCount = (endat22Data.position_clocks >= 32U) ?
             4294967296.0F : (float32_t)(1UL << endat22Data.position_clocks);
 
     sample->rawPosition = rawPosition;
     sample->mechThetaPu = (float32_t)rawPosition / maxCount;
-    sample->elecThetaPu = endatComputeElecThetaPu(sample->mechThetaPu);
+    sample->elecThetaPu = endatComputeElecThetaPu(
+            (float32_t)correctedPosition / maxCount);
     sample->sampleCounter = gEndatRuntimeState.publishCount + 1U;
     sample->valid = 1U;
     sample->reserved = 0U;
@@ -396,6 +442,7 @@ void endat21_initProducer(uint16_t polePairs)
 
     endatClearPublishedPosition();
     endatResetProducerState();
+    endat21_clearAngleOffsetCounts();
 }
 
 void endat21_startProducer(void)
@@ -403,9 +450,23 @@ void endat21_startProducer(void)
     gEndatRuntimeState.readPending = 0U;
     gEndatRuntimeState.frameReady = 0U;
     gEndatRuntimeState.timeoutTicks = 0U;
+    gEndatRuntimeState.positionClocks = endat22Data.position_clocks;
     gEndatRuntimeState.crcFailCount = gEndatCrcFailCount;
     gEndatRuntimeState.timeoutCount = gEndatTimeoutCount;
     endat22Data.dataReady = 0U;
+}
+
+void endat21_setAngleOffsetCounts(int32_t offsetCounts)
+{
+    gEndatRuntimeState.angleOffsetValid = 0U;
+    gEndatRuntimeState.angleOffsetCounts = offsetCounts;
+    gEndatRuntimeState.angleOffsetValid = 1U;
+}
+
+void endat21_clearAngleOffsetCounts(void)
+{
+    gEndatRuntimeState.angleOffsetValid = 0U;
+    gEndatRuntimeState.angleOffsetCounts = 0;
 }
 
 void endat21_runProducerTick(void)
