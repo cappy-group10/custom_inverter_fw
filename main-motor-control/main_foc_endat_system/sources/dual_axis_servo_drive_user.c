@@ -202,6 +202,7 @@ void initControlVars(MOTOR_Vars_t *pMotor)
     // Maximum delay rate of ramp control
     pMotor->rc.RampDelayMax = 10;
     pMotor->rc.RampStepSize = 0.00005f;  // ~3x faster than default
+    pMotor->positionRef = 0.0F;
 
     //
     // PI Controllers Configuration

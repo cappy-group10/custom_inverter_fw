@@ -195,7 +195,7 @@ static inline bool endatDecodePositionSample(EndatPositionSample *sample)
             4294967296.0F : (float32_t)(1UL << endat22Data.position_clocks);
 
     sample->rawPosition = rawPosition;
-    sample->mechThetaPu = (float32_t)rawPosition / maxCount;
+    sample->mechThetaPu = (float32_t)correctedPosition / maxCount;
     sample->elecThetaPu = endatComputeElecThetaPu(
             (float32_t)correctedPosition / maxCount);
     sample->sampleCounter = gEndatRuntimeState.publishCount + 1U;
