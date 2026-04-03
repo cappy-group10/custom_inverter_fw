@@ -25,12 +25,11 @@ typedef struct
     volatile uint16_t readPending;
     volatile uint16_t frameReady;
     volatile uint16_t timeoutTicks;
-    volatile uint16_t positionClocks;
-    volatile uint16_t angleOffsetValid;
     volatile uint32_t publishCount;
     volatile uint32_t crcFailCount;
     volatile uint32_t timeoutCount;
-    volatile int32_t angleOffsetCounts;
+    volatile int16_t  positionDirection;
+    volatile uint16_t reserved;
 } EndatRuntimeState;
 
 extern volatile EndatPositionSample gEndatPositionSamples[ENDAT_POSITION_BUFFER_COUNT];

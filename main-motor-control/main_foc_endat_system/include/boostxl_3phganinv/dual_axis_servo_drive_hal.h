@@ -336,11 +336,6 @@ extern void HAL_setupDACs(HAL_Handle handle);
 extern void HAL_setupGate(HAL_MTR_Handle handle,
                           const MOTOR_Num_e motorNum);
 
-//! \brief     Sets up the QEP peripheral
-//! \param[in] handle  The hardware abstraction layer (HAL) handle
-extern void HAL_setupQEP(HAL_MTR_Handle handle);
-
-
 //! \brief     Sets up the GPIO (General Purpose I/O) pins for test
 //! \param[in] handle  The hardware abstraction layer (HAL) handle
 extern void HAL_setupTestGPIOs(HAL_Handle handle);

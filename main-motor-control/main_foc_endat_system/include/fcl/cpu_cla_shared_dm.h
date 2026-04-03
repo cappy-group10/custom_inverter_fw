@@ -110,7 +110,7 @@ typedef struct motPars {
     RAMPGEN_CLA_DEFAULTS,               /* rg */                               \
     FCL_PI_CONTROLLER_DEFAULTS,         /* pi_iq */                            \
     QEP_DEFAULTS,                       /* qep */                              \
-    &EQep1Regs,                         /* *ptrQEP */                          \
+    0,                                  /* *ptrQEP */                          \
     0,                                  /* taskFlag */                         \
     0, 0, 0, 0                          /* taskCount[4] */                     \
  }

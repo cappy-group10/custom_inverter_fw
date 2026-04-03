@@ -251,13 +251,9 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
 #endif
 
         //
-        // initialize position-feedback hardware that is specific to QEP
-        //
-#if(POSITION_ENCODER_IS_QEP)
-        obj->qepHandle = M1_QEP_BASE;
-#else
+        // No eQEP peripheral is used in the EnDat build; the FCL consumes
+        // EnDat-published angles through compatibility fields instead.
         obj->qepHandle = 0U;
-#endif
     }
 
      return(handle);
@@ -279,12 +275,6 @@ void HAL_setMotorParams(HAL_MTR_Handle handle)
     HAL_setupCMPSS(handle);
 
     //
-    // setup the eqep only when the selected position sensor needs it
-    //
-#if(POSITION_ENCODER_IS_QEP)
-    HAL_setupQEP(handle);
-#endif
-
     return;
 }
 
@@ -539,9 +529,6 @@ void HAL_setupCLA(HAL_Handle handle)
     // Enable EPWM1 INT trigger for CLA TASK1
     CLA_setTriggerSource(CLA_TASK_1, CLA_TRIGGER_EPWM1INT);
 
-    // Enable EPWM4 INT trigger for CLA TASK5
-    CLA_setTriggerSource(CLA_TASK_5, CLA_TRIGGER_EPWM4INT);
-
     return;
 }
 
@@ -560,16 +547,9 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
         // NEG signal from DAC for COMP-H
         CMPSS_configHighComparator(obj->cmpssHandle[cnt], CMPSS_INSRC_DAC);
 
-        // On this board the current signals are routed to CMPINxN, so the low
-        // comparator is the active hardware protection path. Configure it as a
-        // non-inverted upper-threshold detector and route CTRIPL into ePWM TZ.
-#if M1_CMPSS_PROTECTION_ON_N_INPUT
-        CMPSS_configLowComparator(obj->cmpssHandle[cnt], CMPSS_INSRC_DAC);
-#else
         // NEG signal from DAC for COMP-L, COMP-L output is inverted
         CMPSS_configLowComparator(obj->cmpssHandle[cnt],
-                                  (CMPSS_INSRC_DAC | CMPSS_INV_INVERTED));
-#endif
+                                  (CMPSS_INSRC_DAC | CMPSS_INV_INVERTED)) ;
 
         // Dig filter output ==> CTRIPH, Dig filter output ==> CTRIPOUTH
         CMPSS_configOutputsHigh(obj->cmpssHandle[cnt],
@@ -592,8 +572,7 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
         // Set DAC-H to allowed MAX +ve current
         CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], 1024);
 
-        // Set DAC-L to the active low-comparator threshold. For N-input board
-        // protection this is repurposed as the positive OCP threshold.
+        // Set DAC-L to allowed MAX -ve current
         CMPSS_setDACValueLow(obj->cmpssHandle[cnt], 1024);
 
         // digital filter settings - HIGH side
@@ -639,12 +618,8 @@ void HAL_setupCMPSS_DACValue(HAL_MTR_Handle handle,
         // Set DAC-H to allowed MAX +ve current
         CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], curHi);
 
-        // Set DAC-L to the active board-specific threshold.
-#if M1_CMPSS_PROTECTION_ON_N_INPUT
-        CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curHi);
-#else
+        // Set DAC-L to allowed MAX -ve current
         CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curLo);
-#endif
     }
 
     return;
@@ -895,17 +870,15 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(19, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(19, GPIO_PIN_TYPE_STD);
 
-    // Setup GPIO for QEP operation
-    // GPIO20->QEP1A_M1
+    // GPIO20/21 are unused by the EnDat build; keep them as plain inputs.
     GPIO_setMasterCore(20, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_20_EQEP1A);
+    GPIO_setPinConfig(GPIO_20_GPIO20);
     GPIO_setDirectionMode(20, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(20, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(20, GPIO_QUAL_3SAMPLE);
 
-    // GPIO21->QEP1B_M1
     GPIO_setMasterCore(21, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_21_EQEP1B);
+    GPIO_setPinConfig(GPIO_21_GPIO21);
     GPIO_setDirectionMode(21, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(21, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(21, GPIO_QUAL_3SAMPLE);
@@ -983,16 +956,15 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(43, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(43, GPIO_PIN_TYPE_STD);
 
-    // GPIO54->EQEP2A_M2
+    // GPIO54/55/57 are unused by the EnDat build; keep them as plain inputs.
     GPIO_setMasterCore(54, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_54_EQEP2A);
+    GPIO_setPinConfig(GPIO_54_GPIO54);
     GPIO_setDirectionMode(54, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(54, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(54, GPIO_QUAL_3SAMPLE);
 
-    // GPIO55->EQEP2B_M2
     GPIO_setMasterCore(55, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_55_EQEP2B);
+    GPIO_setPinConfig(GPIO_55_GPIO55);
     GPIO_setDirectionMode(55, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(55, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(55, GPIO_QUAL_3SAMPLE);
@@ -1003,9 +975,8 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(56, GPIO_DIR_MODE_OUT);
     GPIO_setPadConfig(56, GPIO_PIN_TYPE_STD);
 
-    // GPIO57->EQEP2I_M2
     GPIO_setMasterCore(57, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_57_EQEP2I);
+    GPIO_setPinConfig(GPIO_57_GPIO57);
     GPIO_setDirectionMode(57, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(57, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(57, GPIO_QUAL_3SAMPLE);
@@ -1064,9 +1035,9 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(94, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(94, GPIO_PIN_TYPE_STD);
 
-    // GPIO99->QEP1I
+    // GPIO99 is unused by the EnDat build; keep it as a plain input.
     GPIO_setMasterCore(99, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_99_EQEP1I);
+    GPIO_setPinConfig(GPIO_99_GPIO99);
     GPIO_setDirectionMode(99, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(99, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(99, GPIO_QUAL_3SAMPLE);
@@ -1298,30 +1269,27 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
         curHi = M1_CMPSS_ZERO_COUNT + M1_CURRENT_SCALE(currentLimitClamped);
         curLo = M1_CMPSS_ZERO_COUNT - M1_CURRENT_SCALE(currentLimitClamped);
 
+        //Select GPIO24 as INPUTXBAR1
+        XBAR_setInputPin(M1_XBAR_INPUT_NUM, M1_XBAR_INPUT_GPIO);
+
         // Rebuild TRIP4 from scratch, clear everything first.
         EALLOW;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX0TO15CFG) = 0;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX16TO31CFG) = 0;
         EDIS;
 
-        // Rebuild TRIP4 from the board-specific CMPSS sources only.
-#if M1_CMPSS_PROTECTION_ON_N_INPUT
-        // Current signals are on CMPINxN, so use CTRIPL from CMPSS3/CMPSS6.
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX05_CMPSS3_CTRIPL);
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX11_CMPSS6_CTRIPL);
-#else
-        // Reference TI configuration uses CTRIPH_OR_L from both CMPSS blocks.
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
-#endif
+        // MUX01: gate-driver fault signal via INPUTXBAR1 (GPIO24)
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX01_INPUTXBAR1);
 
-        // Disable all muxes first, then enable the active CMPSS TRIP4 sources.
+        // MUX04: CMPSS3 (Phase W, ADCINB3/CMPIN3N) filtered CTRIPH-OR-L
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
+
+        // MUX10: CMPSS6 (Phase V, ADCINC3/CMPIN6N) filtered CTRIPH-OR-L
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
+
+        // Disable all muxes first, then enable the three TRIP4 sources
         XBAR_disableEPWMMux(XBAR_TRIP4, 0xFFFF);
-#if M1_CMPSS_PROTECTION_ON_N_INPUT
-        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX05 | XBAR_MUX11);
-#else
-        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX04 | XBAR_MUX10);
-#endif
+        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX01 | XBAR_MUX04 | XBAR_MUX10);
     }
     
     //
@@ -1396,54 +1364,6 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     }
 
     DEVICE_DELAY_US(1L);
-
-    return;
-}
-
-void HAL_setupQEP(HAL_MTR_Handle handle)
-{
-    HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
-
-    // Configure the decoder for quadrature count mode, counting both
-    // rising and falling edges (that is, 2x resolution)
-    EQEP_setDecoderConfig(obj->qepHandle, (EQEP_CONFIG_2X_RESOLUTION |
-                                           EQEP_CONFIG_QUADRATURE |
-                                           EQEP_CONFIG_NO_SWAP) );
-
-    EQEP_setEmulationMode(obj->qepHandle, EQEP_EMULATIONMODE_RUNFREE);
-
-    // Configure the position counter to be latched on a unit time out
-    // and latch on rising edge of index pulse
-    EQEP_setLatchMode(obj->qepHandle, (EQEP_LATCH_RISING_INDEX |
-                                       EQEP_LATCH_UNIT_TIME_OUT) );
-
-    // Configure the position counter to reset on a maximum position
-    if(handle == &halMtr[MTR_1])
-    {
-        EQEP_setPositionCounterConfig(obj->qepHandle,
-                                      EQEP_POSITION_RESET_MAX_POS,
-                                      ((4 * M1_ENCODER_LINES) - 1) );
-
-        // Enable the unit timer, setting the frequency to 10KHz
-        EQEP_enableUnitTimer(obj->qepHandle, M1_QEP_UNIT_TIMER_TICKS - 1);
-    }
-
-    // Disables the eQEP module position-compare unit
-    EQEP_disableCompare(obj->qepHandle);
-
-    // Configure and enable the edge-capture unit. The capture clock divider is
-    // SYSCLKOUT/128. The unit-position event divider is QCLK/32.
-    EQEP_setCaptureConfig(obj->qepHandle, EQEP_CAPTURE_CLK_DIV_128,
-                                          EQEP_UNIT_POS_EVNT_DIV_32);
-
-    // Enable QEP edge-capture unit
-    EQEP_enableCapture(obj->qepHandle);
-
-    // Enable UTO on QEP
-    EQEP_enableInterrupt(obj->qepHandle, EQEP_INT_UNIT_TIME_OUT);
-
-    // Enable the eQEP module
-    EQEP_enableModule(obj->qepHandle);
 
     return;
 }

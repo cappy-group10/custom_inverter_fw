@@ -104,27 +104,22 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->FCL_params.wccD  = M1_CUR_LOOP_BANDWIDTH;
         pMotor->FCL_params.wccQ  = M1_CUR_LOOP_BANDWIDTH;
 
-        // set the number of pole pairs of the motor
+        // Keep the FCL's legacy QEP-shaped container populated with only the
+        // fields still needed by the EnDat-based control path.
         pMotor->ptrFCL->qep.PolePairs = M1_POLES / 2;
         pMotor->ptrFCL->qep.CalibratedAngle = 0;
-
-#if(POSITION_ENCODER_IS_QEP)
-        // set the number of slots in the incremental encoder
-        pMotor->ptrFCL->qep.LineEncoder = M1_ENCODER_LINES;
-        pMotor->ptrFCL->qep.MechScaler = 0.25 / pMotor->ptrFCL->qep.LineEncoder;
-#else
         pMotor->ptrFCL->qep.LineEncoder = 0U;
         pMotor->ptrFCL->qep.MechScaler = 0.0F;
         pMotor->ptrFCL->ptrQEP = 0;
-#endif
 
-        // Initialize the Speed module for speed calculation from QEP/RESOLVER
+        // Initialize the electrical-angle differentiator used by the speed estimator.
         pMotor->speed.K1 = 1 / (M1_BASE_FREQ * pMotor->Ts);
 
         // Low-pass cut-off frequency
         pMotor->speed.K2 = 1 / (1 + (2 * PI * pMotor->Ts * 5));
         pMotor->speed.K3 = 1 - pMotor->speed.K2;
         pMotor->speed.BaseRpm = 120 * (M1_BASE_FREQ / M1_POLES);
+        pMotor->speedDirection = (pMotor->speedDirection < 0) ? -1 : 1;
 
         // set up current and voltage scaling coefficient
         pMotor->currentScale = M1_CURRENT_SF;
@@ -180,11 +175,6 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     FCL_initPWM(pMotor,
                 obj->pwmHandle[0], obj->pwmHandle[1], obj->pwmHandle[2]);
 
-    // ensure the correct QEP base is passed only for incremental encoders
-#if(POSITION_ENCODER_IS_QEP)
-    FCL_initQEP(pMotor, obj->qepHandle);
-#endif
-
     pMotor->ptrFCL->taskCount[0] = 0;
     pMotor->ptrFCL->taskCount[1] = 0;
     pMotor->ptrFCL->taskCount[2] = 0;
@@ -202,7 +192,6 @@ void initControlVars(MOTOR_Vars_t *pMotor)
     // Maximum delay rate of ramp control
     pMotor->rc.RampDelayMax = 10;
     pMotor->rc.RampStepSize = 0.00005f;  // ~3x faster than default
-    pMotor->positionRef = 0.0F;
 
     //
     // PI Controllers Configuration

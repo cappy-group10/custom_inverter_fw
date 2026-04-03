@@ -67,12 +67,8 @@
 #endif
 
 // J3 pin24 exposes ADCINC3/CMPIN6N (CMPSS6) and J3 pin25 exposes ADCINB3/CMPIN3N (CMPSS3).
-// These current signals land on the CMPSS N inputs, so board-level hardware
-// protection uses the low comparator path (CTRIPL) for each channel.
-// With this routing only a single threshold per channel is available in CMPSS;
-// we use it for positive overcurrent shutdown on this board.
+// Both channels have comparator-capable inputs, so CMPSS overcurrent protection is enabled.
 #define COUNT_CURRENT_PROTECTION_CMPSS  2U
-#define M1_CMPSS_PROTECTION_ON_N_INPUT  1U
 
 // Current-sensor analog front end: 90mV/A with an approximately 2.5V offset.
 // With a 3.0V ADC reference this gives only about +5.56A of positive headroom,

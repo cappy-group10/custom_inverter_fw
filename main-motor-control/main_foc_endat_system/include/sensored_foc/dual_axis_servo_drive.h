@@ -135,134 +135,10 @@ extern DLOG_2CH_F dlog_2ch1;
 
 #endif  // DLOG_ENABLE
 
-//
-// USER Variables
-//
-
-//
-// Global variables used in this system
-//
-extern MOTOR_Vars_t motorVars[2];
-
-//
-// Variables for current measurement
-//
-
-//
-// CMPSS parameters for Over Current Protection
-//
-extern uint16_t clkPrescale;
-extern uint16_t sampWin;
-extern uint16_t thresh;
-
-//
-// Flag variables
-//
-extern volatile uint16_t enableFlag;
-
-extern uint16_t backTicker;
-
-extern uint16_t led1Cnt;
-extern uint16_t led2Cnt;
-
-// Variables for Field Oriented Control
-extern float32_t VdTesting;          // Vd reference (pu)
-extern float32_t VqTesting;          // Vq reference (pu)
-
-// V/f profile variables for open-loop IPM control
-extern float32_t vfBoost;   // minimum voltage at zero speed
-extern float32_t vfSlope;   // V/f ratio (Vq per unit speed)
-extern float32_t vfVqMax;   // maximum Vq clamp
-extern volatile uint16_t vfEnable;  // true = V/f active, false = manual VdTesting/VqTesting
-
-// Desynchronization detection variables
-extern float32_t desyncAngleError;
-extern float32_t desyncThreshold;  // 0.25 = 90 electrical degrees
-extern volatile uint16_t desyncFlag;
-
-// Variables for position reference generation and control
 extern float32_t posArray[8];
 extern float32_t posPtrMax;
 
-// Variables for Datalog module
-extern float32_t DBUFF_4CH1[200];
-extern float32_t DBUFF_4CH2[200];
-extern float32_t DBUFF_4CH3[200];
-extern float32_t DBUFF_4CH4[200];
-extern float32_t dlogCh1;
-extern float32_t dlogCh2;
-extern float32_t dlogCh3;
-extern float32_t dlogCh4;
-
-// Create an instance of DATALOG Module
-extern DLOG_4CH_F dlog_4ch1;
-
-// Variables for SFRA module
-#if(BUILDLEVEL == FCL_LEVEL6)
-extern SFRA_F32 sfra1;
-extern SFRATest_e sfraTestLoop;  //speedLoop;
-extern uint32_t sfraCollectStart;
-extern float32_t sfraNoiseD;
-extern float32_t sfraNoiseQ;
-extern float32_t sfraNoiseW;
-#endif
-
-extern HAL_Handle halHandle;    //!< the handle for the hardware abstraction layer
-extern HAL_Obj hal;          //!< the hardware abstraction layer object
-
-extern HAL_MTR_Handle halMtrHandle[2];   //!< the handle for the hardware abstraction
-                                  //!< layer to motor control
-extern HAL_MTR_Obj halMtr[2];         //!< the hardware abstraction layer object
-                                  //!< to motor control
-
-// FCL Latency variables
 extern volatile uint16_t FCL_cycleCount[2];
-
-// system-level control references
-extern float32_t speedRef;
-extern float32_t IdRef;
-extern float32_t IqRef;
-extern float32_t positionRef;
-extern uint32_t rampDelayMax;
-
-extern MotorRunStop_e runMotor;
-extern CtrlState_e ctrlState;
-extern bool flagSyncRun;
-extern volatile bool positionRefGenEnable;
-
-extern volatile uint32_t endatPosRaw;   // raw position word from EnDat encoder
-extern volatile uint16_t endatInitDone; // flag: 1 = init succeeded
-extern volatile uint32_t endatCrcFailCount;
-
-#define ENDAT_OFFSET_CAL_SAMPLE_COUNT  8U
-
-extern volatile bool endatOffsetCalEnable;
-extern volatile bool endatOffsetCalInProgress;
-extern volatile bool endatOffsetCalibrated;
-extern volatile bool endatOffsetValid;
-extern volatile uint16_t endatOffsetCalSampleCount;
-extern volatile uint32_t endatOffsetCounts;
-extern volatile float32_t endatOffsetMechPu;
-extern volatile float32_t endatOffsetElecPu;
-
-extern volatile uint16_t dbg_tzFlag[3];
-extern volatile uint16_t dbg_tzOstFlag[3];
-extern volatile uint16_t dbg_cmpssStatus[3];
-extern volatile uint32_t dbg_gpio24;
-extern volatile uint16_t dbg_tripSource;
-extern volatile uint16_t dbg_xbarFlags;
-extern volatile uint16_t dbg_adcRawIv;
-extern volatile uint16_t dbg_adcRawIw;
-extern volatile uint16_t dbg_curHi;
-extern volatile uint16_t dbg_curLo;
-
-//
-// These are defined by the linker file
-//
-extern uint32_t Cla1funcsLoadStart;
-extern uint32_t Cla1funcsLoadEnd;
-extern uint32_t Cla1funcsRunStart;
-extern uint32_t Cla1funcsLoadSize;
 
 //
 // the function prototypes
@@ -301,6 +177,13 @@ static inline uint16_t scaleVoltageValue(float32_t voltage, float32_t voltageSF)
 // Position Reading Functions - EnDat
 // ****************************************************************************
 static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+
+static inline ENC_Status_e getPostAlignmentEncoderState(void)
+{
+    // The active build uses an absolute EnDat encoder, so there is no
+    // incremental-index search state after startup.
+    return ENC_CALIBRATION_DONE;
+}
 
 // ****************************************************************************
 // Get FCL timing details - time stamp taken in library after PWM update

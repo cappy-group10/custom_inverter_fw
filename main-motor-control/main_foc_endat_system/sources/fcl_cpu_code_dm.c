@@ -139,6 +139,41 @@ FCL_Vars_t fclVars[2];
     /* SETGPIO18_LOW; */                                                       \
     FCL_CLARKE_STYLE_1();
 
+//
+// Motor 2
+//
+#define M2_FCL_POSITION_CURRENT_CLARKE_MACRO()                                 \
+/*                                                                             \
+ *-----------------------------------------------------------------------------\
+ *  Wait for QEP sense to complete (Position encoder suite module)             \
+ * ----------------------------------------------------------------------------\
+ */                                                                            \
+    /* SETGPIO18_HIGH; */                                                      \
+    /* check CLA1_5 status   */                                                \
+    /* below line took 2 additional cycles vs bitfield style*/                 \
+    /*while((HWREGH(PIECTRL_BASE + PIE_O_IFR11) & PIE_IFR11_INTX5) == false);*/\
+    while(PieCtrlRegs.PIEIFR11.bit.INTx5 == 0);                                \
+    /* SETGPIO18_LOW; */                                                       \
+/*                                                                             \
+ *  ---------------------------------------------------------------------------\
+ *  Connect inputs of the PARK module and call the park trans. macro           \
+ *  ---------------------------------------------------------------------------\
+ */                                                                            \
+    park1Sine   = __sinpuf32(fclVars[1].pangle);                          \
+    park1Cosine = __cospuf32(fclVars[1].pangle);                          \
+/*                                                                             \
+ * ----------------------------------------------------------------------------\
+ * Measure phase currents, and normalize to (-1,+1).                           \
+ * Connect inputs of the CLARKE module and call the clarke xform macro         \
+ * ----------------------------------------------------------------------------\
+ */                                                                            \
+    /* SETGPIO18_HIGH; */                                                      \
+    /* below line took 2 additional cycles vs bitfield style*/                 \
+    /*while((HWREGH(adcBasePhaseW) & ADC_INTFLG_ADCINT2) == false);*/          \
+    while(pMotor->AdcIntFlag->bit.ADCINT2 == 0);                               \
+    /* asm(" NOP");   */                                                       \
+    /* SETGPIO18_LOW; */                                                       \
+    FCL_CLARKE_STYLE_1();
 
 //
 // FCL MACRO implementing PWM updates using pointers access to registers

@@ -192,6 +192,7 @@ typedef struct _FCL_Parameters_ {
     MOTOR_STOP,                          /* runMotor */                        \
     CTRL_STOP,                           /* ctrlState */                       \
                                                                                \
+    1,                                  /* speedDirection */                  \
     0,                                  /* clearTripFlagDMC */                 \
     0,                                  /* lsw2EntryFlag */                    \
     0,                                  /* offsetDoneFlag */                   \
@@ -297,6 +298,7 @@ typedef struct _FCL_Parameters_ {
     MOTOR_STOP,                          /* runMotor */                        \
     CTRL_STOP,                           /* ctrlState */                       \
                                                                                \
+    1,                                  /* speedDirection */                  \
     0,                                  /* clearTripFlagDMC */                 \
     0,                                  /* lsw2EntryFlag */                    \
     0,                                  /* offsetDoneFlag */                   \
@@ -404,6 +406,7 @@ typedef struct _FCL_Parameters_ {
     MOTOR_STOP,                          /* runMotor */                        \
     CTRL_STOP,                           /* ctrlState */                       \
                                                                                \
+    1,                                  /* speedDirection */                  \
     0,                                  /* clearTripFlagDMC */                 \
     0,                                  /* lsw2EntryFlag */                    \
     0,                                  /* offsetDoneFlag */                   \
@@ -513,6 +516,7 @@ typedef struct _MOTOR_Vars_t_
 
     MotorRunStop_e  runMotor;
     CtrlState_e     ctrlState;
+    int16_t         speedDirection;     // Set to 1 or -1 to match feedback direction
 
     bool clearTripFlagDMC;
     bool lsw2EntryFlag;
