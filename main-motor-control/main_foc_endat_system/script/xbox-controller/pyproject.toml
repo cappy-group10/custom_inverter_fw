@@ -1,10 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "xbox-controller"
 version = "0.1.0"
 description = "Xbox controller input interface for custom inverter motor control"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.12"
 dependencies = [
     "pygame>=2.6.1",
     "pyserial>=3.5",
 ]
+
+[project.scripts]
+xbox-ctrl = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "controller", "commands", "mapping", "uart"]

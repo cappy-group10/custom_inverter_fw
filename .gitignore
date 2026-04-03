@@ -58,9 +58,12 @@ Thumbs.db
 
 
 # Python environment stuff
-.python-version
+# .python-version
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 # uv.lock
+*.egg-info/
+dist/
+build/

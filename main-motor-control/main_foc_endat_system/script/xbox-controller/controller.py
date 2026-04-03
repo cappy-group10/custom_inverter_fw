@@ -2,8 +2,9 @@
 """Xbox controller input handler using pygame."""
 
 import pygame
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Dict
+from enum import Enum, auto
 
 
 @dataclass
@@ -18,10 +19,10 @@ class ControllerState:
     right_trigger: float = 0.0
 
     # Button states (True = pressed)
-    buttons: Dict[str, bool] = field(default_factory=dict)
+    buttons: dict[str, bool] = field(default_factory=dict)
 
     # D-pad
-    dpad: tuple = (0, 0)  # (x, y) each -1, 0, or 1
+    dpad: tuple[int, int] = (0, 0)  # (x, y) each -1, 0, or 1
 
     def left_x_u8(self) -> int:
         """Left X axis scaled to 0-255."""
@@ -48,6 +49,17 @@ class ControllerState:
         return mask
 
 
+class ButtonEdge(Enum):
+    PRESSED = auto()
+    RELEASED = auto()
+
+
+@dataclass
+class ButtonEvent:
+    button: str
+    edge: ButtonEdge
+
+
 # Xbox controller button mapping (pygame index -> name)
 # Matches Xbox Wireless Controller on macOS via pygame
 XBOX_BUTTON_MAP = {
@@ -62,6 +74,10 @@ XBOX_BUTTON_MAP = {
     8: "guide",
     9: "left_stick",
     10: "right_stick",
+    11: "dpad_up",
+    12: "dpad_down",
+    13: "dpad_left",
+    14: "dpad_right",
 }
 
 # Axis mapping
@@ -84,12 +100,15 @@ class XboxController:
             print(ctrl.state)
     """
 
-    def __init__(self, joystick_index: int = 0, deadzone: float = 0.05):
+    def __init__(self, joystick_index: int = 0, deadzone: float = 0.05,
+                 event_buffer_size: int = 64):
         self._index = joystick_index
         self._deadzone = deadzone
-        self._joystick = None  # type: pygame.joystick.JoystickType | None
+        self._joystick: pygame.joystick.JoystickType | None = None
         self.state = ControllerState()
         self.connected = False
+        self._prev_buttons: dict[str, bool] = {}
+        self.events: deque[ButtonEvent] = deque(maxlen=event_buffer_size)
 
     def connect(self):
         """Initialize pygame and connect to the controller."""
@@ -156,11 +175,26 @@ class XboxController:
         if num_axes > AXIS_RIGHT_TRIGGER:
             self.state.right_trigger = js.get_axis(AXIS_RIGHT_TRIGGER)
 
-        # Buttons
+        # Buttons — detect edges and buffer events
         for i in range(js.get_numbuttons()):
             name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
-            self.state.buttons[name] = bool(js.get_button(i))
+            now = bool(js.get_button(i))
+            prev = self._prev_buttons.get(name, False)
+
+            if now and not prev:
+                self.events.append(ButtonEvent(name, ButtonEdge.PRESSED))
+            elif not now and prev:
+                self.events.append(ButtonEvent(name, ButtonEdge.RELEASED))
+
+            self.state.buttons[name] = now
+            self._prev_buttons[name] = now
 
         # D-pad (hat)
         if js.get_numhats() > 0:
             self.state.dpad = js.get_hat(0)
+
+    def drain_events(self) -> list[ButtonEvent]:
+        """Return all buffered button events and clear the buffer."""
+        events = list(self.events)
+        self.events.clear()
+        return events
