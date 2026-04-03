@@ -1,0 +1,10 @@
+[project]
+name = "xbox-controller"
+version = "0.1.0"
+description = "Xbox controller input interface for custom inverter motor control"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "pygame>=2.6.1",
+    "pyserial>=3.5",
+]
