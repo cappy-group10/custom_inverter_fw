@@ -39,6 +39,8 @@ File name:        RMP_CNTL.H
 #ifndef __RMP_CNTL_H__
 #define __RMP_CNTL_H__
 
+#include <math.h>
+
 typedef struct {
     float32_t TargetValue; 	  // Input: Target input (pu)
     uint32_t  RampDelayMax;	  // Parameter: Maximum delay rate (Q0) - independently with global Q

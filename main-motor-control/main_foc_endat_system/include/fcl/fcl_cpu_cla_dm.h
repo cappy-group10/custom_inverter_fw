@@ -20,6 +20,8 @@
 #ifndef FCL_CPU_CLA_DM_H
 #define FCL_CPU_CLA_DM_H
 
+#include <math.h>
+
 #define   MATH_TYPE      1
 
 //#include "IQmathLib.h"
