@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 from commands import MotorCommand, MusicCommand, CtrlState, CommandLimits
 from controller import ControllerState, ButtonEvent, ButtonEdge
+from runtime_models import ControllerLayoutDescriptor
 
 
 class InputMapping(ABC):
@@ -38,6 +39,40 @@ DEFAULT_DRIVE_BINDINGS: dict[str, str] = {
     "dpad_left":   "id_down",      # btn_13: decrease Id (field weakening)
     "dpad_right":  "id_up",        # btn_14: increase Id
 }
+
+DRIVE_CONTROL_LAYOUT: list[tuple[str, str, str]] = [
+    ("left_trigger", "LT", "shoulders"),
+    ("lb", "LB", "shoulders"),
+    ("rb", "RB", "shoulders"),
+    ("right_trigger", "RT", "shoulders"),
+    ("left_stick", "Left Stick", "sticks"),
+    ("right_stick", "Right Stick", "sticks"),
+    ("dpad_up", "D-Pad Up", "dpad"),
+    ("dpad_down", "D-Pad Down", "dpad"),
+    ("dpad_left", "D-Pad Left", "dpad"),
+    ("dpad_right", "D-Pad Right", "dpad"),
+    ("back", "Back", "center"),
+    ("guide", "Guide", "center"),
+    ("start", "Start", "center"),
+    ("x", "X", "face_buttons"),
+    ("y", "Y", "face_buttons"),
+    ("a", "A", "face_buttons"),
+    ("b", "B", "face_buttons"),
+]
+
+ACTION_DETAILS: dict[str, tuple[str, str]] = {
+    "run": ("ctrl_state", "ctrl_state = RUN"),
+    "stop": ("ctrl_state", "ctrl_state = STOP"),
+    "brake": ("ctrl_state", "ctrl_state = BRAKE"),
+    "reset": ("ctrl_state", "ctrl_state = RESET"),
+    "iq_up": ("iq_ref", "iq_ref += iq_step"),
+    "iq_down": ("iq_ref", "iq_ref -= iq_step"),
+    "id_up": ("id_ref", "id_ref += id_step"),
+    "id_down": ("id_ref", "id_ref -= id_step"),
+}
+
+UNMAPPED_TARGET = "not mapped"
+UNMAPPED_TEXT = "not mapped in drive mode"
 
 
 class DriveMapping(InputMapping):
@@ -73,6 +108,71 @@ class DriveMapping(InputMapping):
     def _event_matches(self, event: ButtonEvent, action: str) -> bool:
         return (event.edge == ButtonEdge.PRESSED
                 and self.bindings.get(event.button) == action)
+
+    def _describe_button_control(self, control_id: str, label: str, group: str) -> ControllerLayoutDescriptor:
+        action = self.bindings.get(control_id)
+        if action is None:
+            return ControllerLayoutDescriptor(
+                control_id=control_id,
+                label=label,
+                group=group,
+                mapped=False,
+                mapping_target=UNMAPPED_TARGET,
+                mapping_text=UNMAPPED_TEXT,
+            )
+
+        mapping_target, mapping_text = ACTION_DETAILS.get(action, ("custom", f"custom action = {action}"))
+        return ControllerLayoutDescriptor(
+            control_id=control_id,
+            label=label,
+            group=group,
+            mapped=True,
+            mapping_target=mapping_target,
+            mapping_text=mapping_text,
+        )
+
+    def describe_controller_layout(self) -> list[ControllerLayoutDescriptor]:
+        """Return a dashboard-friendly map of physical controls to drive variables."""
+
+        layout: list[ControllerLayoutDescriptor] = []
+        for control_id, label, group in DRIVE_CONTROL_LAYOUT:
+            if control_id == "left_stick":
+                layout.append(
+                    ControllerLayoutDescriptor(
+                        control_id=control_id,
+                        label=label,
+                        group=group,
+                        mapped=True,
+                        mapping_target="speed_ref",
+                        mapping_text="left_y -> speed_ref; left_x and stick click are not mapped",
+                    )
+                )
+            elif control_id == "right_stick":
+                layout.append(
+                    ControllerLayoutDescriptor(
+                        control_id=control_id,
+                        label=label,
+                        group=group,
+                        mapped=False,
+                        mapping_target=UNMAPPED_TARGET,
+                        mapping_text="right stick axes and stick click are not mapped in drive mode",
+                    )
+                )
+            elif control_id in {"left_trigger", "right_trigger"}:
+                axis_name = "left_trigger" if control_id == "left_trigger" else "right_trigger"
+                layout.append(
+                    ControllerLayoutDescriptor(
+                        control_id=control_id,
+                        label=label,
+                        group=group,
+                        mapped=False,
+                        mapping_target=UNMAPPED_TARGET,
+                        mapping_text=f"{axis_name} axis is not mapped in drive mode",
+                    )
+                )
+            else:
+                layout.append(self._describe_button_control(control_id, label, group))
+        return layout
 
     # -- main entry point --------------------------------------------------
 

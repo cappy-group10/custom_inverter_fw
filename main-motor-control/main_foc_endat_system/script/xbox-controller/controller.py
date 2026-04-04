@@ -80,6 +80,8 @@ XBOX_BUTTON_MAP = {
     14: "dpad_right",
 }
 
+D_PAD_BUTTON_NAMES = ("dpad_up", "dpad_down", "dpad_left", "dpad_right")
+
 # Axis mapping
 AXIS_LEFT_X = 0
 AXIS_LEFT_Y = 1
@@ -107,7 +109,9 @@ class XboxController:
         self._joystick: pygame.joystick.JoystickType | None = None
         self.state = ControllerState()
         self.connected = False
+        self.name = ""
         self._prev_buttons: dict[str, bool] = {}
+        self._prev_dpad: tuple[int, int] = (0, 0)
         self.events: deque[ButtonEvent] = deque(maxlen=event_buffer_size)
 
     def connect(self):
@@ -127,13 +131,17 @@ class XboxController:
         self._joystick = pygame.joystick.Joystick(self._index)
         self._joystick.init()
         self.connected = True
+        self.name = self._joystick.get_name()
 
         # Pre-populate button dict with names
         for i in range(self._joystick.get_numbuttons()):
             name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
             self.state.buttons[name] = False
+        if self._joystick.get_numhats() > 0:
+            for name in D_PAD_BUTTON_NAMES:
+                self.state.buttons.setdefault(name, False)
 
-        print(f"Connected: {self._joystick.get_name()}")
+        print(f"Connected: {self.name}")
         print(f"  Axes: {self._joystick.get_numaxes()}, "
               f"Buttons: {self._joystick.get_numbuttons()}, "
               f"Hats: {self._joystick.get_numhats()}")
@@ -144,6 +152,7 @@ class XboxController:
             self._joystick.quit()
             self._joystick = None
         self.connected = False
+        self.name = ""
         pygame.quit()
 
     def _apply_deadzone(self, value: float) -> float:
@@ -160,6 +169,7 @@ class XboxController:
 
         js = self._joystick
         num_axes = js.get_numaxes()
+        raw_dpad_buttons = {name: False for name in D_PAD_BUTTON_NAMES}
 
         # Axes
         if num_axes > AXIS_LEFT_X:
@@ -179,6 +189,9 @@ class XboxController:
         for i in range(js.get_numbuttons()):
             name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
             now = bool(js.get_button(i))
+            if name in D_PAD_BUTTON_NAMES:
+                raw_dpad_buttons[name] = now
+                continue
             prev = self._prev_buttons.get(name, False)
 
             if now and not prev:
@@ -192,6 +205,25 @@ class XboxController:
         # D-pad (hat)
         if js.get_numhats() > 0:
             self.state.dpad = js.get_hat(0)
+
+        hat_x, hat_y = self.state.dpad
+        normalized_dpad = {
+            "dpad_up": hat_y > 0 or raw_dpad_buttons["dpad_up"],
+            "dpad_down": hat_y < 0 or raw_dpad_buttons["dpad_down"],
+            "dpad_left": hat_x < 0 or raw_dpad_buttons["dpad_left"],
+            "dpad_right": hat_x > 0 or raw_dpad_buttons["dpad_right"],
+        }
+
+        for name, now in normalized_dpad.items():
+            prev = self._prev_buttons.get(name, False)
+            if now and not prev:
+                self.events.append(ButtonEvent(name, ButtonEdge.PRESSED))
+            elif not now and prev:
+                self.events.append(ButtonEvent(name, ButtonEdge.RELEASED))
+            self.state.buttons[name] = now
+            self._prev_buttons[name] = now
+
+        self._prev_dpad = self.state.dpad
 
     def drain_events(self) -> list[ButtonEvent]:
         """Return all buffered button events and clear the buffer."""

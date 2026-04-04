@@ -3,12 +3,15 @@
 
 import struct
 import threading
+import time
+from copy import deepcopy
 from collections import deque
 from dataclasses import dataclass
 
 import serial
 
 from commands import MotorCommand, MusicCommand, CtrlState
+from runtime_models import FrameRecord, to_payload
 
 
 # ---------------------------------------------------------------------------
@@ -49,8 +52,8 @@ TX_MUSIC_LEN = struct.calcsize(TX_MUSIC_FMT)
 #   [SYNC:1][ID:1][runMotor:1][ctrlState:1][tripFlag:2H][speedRef:4f]
 #   [posMechTheta:4f][Vdcbus:4f][IdFbk:4f][IqFbk:4f]
 #   [currentAs:4f][currentBs:4f][currentCs:4f][isrTicker:4I][chksum:1]
-#   total = 39 bytes
-RX_STATUS_FMT = ">BBBBHfffffffIB"
+#   total = 43 bytes
+RX_STATUS_FMT = ">BBBBHffffffffIB"
 RX_STATUS_LEN = struct.calcsize(RX_STATUS_FMT)
 
 # Fault frame:
@@ -58,6 +61,29 @@ RX_STATUS_LEN = struct.calcsize(RX_STATUS_FMT)
 #   total = 8 bytes
 RX_FAULT_FMT = ">BBHHB"
 RX_FAULT_LEN = struct.calcsize(RX_FAULT_FMT)
+
+
+@dataclass
+class UARTCounters:
+    """Transport counters exposed to the drive runtime."""
+
+    tx_frames: int = 0
+    rx_frames: int = 0
+    status_frames: int = 0
+    fault_frames: int = 0
+    checksum_errors: int = 0
+    serial_errors: int = 0
+
+
+@dataclass
+class UARTHealth:
+    """Current UART state used by the dashboard health panel."""
+
+    port_open: bool = False
+    terminal_only: bool = False
+    last_error: str | None = None
+    last_frame_at: float | None = None
+    last_status_at: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +150,16 @@ class UARTLink:
         self._port_name = port
         self._baudrate = baudrate
         self._ser: serial.Serial | None = None
+        self._lock = threading.Lock()
 
         # Buffers
         self.rx_status: deque[MCUStatus] = deque(maxlen=rx_buf_size)
         self.rx_faults: deque[MCUFault] = deque(maxlen=rx_buf_size)
         self.tx_log: deque[bytes] = deque(maxlen=tx_buf_size)
+        self._frame_events: deque[FrameRecord] = deque(maxlen=rx_buf_size + tx_buf_size)
+        self._latest_status: MCUStatus | None = None
+        self._counters = UARTCounters()
+        self._health = UARTHealth(terminal_only=port is None)
 
         self._rx_thread: threading.Thread | None = None
         self._running = False
@@ -139,6 +170,10 @@ class UARTLink:
     def open(self):
         """Open the serial port and start the RX listener thread."""
         if self._port_name is None:
+            with self._lock:
+                self._health.terminal_only = True
+                self._health.port_open = False
+                self._health.last_error = None
             print("[UART] terminal-only mode (no serial port)")
             return
 
@@ -150,6 +185,10 @@ class UARTLink:
         self._running = True
         self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
         self._rx_thread.start()
+        with self._lock:
+            self._health.port_open = True
+            self._health.terminal_only = False
+            self._health.last_error = None
         print(f"[UART] opened {self._port_name} @ {self._baudrate}")
 
     def close(self):
@@ -161,12 +200,51 @@ class UARTLink:
         if self._ser:
             self._ser.close()
             self._ser = None
+        with self._lock:
+            self._health.port_open = False
 
     # -- TX: command -> wire -----------------------------------------------
 
     @staticmethod
     def _checksum(data: bytes) -> int:
         return sum(data) & 0xFF
+
+    @staticmethod
+    def _frame_name(frame_id: int) -> str:
+        return {
+            FRAME_MOTOR_CMD: "motor_cmd",
+            FRAME_MUSIC_CMD: "music_cmd",
+            FRAME_STATUS: "status",
+            FRAME_FAULT: "fault",
+        }.get(frame_id, f"frame_{frame_id:02X}")
+
+    def _record_frame(
+        self,
+        direction: str,
+        frame_id: int,
+        frame: bytes,
+        decoded: dict[str, object],
+        checksum_ok: bool,
+    ):
+        now = time.time()
+        record = FrameRecord(
+            direction=direction,
+            frame_id=frame_id,
+            frame_name=self._frame_name(frame_id),
+            raw_hex=frame.hex(" "),
+            decoded=decoded,
+            checksum_ok=checksum_ok,
+            timestamp=now,
+        )
+        with self._lock:
+            self._frame_events.append(record)
+            self._health.last_frame_at = now
+            if direction == "tx":
+                self._counters.tx_frames += 1
+            else:
+                self._counters.rx_frames += 1
+                if not checksum_ok:
+                    self._counters.checksum_errors += 1
 
     def pack_motor(self, cmd: MotorCommand) -> bytes:
         """Pack a MotorCommand into a wire frame."""
@@ -194,10 +272,23 @@ class UARTLink:
         else:
             frame = self.pack_motor(cmd)
 
-        self.tx_log.append(frame)
+        with self._lock:
+            self.tx_log.append(frame)
+        self._record_frame(
+            direction="tx",
+            frame_id=frame[1],
+            frame=frame,
+            decoded=to_payload(cmd),
+            checksum_ok=True,
+        )
 
         if self._ser and self._ser.is_open:
-            self._ser.write(frame)
+            try:
+                self._ser.write(frame)
+            except serial.SerialException as exc:
+                with self._lock:
+                    self._counters.serial_errors += 1
+                    self._health.last_error = str(exc)
 
     # -- RX: wire -> parsed data -------------------------------------------
 
@@ -206,7 +297,10 @@ class UARTLink:
         while self._running and self._ser:
             try:
                 chunk = self._ser.read(64)
-            except serial.SerialException:
+            except serial.SerialException as exc:
+                with self._lock:
+                    self._counters.serial_errors += 1
+                    self._health.last_error = str(exc)
                 break
             if chunk:
                 self._rx_buf.extend(chunk)
@@ -238,6 +332,13 @@ class UARTLink:
                 if self._verify_checksum(frame):
                     self._handle_status(frame)
                 else:
+                    self._record_frame(
+                        direction="rx",
+                        frame_id=frame_id,
+                        frame=frame,
+                        decoded={"error": "status checksum mismatch"},
+                        checksum_ok=False,
+                    )
                     print("[UART] status frame checksum mismatch")
 
             elif frame_id == FRAME_FAULT:
@@ -249,6 +350,13 @@ class UARTLink:
                 if self._verify_checksum(frame):
                     self._handle_fault(frame)
                 else:
+                    self._record_frame(
+                        direction="rx",
+                        frame_id=frame_id,
+                        frame=frame,
+                        decoded={"error": "fault checksum mismatch"},
+                        checksum_ok=False,
+                    )
                     print("[UART] fault frame checksum mismatch")
 
             else:
@@ -277,25 +385,81 @@ class UARTLink:
             current_cs=vals[12],
             isr_ticker=vals[13],
         )
-        self.rx_status.append(status)
+        now = time.time()
+        with self._lock:
+            self.rx_status.append(status)
+            self._latest_status = status
+            self._health.last_status_at = now
+            self._counters.status_frames += 1
+        self._record_frame(
+            direction="rx",
+            frame_id=FRAME_STATUS,
+            frame=frame,
+            decoded=to_payload(status),
+            checksum_ok=True,
+        )
 
     def _handle_fault(self, frame: bytes):
         vals = struct.unpack(RX_FAULT_FMT, frame)
         # vals: (sync, id, tripFlag, tripCount, chk)
         fault = MCUFault(trip_flag=vals[2], trip_count=vals[3])
-        self.rx_faults.append(fault)
+        with self._lock:
+            self.rx_faults.append(fault)
+            self._counters.fault_frames += 1
+        self._record_frame(
+            direction="rx",
+            frame_id=FRAME_FAULT,
+            frame=frame,
+            decoded=to_payload(fault),
+            checksum_ok=True,
+        )
         print(f"\r\n[RX] {fault}")
 
-    # -- drain helpers for main loop ---------------------------------------
+    # -- thread-safe consumers ---------------------------------------------
 
-    def drain_status(self):
-        """Return and clear all buffered status messages."""
-        msgs = list(self.rx_status)
-        self.rx_status.clear()
+    def pop_statuses(self) -> list[MCUStatus]:
+        """Return and clear buffered status messages."""
+        with self._lock:
+            msgs = list(self.rx_status)
+            self.rx_status.clear()
         return msgs
 
-    def drain_faults(self):
-        """Return and clear all buffered fault messages."""
-        msgs = list(self.rx_faults)
-        self.rx_faults.clear()
+    def pop_faults(self) -> list[MCUFault]:
+        """Return and clear buffered fault messages."""
+        with self._lock:
+            msgs = list(self.rx_faults)
+            self.rx_faults.clear()
         return msgs
+
+    def pop_frame_records(self) -> list[FrameRecord]:
+        """Return and clear buffered frame records."""
+        with self._lock:
+            frames = list(self._frame_events)
+            self._frame_events.clear()
+        return frames
+
+    def drain_status(self) -> list[MCUStatus]:
+        """Backward-compatible alias for pop_statuses()."""
+        return self.pop_statuses()
+
+    def drain_faults(self) -> list[MCUFault]:
+        """Backward-compatible alias for pop_faults()."""
+        return self.pop_faults()
+
+    def get_latest_status(self) -> MCUStatus | None:
+        """Return the latest status without consuming buffered updates."""
+        with self._lock:
+            return deepcopy(self._latest_status)
+
+    def get_counters(self) -> UARTCounters:
+        """Return a copy of the current transport counters."""
+        with self._lock:
+            return deepcopy(self._counters)
+
+    def get_health(self) -> UARTHealth:
+        """Return a copy of the current transport health flags."""
+        with self._lock:
+            health = deepcopy(self._health)
+            if self._ser:
+                health.port_open = self._ser.is_open
+        return health

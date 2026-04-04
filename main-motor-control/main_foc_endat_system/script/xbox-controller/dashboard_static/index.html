@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xbox Drive Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Host ↔ MCU Telemetry Console</p>
+          <h1>Xbox Drive Dashboard</h1>
+          <p class="hero-copy">
+            Live controller input, host command frames, and motor-control MCU telemetry in one local view.
+          </p>
+        </div>
+        <div class="hero-status">
+          <span class="status-chip" id="session-chip">Idle</span>
+          <span class="status-chip muted" id="mode-chip">Drive Mode</span>
+        </div>
+      </header>
+
+      <section class="health-banner" id="health-banner">
+        <strong id="health-title">Waiting for session</strong>
+        <span id="health-message">Start the runtime to begin streaming controller and UART activity.</span>
+      </section>
+
+      <main class="workspace">
+        <nav class="tab-strip" aria-label="Dashboard sections">
+          <button
+            id="tab-button-overview"
+            class="tab-button active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="tab-panel-overview"
+            data-tab-target="overview"
+          >
+            <strong>Overview</strong>
+            <span>Session, transport, and host command</span>
+          </button>
+          <button
+            id="tab-button-controller"
+            class="tab-button"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-panel-controller"
+            data-tab-target="controller"
+          >
+            <strong>Controller</strong>
+            <span>Sticks, triggers, and button state</span>
+          </button>
+          <button
+            id="tab-button-telemetry"
+            class="tab-button"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-panel-telemetry"
+            data-tab-target="telemetry"
+          >
+            <strong>Telemetry</strong>
+            <span>MCU status and rolling charts</span>
+          </button>
+          <button
+            id="tab-button-frames"
+            class="tab-button"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-panel-frames"
+            data-tab-target="frames"
+          >
+            <strong>Frames</strong>
+            <span>Raw transport timeline</span>
+          </button>
+          <button
+            id="tab-button-events"
+            class="tab-button"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-panel-events"
+            data-tab-target="events"
+          >
+            <strong>Events</strong>
+            <span>Faults and runtime activity</span>
+          </button>
+        </nav>
+
+        <section
+          id="tab-panel-overview"
+          class="tab-panel active"
+          role="tabpanel"
+          aria-labelledby="tab-button-overview"
+          data-tab-panel="overview"
+        >
+          <div class="overview-grid">
+            <section class="panel controls-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Session Control</h2>
+                  <p class="panel-copy">Connect the controller, choose the UART target, and start the drive loop.</p>
+                </div>
+                <span id="ws-indicator" class="badge offline">Socket offline</span>
+              </div>
+              <div class="session-form">
+                <label class="control-field control-field-wide">
+                  Port
+                  <select id="port-select"></select>
+                </label>
+                <div class="session-input-row">
+                  <label class="control-field">
+                    Baud Rate
+                    <input id="baudrate-input" type="number" value="115200" min="1" step="1" />
+                  </label>
+                  <label class="control-field">
+                    Joystick Index
+                    <input id="joystick-input" type="number" value="0" min="0" step="1" />
+                  </label>
+                </div>
+              </div>
+              <p id="port-help" class="control-help">
+                Choose the LaunchXL App UART when it appears. Demo mode skips MCU serial traffic.
+              </p>
+              <div class="button-row session-actions">
+                <button id="start-button" class="primary">Start Drive Session</button>
+                <button id="stop-button">Stop</button>
+                <button id="refresh-ports">Refresh Ports</button>
+              </div>
+              <dl class="meta-list">
+                <div>
+                  <dt>Port</dt>
+                  <dd id="meta-port">demo</dd>
+                </div>
+                <div>
+                  <dt>Controller</dt>
+                  <dd id="meta-controller">Not connected</dd>
+                </div>
+                <div>
+                  <dt>Started</dt>
+                  <dd id="meta-started">-</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="panel summary-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Transport Health</h2>
+                  <p class="panel-copy">Live counters and link freshness for the host-to-MCU serial path.</p>
+                </div>
+                <span class="badge" id="telemetry-chip">No telemetry</span>
+              </div>
+              <div class="metric-grid">
+                <div class="metric-card">
+                  <span>TX Frames</span>
+                  <strong id="counter-tx">0</strong>
+                </div>
+                <div class="metric-card">
+                  <span>RX Frames</span>
+                  <strong id="counter-rx">0</strong>
+                </div>
+                <div class="metric-card">
+                  <span>Checksum Errors</span>
+                  <strong id="counter-checksum">0</strong>
+                </div>
+                <div class="metric-card">
+                  <span>Serial Errors</span>
+                  <strong id="counter-serial">0</strong>
+                </div>
+              </div>
+              <dl class="meta-list compact">
+                <div>
+                  <dt>Last MCU Status</dt>
+                  <dd id="meta-last-status">-</dd>
+                </div>
+                <div>
+                  <dt>Last Frame</dt>
+                  <dd id="meta-last-frame">-</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="panel command-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Host Command</h2>
+                  <p class="panel-copy">The latest control command being packed and sent from the laptop.</p>
+                </div>
+                <span class="badge" id="command-state">STOP</span>
+              </div>
+              <div class="command-grid">
+                <div class="command-meter">
+                  <span>Speed Ref</span>
+                  <strong id="cmd-speed">0.0000</strong>
+                </div>
+                <div class="command-meter">
+                  <span>Id Ref</span>
+                  <strong id="cmd-id">0.0000</strong>
+                </div>
+                <div class="command-meter">
+                  <span>Iq Ref</span>
+                  <strong id="cmd-iq">0.0000</strong>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section
+          id="tab-panel-controller"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-button-controller"
+          data-tab-panel="controller"
+        >
+          <section class="panel controller-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Controller View</h2>
+                <p class="panel-copy">Inspect the live Xbox layout, grouped mappings, and the exact drive variable each input affects.</p>
+              </div>
+              <span class="badge" id="controller-badge">Disconnected</span>
+            </div>
+            <div class="controller-layout">
+              <section class="controller-stage">
+                <div class="controller-trigger-strip">
+                  <div class="trigger-module" data-control="left_trigger">
+                    <div class="trigger-header">
+                      <span>LT</span>
+                      <span id="lt-value">0.00</span>
+                    </div>
+                    <div class="bar-track trigger-track"><div id="lt-bar" class="bar-fill"></div></div>
+                  </div>
+                  <div class="shoulder-button" data-control="lb">LB</div>
+                  <div class="shoulder-button" data-control="rb">RB</div>
+                  <div class="trigger-module" data-control="right_trigger">
+                    <div class="trigger-header">
+                      <span>RT</span>
+                      <span id="rt-value">0.00</span>
+                    </div>
+                    <div class="bar-track trigger-track"><div id="rt-bar" class="bar-fill"></div></div>
+                  </div>
+                </div>
+
+                <div class="controller-shell">
+                  <div class="controller-body">
+                    <div class="thumb-module left" data-control="left_stick">
+                      <span class="module-label">Left Stick</span>
+                      <div class="stick-surface">
+                        <div class="stick-center"></div>
+                        <div id="left-stick-vector" class="stick-vector"></div>
+                        <div id="left-stick-dot" class="stick-dot"></div>
+                      </div>
+                      <p id="left-stick-value">X +0.00 / Y +0.00</p>
+                    </div>
+
+                    <div class="cluster dpad-cluster">
+                      <span class="cluster-label">D-Pad</span>
+                      <button type="button" class="control-node dpad-node up" data-control="dpad_up">Up</button>
+                      <button type="button" class="control-node dpad-node left" data-control="dpad_left">Left</button>
+                      <button type="button" class="control-node dpad-node right" data-control="dpad_right">Right</button>
+                      <button type="button" class="control-node dpad-node down" data-control="dpad_down">Down</button>
+                    </div>
+
+                    <div class="center-cluster">
+                      <button type="button" class="control-node pill-button" data-control="back">Back</button>
+                      <button type="button" class="control-node guide-button" data-control="guide">Guide</button>
+                      <button type="button" class="control-node pill-button" data-control="start">Start</button>
+                    </div>
+
+                    <div class="cluster face-cluster">
+                      <span class="cluster-label">A / B / X / Y</span>
+                      <button type="button" class="control-node face-node y" data-control="y">Y</button>
+                      <button type="button" class="control-node face-node x" data-control="x">X</button>
+                      <button type="button" class="control-node face-node b" data-control="b">B</button>
+                      <button type="button" class="control-node face-node a" data-control="a">A</button>
+                    </div>
+
+                    <div class="thumb-module right" data-control="right_stick">
+                      <span class="module-label">Right Stick</span>
+                      <div class="stick-surface">
+                        <div class="stick-center"></div>
+                        <div id="right-stick-vector" class="stick-vector"></div>
+                        <div id="right-stick-dot" class="stick-dot"></div>
+                      </div>
+                      <p id="right-stick-value">X +0.00 / Y +0.00</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="controller-status-strip" id="controller-status-strip"></div>
+                <section class="controller-groups" id="controller-groups"></section>
+              </section>
+            </div>
+          </section>
+        </section>
+
+        <section
+          id="tab-panel-telemetry"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-button-telemetry"
+          data-tab-panel="telemetry"
+        >
+          <div class="telemetry-workspace">
+            <section class="panel telemetry-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>MCU Telemetry</h2>
+                  <p class="panel-copy">Decoded status feedback from the motor-control MCU.</p>
+                </div>
+                <span class="badge" id="mcu-state">STOP</span>
+              </div>
+              <div class="metric-grid telemetry-grid">
+                <div class="metric-card"><span>Speed Ref</span><strong id="mcu-speed">0.0000</strong></div>
+                <div class="metric-card"><span>Rotor Theta</span><strong id="mcu-theta">0.0000</strong></div>
+                <div class="metric-card"><span>Vdc Bus</span><strong id="mcu-vdc">0.0</strong></div>
+                <div class="metric-card"><span>Trip Flag</span><strong id="mcu-trip">0x0000</strong></div>
+                <div class="metric-card"><span>Id Fbk</span><strong id="mcu-id">0.0000</strong></div>
+                <div class="metric-card"><span>Iq Fbk</span><strong id="mcu-iq">0.0000</strong></div>
+                <div class="metric-card"><span>Phase A</span><strong id="mcu-ia">0.000</strong></div>
+                <div class="metric-card"><span>Phase B</span><strong id="mcu-ib">0.000</strong></div>
+                <div class="metric-card"><span>Phase C</span><strong id="mcu-ic">0.000</strong></div>
+                <div class="metric-card"><span>ISR Ticker</span><strong id="mcu-isr">0</strong></div>
+              </div>
+              <div class="fault-list" id="fault-list"></div>
+            </section>
+
+            <section class="panel charts-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Rolling Charts</h2>
+                  <p class="panel-copy">A 10 Hz view of the values that change most during driving.</p>
+                </div>
+                <span class="badge muted">10 Hz UI samples</span>
+              </div>
+              <div class="chart-grid">
+                <article class="chart-card">
+                  <h3>Speed Reference</h3>
+                  <svg id="chart-speed" viewBox="0 0 320 120" preserveAspectRatio="none"></svg>
+                </article>
+                <article class="chart-card">
+                  <h3>D/Q Currents</h3>
+                  <svg id="chart-dq" viewBox="0 0 320 120" preserveAspectRatio="none"></svg>
+                </article>
+                <article class="chart-card">
+                  <h3>DC Bus</h3>
+                  <svg id="chart-vdc" viewBox="0 0 320 120" preserveAspectRatio="none"></svg>
+                </article>
+                <article class="chart-card">
+                  <h3>Phase Currents</h3>
+                  <svg id="chart-phase" viewBox="0 0 320 120" preserveAspectRatio="none"></svg>
+                </article>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section
+          id="tab-panel-frames"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-button-frames"
+          data-tab-panel="frames"
+        >
+          <section class="panel timeline-panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Frame Timeline</h2>
+                <p class="panel-copy">Decoded TX/RX frames with raw payload bytes for transport debugging.</p>
+              </div>
+              <div class="button-row compact">
+                <button id="toggle-frame-pause">Pause</button>
+                <button id="clear-frames">Clear</button>
+              </div>
+            </div>
+            <div class="log-list tall-log" id="frame-list"></div>
+          </section>
+        </section>
+
+        <section
+          id="tab-panel-events"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-button-events"
+          data-tab-panel="events"
+        >
+          <section class="panel events-panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Event Feed</h2>
+                <p class="panel-copy">Fault notifications, session lifecycle events, and runtime notices.</p>
+              </div>
+              <div class="button-row compact">
+                <button id="toggle-event-pause">Pause</button>
+                <button id="clear-events">Clear</button>
+              </div>
+            </div>
+            <div class="log-list tall-log" id="event-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js" type="module"></script>
+  </body>
+</html>
