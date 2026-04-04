@@ -55,6 +55,7 @@
 #include "sfra_settings.h"
 
 #include "endat.h"
+#include "uart_link.h"
 
 
 //
@@ -430,6 +431,9 @@ void main(void)
     GPIO_writePin(motorVars[0].drvEnableGateGPIO, DISABLE_GATE);
 
 
+    // Initialize UART link (SCI-A, 115200 8N1) for PC communication
+    UART_Link_init();
+
     // enable global interrupt
     EINT;          // Enable Global interrupt INTM
 
@@ -579,9 +583,11 @@ void B1(void) // Toggle GPIO-00
 }
 
 //----------------------------------------
-void B2(void) // SPARE
+void B2(void) // UART echo (Phase 1) / RX polling (Phase 3+)
 //----------------------------------------
 {
+    UART_Link_echoTask();
+
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
     B_Task_Ptr = &B3;

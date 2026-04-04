@@ -130,7 +130,7 @@ typedef float _iq;
 // User can select choices from available control configurations
 //
 #define  CGND                COLD
-#define  BUILDLEVEL          FCL_LEVEL2
+#define  BUILDLEVEL          FCL_LEVEL1
 #define  SAMPLING_METHOD     SINGLE_SAMPLING   // DOUBLE_SAMPLING   // SINGLE_SAMPLING
 #define  FCL_CNTLR           PI_CNTLR          // CMPLX_CNTLR       //
 #define  CURRENT_SENSE       LEM_CURRENT_SENSE
@@ -151,7 +151,7 @@ typedef float _iq;
 // #define DISABLE_BUS_VOLTAGE_CHECK
 // #define DISABLE_OVERCURRENT_CHECK
 
-// #define DISABLE_ENDAT   // Re-enabled for position feedback
+#define DISABLE_ENDAT   // Re-enabled for position feedback
 #define DACOUT_EN
 
 

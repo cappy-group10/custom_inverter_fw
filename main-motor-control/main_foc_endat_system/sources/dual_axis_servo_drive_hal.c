@@ -470,8 +470,12 @@ void HAL_setupCLA(HAL_Handle handle)
     memcpy((uint32_t *)&Cla1funcsRunStart, (uint32_t *)&Cla1funcsLoadStart,
             (uint32_t)&Cla1funcsLoadSize);
 
+    // This project does not currently emit a .const_cla payload, so only
+    // copy CLA constants when that section is intentionally enabled.
+#ifdef CLA_COPY_CONST_SECTION
     memcpy((uint32_t *)&Cla1ConstRunStart, (uint32_t *)&Cla1ConstLoadStart,
             (uint32_t)&Cla1ConstLoadSize);
+#endif
 #endif //_FLASH
 
     // make sure QEP access is given to CLA as Secondary master
