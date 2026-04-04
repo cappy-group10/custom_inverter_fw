@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { MotorControlPanel } from "../components/MotorControlPanel";
-import { InfoHint, UiIcon } from "../components/UiChrome";
+import { UiIcon } from "../components/UiChrome";
 import { useDashboard } from "../context/DashboardContext";
 import { frontendLogger } from "../lib/frontendLogger";
 import { getConnectionInstance, getMostRecentlyOpenedInstance, markConnectionInstanceOpened, updateConnectionInstanceFromSnapshot } from "../lib/instances";
@@ -54,6 +54,13 @@ function getHealthCopy(snapshot: ReturnType<typeof useDashboard>["snapshot"]) {
   };
 }
 
+function getHealthBadgeTone(level: string) {
+  if (level === "good" || level === "warn" || level === "danger") {
+    return level;
+  }
+  return "muted";
+}
+
 export function McuPage() {
   const { mcuId } = useParams();
   const [searchParams] = useSearchParams();
@@ -62,6 +69,9 @@ export function McuPage() {
   const instanceId = searchParams.get("instance");
   const activeInstance = instanceId ? getConnectionInstance(instanceId) : getMostRecentlyOpenedInstance();
   const dashboardPath = activeInstance ? `/configure?instance=${encodeURIComponent(activeInstance.id)}` : "/configure";
+  const startedAtLabel = formatTimestamp(snapshot.started_at);
+  const lastStatusLabel = formatTimestamp(snapshot.health.last_status_at);
+  const healthTone = getHealthBadgeTone(banner.level);
 
   useEffect(() => {
     if (instanceId) {
@@ -110,41 +120,59 @@ export function McuPage() {
   }
 
   return (
-    <div className="page-shell">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">Emission Impossible</p>
-          <h1>Inverter OS Motor Control</h1>
-          <p className="hero-copy">
-            A dedicated operator view for motor speed, electrical feedback, and the emergency brake override.
-          </p>
-        </div>
-        <div className="hero-status">
-          <span className={`status-chip ${activeInstance ? "good" : "muted"}`}>
-            <UiIcon name="instances" />
-            {activeInstance?.name || "No instance selected"}
-          </span>
-          <span className="status-chip">
-            <UiIcon name="shield" />
-            {snapshot.session_state || "Idle"}
-          </span>
-          <span className="status-chip muted">
-            <UiIcon name="port" />
-            {snapshot.port || "demo"}
-          </span>
-          <Link className="status-chip muted page-link-chip" to={dashboardPath}>
-            <UiIcon name="back" />
-            Back to Dashboard
-          </Link>
+    <div className="page-shell motor-page-shell">
+      <header className="panel motor-page-masthead">
+        <div className="motor-page-title-row">
+          <div className="motor-page-copy">
+            <p className="eyebrow">Emission Impossible</p>
+            <h1>Inverter OS Motor Control</h1>
+            <p className="hero-copy">
+              Compact operator view for speed tracking, d/q currents, fault state, and brake control without leaving the primary motor surface.
+            </p>
+            <p className="motor-page-health-note">
+              <strong>{banner.title}</strong>
+              <span>{banner.message}</span>
+            </p>
+          </div>
+
+          <div className="motor-page-chip-grid">
+            <Link className="status-chip muted page-link-chip" to={dashboardPath}>
+              <UiIcon name="back" />
+              Back to Dashboard
+            </Link>
+            <span className={`status-chip ${activeInstance ? "good" : "muted"}`}>
+              <UiIcon name="instances" />
+              {activeInstance?.name || "No instance selected"}
+            </span>
+            <span className="status-chip">
+              <UiIcon name="session" />
+              {snapshot.session_state || "Idle"}
+            </span>
+            <span className="status-chip muted">
+              <UiIcon name="port" />
+              {snapshot.port || "demo"}
+            </span>
+            <span className={`badge motor-inline-health ${healthTone}`}>
+              <UiIcon name="shield" />
+              {banner.title}
+            </span>
+            <span className="status-chip muted">
+              <UiIcon name="controller-pad" />
+              {snapshot.joystick_name || "Controller offline"}
+            </span>
+            <span className="status-chip muted">
+              <UiIcon name="clock" />
+              {`Started ${startedAtLabel}`}
+            </span>
+            <span className="status-chip muted">
+              <UiIcon name="telemetry" />
+              {`Last status ${lastStatusLabel}`}
+            </span>
+          </div>
         </div>
       </header>
 
-      <section className={`health-banner ${banner.level}`}>
-        <strong>{banner.title}</strong>
-        <span>{banner.message}</span>
-      </section>
-
-      <main className="workspace">
+      <main className="workspace motor-page-workspace">
         <MotorControlPanel
           snapshot={snapshot}
           loadingBrake={loading.brake}
@@ -156,34 +184,6 @@ export function McuPage() {
             void releaseBrake().catch(() => undefined);
           }}
         />
-
-        <section className="panel dedicated-meta-panel">
-          <div className="panel-heading">
-            <div>
-              <div className="heading-line">
-                <UiIcon name="session" className="heading-icon" />
-                <h2>Session Context</h2>
-                <InfoHint text="A compact summary of the current controller, timing, and last known telemetry timestamps for this motor session." />
-              </div>
-              <p className="panel-copy">A compact reference strip so the dedicated motor page still shows the session essentials.</p>
-            </div>
-            <span className="badge muted">Primary MCU</span>
-          </div>
-          <dl className="meta-list">
-            <div>
-              <dt>Controller</dt>
-              <dd>{snapshot.joystick_name || "Not connected"}</dd>
-            </div>
-            <div>
-              <dt>Started</dt>
-              <dd>{formatTimestamp(snapshot.started_at)}</dd>
-            </div>
-            <div>
-              <dt>Last Status</dt>
-              <dd>{formatTimestamp(snapshot.health.last_status_at)}</dd>
-            </div>
-          </dl>
-        </section>
       </main>
     </div>
   );

@@ -167,6 +167,8 @@ describe("React dashboard routes", () => {
     expect(screen.getByRole("heading", { level: 1, name: /inverter os motor control/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /motor control/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /emergency brake/i })).toBeInTheDocument();
-    expect(screen.getByTestId("speedometer")).toBeInTheDocument();
+    expect(screen.getByTestId("compact-speed-band")).toBeInTheDocument();
+    expect(screen.queryByTestId("speedometer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: /session context/i })).not.toBeInTheDocument();
   });
 });

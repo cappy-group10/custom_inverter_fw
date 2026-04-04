@@ -290,6 +290,21 @@ a {
   color: var(--teal);
 }
 
+.status-chip.good {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.status-chip.warn {
+  background: rgba(255, 200, 87, 0.16);
+  color: var(--warning);
+}
+
+.status-chip.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .button-row,
 .metric-grid,
 .command-grid {
@@ -1269,6 +1284,380 @@ button.danger-button {
   font-family: var(--mono);
 }
 
+.motor-panel-dedicated {
+  padding: 16px;
+  border-radius: 24px;
+}
+
+.motor-panel-heading-compact {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.motor-panel-heading-compact .heading-line {
+  gap: 8px;
+}
+
+.motor-panel-heading-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.motor-status-grid.compact {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.motor-status-card.compact {
+  padding: 12px 14px;
+  gap: 4px;
+  border-radius: 18px;
+}
+
+.motor-status-card.compact strong {
+  font-size: 1rem;
+}
+
+.motor-status-card.compact small {
+  font-size: 0.76rem;
+}
+
+.motor-dedicated-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.36fr) minmax(300px, 0.9fr);
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+
+.motor-speed-band-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(68, 209, 194, 0.07), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+    var(--panel-strong);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.motor-speed-band-card .motor-card-head strong {
+  font-size: 1.28rem;
+}
+
+.motor-speed-band-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.motor-speed-band-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.motor-speed-band-metric,
+.motor-speed-band-center {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  min-height: 84px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.motor-speed-band-metric span,
+.motor-speed-band-center span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.motor-speed-band-metric strong,
+.motor-speed-band-center strong {
+  font-family: var(--mono);
+  font-size: 1.08rem;
+}
+
+.motor-speed-band-center {
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.motor-speed-band-center strong {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.motor-speed-band-metric small,
+.motor-speed-band-center small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.motor-speed-band-metric.is-forward,
+.motor-speed-band-marker.is-forward {
+  color: var(--teal);
+}
+
+.motor-speed-band-metric.is-reverse,
+.motor-speed-band-marker.is-reverse {
+  color: #ff8d5c;
+}
+
+.motor-speed-band-metric.is-zero,
+.motor-speed-band-marker.is-zero {
+  color: var(--muted);
+}
+
+.motor-speed-band-scale {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+}
+
+.motor-speed-band-scale span:nth-child(2) {
+  text-align: center;
+}
+
+.motor-speed-band-scale span:last-child {
+  text-align: right;
+}
+
+.motor-speed-band-track {
+  position: relative;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 141, 92, 0.15) 0%,
+      rgba(255, 141, 92, 0.07) 46%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(68, 209, 194, 0.07) 54%,
+      rgba(68, 209, 194, 0.15) 100%
+    ),
+    rgba(255, 255, 255, 0.02);
+}
+
+.motor-speed-band-zero {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.motor-speed-band-marker {
+  position: absolute;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.motor-speed-band-marker::before {
+  content: "";
+  width: 2px;
+  height: 16px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.motor-speed-band-marker span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(9, 15, 20, 0.86);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.motor-speed-band-marker.command {
+  top: 6px;
+}
+
+.motor-speed-band-marker.feedback {
+  bottom: 6px;
+}
+
+.motor-speed-band-marker.feedback::before {
+  order: 2;
+}
+
+.motor-safety-card-compact {
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+}
+
+.motor-safety-card-compact .motor-card-head strong {
+  font-size: 1.06rem;
+}
+
+.motor-compact-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.motor-safety-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.motor-safety-stack .primary,
+.motor-safety-stack .panel-link-button {
+  min-height: 46px;
+}
+
+.motor-compact-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.motor-compact-meta-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.motor-compact-meta-grid span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.motor-compact-meta-grid strong {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+}
+
+.motor-dedicated-lower-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(420px, 0.82fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.motor-trend-stack {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.motor-electrical-rail {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.motor-voltage-hero .motor-card-head strong {
+  font-size: 1.42rem;
+}
+
+.motor-voltage-hero .motor-compact-copy {
+  font-size: 0.82rem;
+}
+
+.motor-electrical-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.motor-electrical-mini-grid .power-card {
+  grid-column: span 2;
+}
+
+.motor-trend-card.compact,
+.motor-data-card.compact,
+.motor-emphasis-card.compact {
+  padding: 14px 15px;
+  border-radius: 18px;
+}
+
+.motor-trend-card.compact .motor-card-head strong,
+.motor-data-card.compact .motor-card-head strong,
+.motor-emphasis-card.compact .motor-card-head strong {
+  font-size: 1rem;
+}
+
+.motor-trend-card.compact .motor-trend-svg {
+  height: 94px;
+  margin-top: 8px;
+}
+
+.motor-trend-values.compact {
+  margin-top: 8px;
+  font-size: 0.76rem;
+}
+
+.motor-pair-list.compact.dense {
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+
+.motor-pair-list.compact.dense dt {
+  font-size: 0.74rem;
+}
+
+.motor-pair-list.compact.dense dd {
+  font-size: 0.9rem;
+}
+
+.temperature-compact-card .motor-card-head {
+  margin-bottom: 0;
+}
+
+.motor-temperature-stack {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.temperature-pill.compact {
+  padding: 10px 12px;
+  border-radius: 14px;
+  gap: 4px;
+}
+
+.temperature-pill.compact strong {
+  font-size: 0.88rem;
+}
+
+.motor-data-card.compact .power-bar-shell {
+  height: 10px;
+  margin-top: 10px;
+}
+
 .motor-safety-card {
   display: grid;
   gap: 14px;
@@ -1436,6 +1825,78 @@ button.danger-button {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--teal), var(--accent));
   box-shadow: 0 0 18px rgba(68, 209, 194, 0.22);
+}
+
+.motor-page-shell {
+  max-width: 1500px;
+  padding: 16px 20px 18px;
+}
+
+.motor-page-masthead {
+  margin-bottom: 12px;
+  padding: 16px 18px;
+  border-radius: 24px;
+}
+
+.motor-page-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.98fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.motor-page-copy .eyebrow {
+  margin-bottom: 8px;
+}
+
+.motor-page-copy h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 3vw, 2.7rem);
+  line-height: 0.98;
+}
+
+.motor-page-masthead .hero-copy {
+  margin-top: 10px;
+  max-width: 54ch;
+  font-size: 0.92rem;
+}
+
+.motor-page-health-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.motor-page-health-note strong {
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.motor-page-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.motor-page-chip-grid .status-chip,
+.motor-page-chip-grid .badge {
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.motor-inline-health {
+  justify-content: flex-start;
+}
+
+.motor-page-workspace {
+  gap: 12px;
 }
 
 .motor-stats-heading {
@@ -1871,6 +2332,8 @@ button.danger-button {
   .session-input-row,
   .button-row,
   .motor-hero-grid,
+  .motor-dedicated-main-grid,
+  .motor-page-title-row,
   .landing-workspace,
   .landing-note-grid,
   .landing-link-row,
@@ -1885,6 +2348,15 @@ button.danger-button {
     grid-template-columns: 1fr;
   }
 
+  .motor-dedicated-lower-shell,
+  .motor-electrical-mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .motor-electrical-mini-grid .power-card {
+    grid-column: span 1;
+  }
+
   .power-card {
     grid-column: span 1;
   }
@@ -1897,6 +2369,10 @@ button.danger-button {
 @media (max-width: 720px) {
   .page-shell {
     padding: 16px;
+  }
+
+  .motor-page-shell {
+    padding: 12px;
   }
 
   .hero {
@@ -1914,12 +2390,27 @@ button.danger-button {
 
   .speedometer-value-row,
   .motor-trend-values,
-  .motor-temperature-grid {
+  .motor-temperature-grid,
+  .motor-panel-heading-badges,
+  .motor-speed-band-badges {
     flex-direction: column;
   }
 
   .motor-pair-list {
     grid-template-columns: 1fr;
+  }
+
+  .motor-page-chip-grid,
+  .motor-speed-band-summary,
+  .motor-compact-meta-grid,
+  .motor-dedicated-lower-shell,
+  .motor-electrical-mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .motor-panel-dedicated,
+  .motor-page-masthead {
+    padding: 14px;
   }
 
   .tab-button {
