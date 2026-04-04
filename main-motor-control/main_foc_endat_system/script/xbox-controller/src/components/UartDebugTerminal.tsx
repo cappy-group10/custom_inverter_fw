@@ -14,6 +14,8 @@ interface UartDebugTerminalProps {
   snapshot: SessionSnapshot;
 }
 
+const TERMINAL_ROW_LIMIT = 200;
+
 function createFrameKey(frame: FrameRecord) {
   return [
     Number(frame.timestamp || 0).toFixed(6),
@@ -70,9 +72,23 @@ export function UartDebugTerminal({ snapshot }: UartDebugTerminalProps) {
       if (!query) {
         return true;
       }
-      return JSON.stringify([frame.frame_name, frame.frame_id, frame.raw_hex, frame.decoded]).toLowerCase().includes(query);
+      if (String(frame.frame_name || "").toLowerCase().includes(query)) {
+        return true;
+      }
+      if (String(frame.frame_id ?? "").toLowerCase().includes(query)) {
+        return true;
+      }
+      if (String(frame.raw_hex || "").toLowerCase().includes(query)) {
+        return true;
+      }
+      return JSON.stringify(frame.decoded || {}).toLowerCase().includes(query);
     });
   }, [errorsOnly, search, showRx, showTx, sourceFrames]);
+
+  const visibleFrames = useMemo(
+    () => filteredFrames.slice(Math.max(filteredFrames.length - TERMINAL_ROW_LIMIT, 0)),
+    [filteredFrames],
+  );
 
   const selectedFrame = useMemo(
     () => filteredFrames.find((frame) => createFrameKey(frame) === selectedFrameKey) || null,
@@ -94,7 +110,7 @@ export function UartDebugTerminal({ snapshot }: UartDebugTerminalProps) {
       return;
     }
     surface.scrollTop = surface.scrollHeight;
-  }, [autoScroll, filteredFrames.length, paused]);
+  }, [autoScroll, paused, visibleFrames.length]);
 
   return (
     <section className="panel uart-debug-panel wide-panel">
@@ -178,9 +194,9 @@ export function UartDebugTerminal({ snapshot }: UartDebugTerminalProps) {
             <span className="mono-muted">newest at bottom</span>
           </div>
           <div ref={terminalRef} className="uart-terminal">
-            {filteredFrames.length ? (
-              filteredFrames.map((frame, index) => {
-                const previousFrame = filteredFrames[index - 1];
+            {visibleFrames.length ? (
+              visibleFrames.map((frame, index) => {
+                const previousFrame = visibleFrames[index - 1];
                 const deltaMs = previousFrame ? Math.max(0, (frame.timestamp - previousFrame.timestamp) * 1000) : null;
                 const rawBytes = getRawBytes(frame.raw_hex);
                 const checksumLabel = frame.checksum_ok ? "Checksum OK" : "Checksum error";

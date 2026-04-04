@@ -22,6 +22,10 @@ class InputMapping(ABC):
         and return the command to send to the MCU."""
         ...
 
+    def force_motor_command(self, command: MotorCommand) -> None:
+        """Optionally replace the mapping's latched motor command state."""
+        return None
+
 
 # ---------------------------------------------------------------------------
 #  Default button bindings — override by passing a dict to DriveMapping()
@@ -173,6 +177,16 @@ class DriveMapping(InputMapping):
             else:
                 layout.append(self._describe_button_control(control_id, label, group))
         return layout
+
+    def force_motor_command(self, command: MotorCommand) -> None:
+        """Overwrite the latched drive command used between button events."""
+
+        self._cmd = MotorCommand(
+            ctrl_state=command.ctrl_state,
+            speed_ref=command.speed_ref,
+            id_ref=command.id_ref,
+            iq_ref=command.iq_ref,
+        )
 
     # -- main entry point --------------------------------------------------
 

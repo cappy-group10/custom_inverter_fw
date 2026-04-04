@@ -14,6 +14,7 @@ from .app_logging import NullStructuredLogger
 from .commands import CtrlState, MotorCommand
 from .controller import ButtonEdge, XboxController
 from .mapping import DriveMapping
+from .motor_config import DEFAULT_MOTOR_CONFIG
 from .runtime_models import EventRecord, SessionSnapshot, TelemetrySample, to_payload
 from .uart import FRAME_FAULT, FRAME_STATUS, MCUFault, MCUStatus, UARTLink
 
@@ -23,6 +24,7 @@ UI_SAMPLE_HZ = 10
 TELEMETRY_STALE_SECONDS = 1.0
 KEEPALIVE_INTERVAL_SECONDS = 0.25
 SPEED_TX_THRESHOLD_PU = 0.01
+TRANSPORT_LOG_INTERVAL_SECONDS = 2.0
 
 
 class DriveRuntime:
@@ -73,6 +75,7 @@ class DriveRuntime:
         self._controller_connected = False
         self._controller_state = None
         self._controller_layout = []
+        self._motor_config = deepcopy(DEFAULT_MOTOR_CONFIG)
         self._last_host_command = MotorCommand()
         self._latest_mcu_status: MCUStatus | None = None
         self._active_override: str | None = None
@@ -83,10 +86,21 @@ class DriveRuntime:
         self._updated_at = 0.0
         self._last_error: str | None = None
         self._next_ui_sample_at = 0.0
+        self._next_ui_tick_at = 0.0
         self._keepalive_interval = KEEPALIVE_INTERVAL_SECONDS
         self._last_tx_at: float | None = None
         self._last_transmitted_command: MotorCommand | None = None
         self._last_transmitted_left_stick_active = False
+        self._pending_frames: list[FrameRecord] = []
+        self._pending_faults: list[MCUFault] = []
+        self._pending_events: list[EventRecord] = []
+        self._last_transport_log_at: float | None = None
+        self._last_transport_log_counters = {
+            "tx_frames": 0,
+            "rx_frames": 0,
+            "checksum_errors": 0,
+            "serial_errors": 0,
+        }
         self._reset_runtime_state()
         self._controller_layout = self._describe_controller_layout()
 
@@ -151,6 +165,8 @@ class DriveRuntime:
             self._controller_layout = self._describe_controller_layout(mapping)
             self._session_state = "running"
             self._next_ui_sample_at = time.time()
+            self._next_ui_tick_at = self._next_ui_sample_at + self._ui_sample_interval
+            self._last_transport_log_at = self._next_ui_sample_at
             self._sync_link_state_locked()
             self._record_event_locked("session", "Session Running", "Drive control loop is active")
         self._logger.log(
@@ -172,14 +188,14 @@ class DriveRuntime:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        self._emit("snapshot", to_payload(self.get_snapshot()))
+        self._emit_snapshot(reset_ui_tick_window=True)
 
     async def start_async(self, port: str | None = None, baudrate: int = 115200, joystick_index: int = 0):
         """Start the drive-mode runtime as an asyncio task on the current thread."""
         self.open(port=port, baudrate=baudrate, joystick_index=joystick_index)
         self._stop_event.clear()
         self._async_task = asyncio.create_task(self._run_loop_async())
-        self._emit("snapshot", to_payload(self.get_snapshot()))
+        self._emit_snapshot(reset_ui_tick_window=True)
 
     def request_shutdown(self):
         """Synchronously ask the runtime loop to stop without waiting for cleanup.
@@ -223,6 +239,7 @@ class DriveRuntime:
                 controller_connected=self._controller_connected,
                 controller_state=deepcopy(self._controller_state),
                 controller_layout=deepcopy(self._controller_layout),
+                motor_config=deepcopy(self._motor_config),
                 last_host_command=deepcopy(self._last_host_command),
                 latest_mcu_status=deepcopy(self._latest_mcu_status),
                 active_override=self._active_override,
@@ -257,28 +274,15 @@ class DriveRuntime:
         if transmit_reason is not None:
             link.send(command)
             self._note_transmit_locked(controller_state, command, loop_started)
-            self._logger.log(
-                "info",
-                "uart_tx",
-                "Host command transmitted",
-                route="/runtime/step",
-                metadata={
-                    "reason": transmit_reason,
-                    "buttons": [
-                        {"button": event.button, "edge": event.edge.name.lower()}
-                        for event in button_events
-                    ],
-                    "command": to_payload(command),
-                },
-            )
 
         frames = link.pop_frame_records()
         statuses = link.pop_statuses()
         faults = link.pop_faults()
+        ui_tick_payload = None
+        transport_summary = None
 
         with self._lock:
             self._controller_state = controller_state
-            self._last_host_command = command
             self._updated_at = loop_started
             self._counters["loop_iterations"] += 1
             self._ingest_button_events_locked(button_events)
@@ -286,24 +290,24 @@ class DriveRuntime:
             self._ingest_statuses_locked(statuses, loop_started)
             self._ingest_faults_locked(faults)
             self._sync_link_state_locked()
+            transport_summary = self._maybe_build_transport_summary_locked(loop_started)
+            if loop_started >= self._next_ui_tick_at:
+                if self._event_callback is not None:
+                    ui_tick_payload = to_payload(self._build_ui_tick_payload_locked())
+                self._clear_pending_stream_items_locked()
+                self._next_ui_tick_at = loop_started + self._ui_sample_interval
 
-        self._emit("controller_state", to_payload(controller_state))
-        self._emit("host_command", to_payload(command))
-        for frame in frames:
-            self._emit("tx_frame", to_payload(frame))
-        status_frames = [frame for frame in frames if frame.frame_id == FRAME_STATUS]
-        for idx, status in enumerate(statuses):
-            payload = {"status": to_payload(status)}
-            if idx < len(status_frames):
-                payload["frame"] = to_payload(status_frames[idx])
-            self._emit("mcu_status", payload)
-        fault_frames = [frame for frame in frames if frame.frame_id == FRAME_FAULT]
-        for idx, fault in enumerate(faults):
-            payload = {"fault": to_payload(fault)}
-            if idx < len(fault_frames):
-                payload["frame"] = to_payload(fault_frames[idx])
-            self._emit("fault", payload)
-        self._emit("health", to_payload(self._health))
+        if transport_summary is not None:
+            self._logger.log(
+                "info",
+                "runtime",
+                "Transport summary",
+                route="/runtime/summary",
+                metadata=transport_summary,
+            )
+
+        if ui_tick_payload is not None:
+            self._emit("ui_tick", ui_tick_payload)
 
     def _left_stick_active(self, controller_state) -> bool:
         return abs(float(getattr(controller_state, "left_y", 0.0) or 0.0)) > 0.0
@@ -351,6 +355,7 @@ class DriveRuntime:
 
     def _note_transmit_locked(self, controller_state, command: MotorCommand, now: float):
         self._last_tx_at = now
+        self._last_host_command = deepcopy(command)
         self._last_transmitted_command = deepcopy(command)
         self._last_transmitted_left_stick_active = self._left_stick_active(controller_state)
 
@@ -413,8 +418,52 @@ class DriveRuntime:
                 route="/api/mcus/primary/brake",
                 metadata={"active_override": "BRAKE", "is_new_override": is_new_override},
             )
-            snapshot = to_payload(self.get_snapshot())
-        self._emit("snapshot", snapshot)
+        self._emit_snapshot(reset_ui_tick_window=True)
+        return self.get_snapshot()
+
+    def release_brake_override(self) -> SessionSnapshot:
+        """Clear the brake override, force STOP, and transmit it immediately."""
+
+        with self._lock:
+            if self._session_state not in {"starting", "running", "error"} or self._link is None:
+                raise RuntimeError("Drive runtime is not active")
+            if self._active_override != "BRAKE":
+                raise RuntimeError("Brake override is not latched")
+
+            stop_command = MotorCommand(
+                ctrl_state=CtrlState.STOP,
+                speed_ref=0.0,
+                id_ref=0.0,
+                iq_ref=0.0,
+            )
+            if self._mapping is not None:
+                force_motor_command = getattr(self._mapping, "force_motor_command", None)
+                if callable(force_motor_command):
+                    force_motor_command(stop_command)
+
+            self._active_override = None
+            self._link.send(stop_command)
+            self._note_transmit_locked(self._controller_state, stop_command, time.time())
+            self._ingest_frames_locked(self._link.pop_frame_records())
+            self._ingest_statuses_locked(self._link.pop_statuses(), time.time())
+            self._ingest_faults_locked(self._link.pop_faults())
+            self._sync_link_state_locked()
+            self._updated_at = time.time()
+            self._record_event_locked(
+                kind="override",
+                title="Emergency Brake Released",
+                message="BRAKE override cleared and STOP command transmitted immediately.",
+                data={"override": None, "ctrl_state": CtrlState.STOP.name},
+            )
+            self._logger.log(
+                "info",
+                "runtime",
+                "Brake override released",
+                route="/api/mcus/primary/brake/release",
+                metadata={"active_override": None, "ctrl_state": CtrlState.STOP.name},
+            )
+
+        self._emit_snapshot(reset_ui_tick_window=True)
         return self.get_snapshot()
 
     def _apply_override(self, command: MotorCommand) -> MotorCommand:
@@ -430,6 +479,7 @@ class DriveRuntime:
     def _ingest_frames_locked(self, frames):
         for frame in frames:
             self._frame_history.append(frame)
+            self._pending_frames.append(frame)
 
     def _describe_controller_layout(self, mapping=None):
         descriptor_source = mapping
@@ -448,11 +498,15 @@ class DriveRuntime:
         for status in statuses:
             self._latest_mcu_status = status
             if timestamp >= self._next_ui_sample_at:
+                latest_command = self._last_host_command or MotorCommand()
                 self._telemetry_history.append(
                     TelemetrySample(
                         timestamp=timestamp,
                         speed_ref=status.speed_ref,
+                        speed_fbk=status.speed_fbk,
+                        id_ref=latest_command.id_ref,
                         id_fbk=status.id_fbk,
+                        iq_ref=latest_command.iq_ref,
                         iq_fbk=status.iq_fbk,
                         vdc_bus=status.vdc_bus,
                         current_as=status.current_as,
@@ -465,6 +519,7 @@ class DriveRuntime:
     def _ingest_faults_locked(self, faults: list[MCUFault]):
         for fault in faults:
             self._fault_history.append(fault)
+            self._pending_faults.append(fault)
             self._record_event_locked(
                 kind="fault",
                 title="MCU Fault",
@@ -564,9 +619,20 @@ class DriveRuntime:
             self._updated_at = time.time()
             self._last_error = None
             self._next_ui_sample_at = 0.0
+            self._next_ui_tick_at = 0.0
             self._last_tx_at = None
             self._last_transmitted_command = None
             self._last_transmitted_left_stick_active = False
+            self._pending_frames = []
+            self._pending_faults = []
+            self._pending_events = []
+            self._last_transport_log_at = None
+            self._last_transport_log_counters = {
+                "tx_frames": 0,
+                "rx_frames": 0,
+                "checksum_errors": 0,
+                "serial_errors": 0,
+            }
 
     def _set_error(self, message: str):
         with self._lock:
@@ -576,8 +642,7 @@ class DriveRuntime:
             self._record_event_locked("error", "Runtime Error", message)
             self._sync_link_state_locked()
         self._logger.log("error", "runtime", "Drive runtime error", route="/runtime", metadata={"error": message})
-        self._emit("health", to_payload(self._health))
-        self._emit("snapshot", to_payload(self.get_snapshot()))
+        self._emit_snapshot(reset_ui_tick_window=True)
 
     def _cleanup_after_loop(self):
         controller = self._controller
@@ -605,18 +670,16 @@ class DriveRuntime:
             self._stopped_at = time.time()
             self._updated_at = self._stopped_at
             self._sync_link_state_locked()
-            snapshot = to_payload(self.get_snapshot())
         self._logger.log(
             "info",
             "runtime",
             "Drive runtime stopped",
             route="/api/session/stop",
-            metadata={"session_state": snapshot["session_state"], "port": snapshot["port"] or "demo"},
+            metadata={"session_state": self.get_snapshot().session_state, "port": self.get_snapshot().port or "demo"},
         )
         self._thread = None
         self._async_task = None
-        self._emit("health", to_payload(self._health))
-        self._emit("snapshot", snapshot)
+        self._emit_snapshot(reset_ui_tick_window=True)
 
     def _record_event_locked(self, kind: str, title: str, message: str, data: dict[str, Any] | None = None):
         event = EventRecord(
@@ -627,10 +690,79 @@ class DriveRuntime:
             data=data or {},
         )
         self._event_history.append(event)
-        self._emit("event", to_payload(event))
+        self._pending_events.append(event)
 
     def _emit(self, event_type: str, payload: Any):
         callback = self._event_callback
         if callback is None:
             return
         callback({"type": event_type, "payload": payload})
+
+    def _clear_pending_stream_items_locked(self):
+        self._pending_frames.clear()
+        self._pending_faults.clear()
+        self._pending_events.clear()
+
+    def _build_ui_tick_payload_locked(self) -> dict[str, Any]:
+        return {
+            "controller_state": deepcopy(self._controller_state),
+            "motor_config": deepcopy(self._motor_config),
+            "last_host_command": deepcopy(self._last_host_command),
+            "latest_mcu_status": deepcopy(self._latest_mcu_status),
+            "health": deepcopy(self._health),
+            "counters": dict(self._counters),
+            "new_frames": deepcopy(self._pending_frames),
+            "new_faults": deepcopy(self._pending_faults),
+            "new_events": deepcopy(self._pending_events),
+        }
+
+    def _emit_snapshot(self, reset_ui_tick_window: bool = False):
+        snapshot_payload = to_payload(self.get_snapshot())
+        with self._lock:
+            self._clear_pending_stream_items_locked()
+            if reset_ui_tick_window:
+                self._next_ui_tick_at = time.time() + self._ui_sample_interval
+        self._emit("snapshot", snapshot_payload)
+
+    def _maybe_build_transport_summary_locked(self, timestamp: float) -> dict[str, Any] | None:
+        if self._session_state != "running":
+            return None
+
+        if self._last_transport_log_at is None:
+            self._last_transport_log_at = timestamp
+            self._last_transport_log_counters = {
+                "tx_frames": int(self._counters.get("tx_frames", 0)),
+                "rx_frames": int(self._counters.get("rx_frames", 0)),
+                "checksum_errors": int(self._counters.get("checksum_errors", 0)),
+                "serial_errors": int(self._counters.get("serial_errors", 0)),
+            }
+            return None
+
+        if (timestamp - self._last_transport_log_at) < TRANSPORT_LOG_INTERVAL_SECONDS:
+            return None
+
+        current = {
+            "tx_frames": int(self._counters.get("tx_frames", 0)),
+            "rx_frames": int(self._counters.get("rx_frames", 0)),
+            "checksum_errors": int(self._counters.get("checksum_errors", 0)),
+            "serial_errors": int(self._counters.get("serial_errors", 0)),
+        }
+        previous = self._last_transport_log_counters
+        latest_status = self._latest_mcu_status
+        latest_command = self._last_host_command
+
+        summary = {
+            "session_state": self._session_state,
+            "port": self._port or "demo",
+            "terminal_only": bool(self._health.get("terminal_only", False)),
+            "tx_frames_delta": current["tx_frames"] - previous["tx_frames"],
+            "rx_frames_delta": current["rx_frames"] - previous["rx_frames"],
+            "checksum_errors_delta": current["checksum_errors"] - previous["checksum_errors"],
+            "serial_errors_delta": current["serial_errors"] - previous["serial_errors"],
+            "ctrl_state": getattr(latest_status, "ctrl_state", getattr(latest_command, "ctrl_state", None)),
+            "speed_ref": getattr(latest_status, "speed_ref", getattr(latest_command, "speed_ref", None)),
+        }
+
+        self._last_transport_log_at = timestamp
+        self._last_transport_log_counters = current
+        return summary

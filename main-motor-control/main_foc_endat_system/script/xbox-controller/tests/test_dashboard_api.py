@@ -14,6 +14,7 @@ class StubRuntime:
         self.started = []
         self.stop_calls = 0
         self.brake_calls = 0
+        self.release_calls = 0
         self.shutdown_requests = 0
         self.snapshot = SessionSnapshot(
             session_state="idle",
@@ -55,6 +56,19 @@ class StubRuntime:
     def engage_brake_override(self):
         self.brake_calls += 1
         self.snapshot.active_override = "BRAKE"
+        if self.callback is not None:
+            self.callback({"type": "snapshot", "payload": to_payload(self.get_snapshot())})
+        return self.snapshot
+
+    def release_brake_override(self):
+        self.release_calls += 1
+        self.snapshot.active_override = None
+        self.snapshot.last_host_command = {
+            "ctrl_state": "STOP",
+            "speed_ref": 0.0,
+            "id_ref": 0.0,
+            "iq_ref": 0.0,
+        }
         if self.callback is not None:
             self.callback({"type": "snapshot", "payload": to_payload(self.get_snapshot())})
         return self.snapshot
@@ -173,12 +187,21 @@ def test_dashboard_serves_react_routes_and_mcu_endpoints():
 
         detail = client.get("/api/mcus/primary")
         assert detail.status_code == 200
-        assert detail.json()["telemetry"]["temperature_available"] is False
+        assert detail.json()["motor_config"]["base_speed_rpm"] >= 0
+        assert detail.json()["telemetry"]["temp_motor_winding_c"] is None
+        assert detail.json()["telemetry"]["temp_mcu_c"] is None
+        assert detail.json()["telemetry"]["temp_igbts_c"] is None
 
         brake = client.post("/api/mcus/primary/brake")
         assert brake.status_code == 200
         assert brake.json()["active_override"] == "BRAKE"
         assert runtime.brake_calls == 1
+
+        release = client.post("/api/mcus/primary/brake/release")
+        assert release.status_code == 200
+        assert release.json()["active_override"] is None
+        assert release.json()["command"]["ctrl_state"] == "STOP"
+        assert runtime.release_calls == 1
 
 
 def test_dashboard_port_labels_are_operator_friendly(monkeypatch):

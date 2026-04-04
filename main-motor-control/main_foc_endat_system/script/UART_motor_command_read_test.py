@@ -6,7 +6,7 @@ from collections import deque
 
 SERIAL_PORT = '/dev/tty.usbserial-TI9PSUYY1'
 BAUD_RATE = 115200
-FRAME_SIZE = 43
+FRAME_SIZE = 47
 HEADER = bytes([0x55, 0x10])
 MAX_HISTORY = 5  # number of frames to keep in display
 
@@ -19,7 +19,8 @@ def print_status_lines(frames):
     for f in frames:
         line = (
             f"ticker={f['isrTicker']}, runMotor={f['runMotor']}, ctrlState={f['ctrlState']}, "
-            f"tripFlag={f['tripFlag']}, speedRef={f['speedRef']:.3f}, posMechTheta={f['posMechTheta']:.3f}, "
+            f"tripFlag={f['tripFlag']}, speedRef={f['speedRef']:.3f}, speedFbk={f['speedFbk']:.3f}, "
+            f"posMechTheta={f['posMechTheta']:.3f}, "
             f"Vdcbus={f['Vdcbus']:.3f}, IdFbk={f['IdFbk']:.3f}, IqFbk={f['IqFbk']:.3f}, "
             f"currentAs={f['currentAs']:.3f}, currentBs={f['currentBs']:.3f}, currentCs={f['currentCs']:.3f}, "
             f"checksum={f['checksum']:02X}"
@@ -36,7 +37,7 @@ def calc_checksum(frame):
     return sum(frame[:-1]) & 0xFF
 
 def parse_frame(frame):
-    """Parse the 43-byte frame into meaningful fields."""
+    """Parse the 47-byte frame into meaningful fields."""
     if len(frame) != FRAME_SIZE:
         return None
 
@@ -44,15 +45,16 @@ def parse_frame(frame):
     ctrlState = frame[3]
     tripFlag = struct.unpack(">H", frame[4:6])[0]
     speedRef = struct.unpack(">f", frame[6:10])[0]
-    posMechTheta = struct.unpack(">f", frame[10:14])[0]
-    Vdcbus = struct.unpack(">f", frame[14:18])[0]
-    IdFbk = struct.unpack(">f", frame[18:22])[0]
-    IqFbk = struct.unpack(">f", frame[22:26])[0]
-    currentAs = struct.unpack(">f", frame[26:30])[0]
-    currentBs = struct.unpack(">f", frame[30:34])[0]
-    currentCs = struct.unpack(">f", frame[34:38])[0]
-    isrTicker = struct.unpack(">I", frame[38:42])[0]
-    checksum = frame[42]
+    speedFbk = struct.unpack(">f", frame[10:14])[0]
+    posMechTheta = struct.unpack(">f", frame[14:18])[0]
+    Vdcbus = struct.unpack(">f", frame[18:22])[0]
+    IdFbk = struct.unpack(">f", frame[22:26])[0]
+    IqFbk = struct.unpack(">f", frame[26:30])[0]
+    currentAs = struct.unpack(">f", frame[30:34])[0]
+    currentBs = struct.unpack(">f", frame[34:38])[0]
+    currentCs = struct.unpack(">f", frame[38:42])[0]
+    isrTicker = struct.unpack(">I", frame[42:46])[0]
+    checksum = frame[46]
 
     if checksum != calc_checksum(frame):
         return None
@@ -62,6 +64,7 @@ def parse_frame(frame):
         "ctrlState": ctrlState,
         "tripFlag": tripFlag,
         "speedRef": speedRef,
+        "speedFbk": speedFbk,
         "posMechTheta": posMechTheta,
         "Vdcbus": Vdcbus,
         "IdFbk": IdFbk,

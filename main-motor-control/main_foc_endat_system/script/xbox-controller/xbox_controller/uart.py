@@ -51,11 +51,19 @@ TX_MUSIC_LEN = struct.calcsize(TX_MUSIC_FMT)
 # ---------------------------------------------------------------------------
 # Status frame:
 #   [SYNC:1][ID:1][runMotor:1][ctrlState:1][tripFlag:2H][speedRef:4f]
+#   [speedFbk:4f][posMechTheta:4f][Vdcbus:4f][IdFbk:4f][IqFbk:4f]
+#   [currentAs:4f][currentBs:4f][currentCs:4f][isrTicker:4I][chksum:1]
+#   total = 47 bytes
+RX_STATUS_FMT = ">BBBBHfffffffffIB"
+RX_STATUS_LEN = struct.calcsize(RX_STATUS_FMT)
+
+# Legacy Phase 2 status frame without speed feedback:
+#   [SYNC:1][ID:1][runMotor:1][ctrlState:1][tripFlag:2H][speedRef:4f]
 #   [posMechTheta:4f][Vdcbus:4f][IdFbk:4f][IqFbk:4f]
 #   [currentAs:4f][currentBs:4f][currentCs:4f][isrTicker:4I][chksum:1]
 #   total = 43 bytes
-RX_STATUS_FMT = ">BBBBHffffffffIB"
-RX_STATUS_LEN = struct.calcsize(RX_STATUS_FMT)
+RX_STATUS_FMT_LEGACY = ">BBBBHffffffffIB"
+RX_STATUS_LEN_LEGACY = struct.calcsize(RX_STATUS_FMT_LEGACY)
 
 # Fault frame:
 #   [SYNC:1][ID:1][tripFlag:2H][tripCount:2H][chksum:1]
@@ -97,6 +105,7 @@ class MCUStatus:
     ctrl_state: int = 0         # CtrlState_e
     trip_flag: int = 0          # tripFlagDMC
     speed_ref: float = 0.0      # current speedRef on MCU side
+    speed_fbk: float = 0.0      # speed estimator feedback on MCU side
     pos_mech_theta: float = 0.0 # mechanical rotor position
     vdc_bus: float = 0.0        # DC bus voltage (Vdcbus)
     id_fbk: float = 0.0         # d-axis current feedback (pi_id.fbk)
@@ -104,12 +113,15 @@ class MCUStatus:
     current_as: float = 0.0     # phase A current
     current_bs: float = 0.0     # phase B current
     current_cs: float = 0.0     # phase C current
+    temp_motor_winding_c: float | None = None
+    temp_mcu_c: float | None = None
+    temp_igbts_c: float | None = None
     isr_ticker: int = 0         # ISR heartbeat counter
 
     def __str__(self):
         state = CtrlState(self.ctrl_state).name if self.ctrl_state <= 4 else f"?{self.ctrl_state}"
         return (f"MCU: run={self.run_motor} ctrl={state} "
-                f"trip={self.trip_flag:#06x} spd={self.speed_ref:+.4f} "
+                f"trip={self.trip_flag:#06x} spd_ref={self.speed_ref:+.4f} spd_fbk={self.speed_fbk:+.4f} "
                 f"theta={self.pos_mech_theta:+.4f} "
                 f"Vdc={self.vdc_bus:.1f} "
                 f"Id={self.id_fbk:+.4f} Iq={self.iq_fbk:+.4f} "
@@ -162,6 +174,7 @@ class UARTLink:
         self._counters = UARTCounters()
         self._health = UARTHealth(terminal_only=port is None)
         self._logger = NullStructuredLogger()
+        self._legacy_status_warned = False
 
         self._rx_thread: threading.Thread | None = None
         self._running = False
@@ -365,14 +378,22 @@ class UARTLink:
             frame_id = self._rx_buf[1]
 
             if frame_id == FRAME_STATUS:
-                if len(self._rx_buf) < RX_STATUS_LEN:
+                if len(self._rx_buf) < RX_STATUS_LEN_LEGACY:
                     return
-                frame = bytes(self._rx_buf[:RX_STATUS_LEN])
-                self._rx_buf = self._rx_buf[RX_STATUS_LEN:]
 
-                if self._verify_checksum(frame):
-                    self._handle_status(frame)
-                else:
+                if len(self._rx_buf) >= RX_STATUS_LEN:
+                    frame = bytes(self._rx_buf[:RX_STATUS_LEN])
+                    if self._verify_checksum(frame):
+                        self._rx_buf = self._rx_buf[RX_STATUS_LEN:]
+                        self._handle_status(frame)
+                        continue
+
+                    legacy_frame = bytes(self._rx_buf[:RX_STATUS_LEN_LEGACY])
+                    if self._verify_checksum(legacy_frame):
+                        self._rx_buf = self._rx_buf[RX_STATUS_LEN_LEGACY:]
+                        self._handle_status_legacy(legacy_frame)
+                        continue
+
                     self._record_frame(
                         direction="rx",
                         frame_id=frame_id,
@@ -388,6 +409,16 @@ class UARTLink:
                         metadata={"frame_id": frame_id, "raw_hex": frame.hex(" ")},
                     )
                     print("[UART] status frame checksum mismatch")
+                    self._rx_buf = self._rx_buf[1:]
+                    continue
+
+                legacy_frame = bytes(self._rx_buf[:RX_STATUS_LEN_LEGACY])
+                if self._verify_checksum(legacy_frame):
+                    self._rx_buf = self._rx_buf[RX_STATUS_LEN_LEGACY:]
+                    self._handle_status_legacy(legacy_frame)
+                    continue
+
+                return
 
             elif frame_id == FRAME_FAULT:
                 if len(self._rx_buf) < RX_FAULT_LEN:
@@ -423,7 +454,7 @@ class UARTLink:
 
     def _handle_status(self, frame: bytes):
         vals = struct.unpack(RX_STATUS_FMT, frame)
-        # vals: (sync, id, runMotor, ctrlState, tripFlag, speedRef,
+        # vals: (sync, id, runMotor, ctrlState, tripFlag, speedRef, speedFbk,
         #        posMechTheta, Vdcbus, IdFbk, IqFbk,
         #        currentAs, currentBs, currentCs, isrTicker, chk)
         status = MCUStatus(
@@ -431,6 +462,38 @@ class UARTLink:
             ctrl_state=vals[3],
             trip_flag=vals[4],
             speed_ref=vals[5],
+            speed_fbk=vals[6],
+            pos_mech_theta=vals[7],
+            vdc_bus=vals[8],
+            id_fbk=vals[9],
+            iq_fbk=vals[10],
+            current_as=vals[11],
+            current_bs=vals[12],
+            current_cs=vals[13],
+            isr_ticker=vals[14],
+        )
+        now = time.time()
+        with self._lock:
+            self.rx_status.append(status)
+            self._latest_status = status
+            self._health.last_status_at = now
+            self._counters.status_frames += 1
+        self._record_frame(
+            direction="rx",
+            frame_id=FRAME_STATUS,
+            frame=frame,
+            decoded=to_payload(status),
+            checksum_ok=True,
+        )
+
+    def _handle_status_legacy(self, frame: bytes):
+        vals = struct.unpack(RX_STATUS_FMT_LEGACY, frame)
+        status = MCUStatus(
+            run_motor=vals[2],
+            ctrl_state=vals[3],
+            trip_flag=vals[4],
+            speed_ref=vals[5],
+            speed_fbk=0.0,
             pos_mech_theta=vals[6],
             vdc_bus=vals[7],
             id_fbk=vals[8],
@@ -450,16 +513,21 @@ class UARTLink:
             direction="rx",
             frame_id=FRAME_STATUS,
             frame=frame,
-            decoded=to_payload(status),
+            decoded={**to_payload(status), "legacy_status_frame": True},
             checksum_ok=True,
         )
-        self._logger.log(
-            "info",
-            "uart",
-            "MCU status frame parsed",
-            route="/uart/rx",
-            metadata={"frame_id": FRAME_STATUS, "decoded": to_payload(status)},
-        )
+        if not self._legacy_status_warned:
+            self._legacy_status_warned = True
+            self._logger.log(
+                "warning",
+                "uart",
+                "Legacy 43-byte status frame detected",
+                route="/uart/rx",
+                metadata={
+                    "frame_id": FRAME_STATUS,
+                    "message": "MCU telemetry is using the older status frame without speed feedback. Reflash the MCU to enable true speed_fbk telemetry.",
+                },
+            )
 
     def _handle_fault(self, frame: bytes):
         vals = struct.unpack(RX_FAULT_FMT, frame)

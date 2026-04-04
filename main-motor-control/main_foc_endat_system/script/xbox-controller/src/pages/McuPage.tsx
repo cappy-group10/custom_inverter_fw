@@ -57,7 +57,7 @@ function getHealthCopy(snapshot: ReturnType<typeof useDashboard>["snapshot"]) {
 export function McuPage() {
   const { mcuId } = useParams();
   const [searchParams] = useSearchParams();
-  const { snapshot, loading, engageBrake } = useDashboard();
+  const { snapshot, loading, engageBrake, releaseBrake } = useDashboard();
   const banner = getHealthCopy(snapshot);
   const instanceId = searchParams.get("instance");
   const activeInstance = instanceId ? getConnectionInstance(instanceId) : getMostRecentlyOpenedInstance();
@@ -77,8 +77,21 @@ export function McuPage() {
   }, [activeInstance?.id, mcuId]);
 
   useEffect(() => {
-    updateConnectionInstanceFromSnapshot(activeInstance?.id, snapshot);
-  }, [activeInstance?.id, snapshot]);
+    updateConnectionInstanceFromSnapshot(activeInstance?.id, {
+      session_state: snapshot.session_state,
+      port: snapshot.port,
+      joystick_name: snapshot.joystick_name,
+      health: {
+        last_frame_at: snapshot.health.last_frame_at ?? null,
+      },
+    });
+  }, [
+    activeInstance?.id,
+    snapshot.session_state,
+    snapshot.port,
+    snapshot.joystick_name,
+    snapshot.health.last_frame_at,
+  ]);
 
   if (mcuId !== "primary") {
     return (
@@ -138,6 +151,9 @@ export function McuPage() {
           dedicatedPage
           onBrake={() => {
             void engageBrake().catch(() => undefined);
+          }}
+          onBrakeRelease={() => {
+            void releaseBrake().catch(() => undefined);
           }}
         />
 

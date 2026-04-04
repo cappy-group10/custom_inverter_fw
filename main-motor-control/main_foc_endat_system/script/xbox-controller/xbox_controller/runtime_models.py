@@ -50,12 +50,26 @@ class TelemetrySample:
 
     timestamp: float
     speed_ref: float
+    speed_fbk: float
+    id_ref: float
     id_fbk: float
+    iq_ref: float
     iq_fbk: float
     vdc_bus: float
     current_as: float
     current_bs: float
     current_cs: float
+
+
+@dataclass(slots=True)
+class MotorConfig:
+    """Operator-facing scaling and limit values derived from firmware settings."""
+
+    base_speed_rpm: float = 0.0
+    base_current_a: float = 0.0
+    vdcbus_min_v: float = 0.0
+    vdcbus_max_v: float = 0.0
+    rated_input_power_w: float = 0.0
 
 
 @dataclass(slots=True)
@@ -72,6 +86,7 @@ class SessionSnapshot:
     controller_connected: bool = False
     controller_state: Any = None
     controller_layout: list[ControllerLayoutDescriptor] = field(default_factory=list)
+    motor_config: MotorConfig = field(default_factory=MotorConfig)
     last_host_command: Any = None
     latest_mcu_status: Any = None
     active_override: str | None = None

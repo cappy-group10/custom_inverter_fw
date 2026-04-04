@@ -1050,22 +1050,72 @@ button.danger-button {
 
 .motor-hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
+  grid-template-columns: minmax(0, 1.14fr) minmax(320px, 0.86fr);
   gap: 16px;
   align-items: start;
 }
 
+.motor-status-grid,
+.motor-trend-grid,
+.motor-electrical-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.motor-status-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.motor-status-card,
 .speedometer-card,
 .motor-safety-card {
   padding: 18px;
   border-radius: 22px;
 }
 
+.motor-status-card,
+.motor-trend-card,
+.motor-data-card,
+.motor-emphasis-card,
 .speedometer-card {
   background:
-    radial-gradient(circle at center, rgba(68, 209, 194, 0.06), transparent 38%),
+    radial-gradient(circle at center, rgba(68, 209, 194, 0.05), transparent 40%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
     var(--panel-strong);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.motor-status-card {
+  display: grid;
+  gap: 6px;
+}
+
+.motor-status-card span,
+.motor-card-kicker {
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.motor-status-card strong,
+.motor-card-head strong {
+  font-size: 1.18rem;
+}
+
+.motor-status-card small,
+.motor-trend-values,
+.motor-pair-list dt,
+.motor-pair-list dd,
+.temperature-pill span {
+  color: var(--muted);
+}
+
+.motor-status-card small,
+.motor-trend-values,
+.temperature-pill span {
+  font-size: 0.82rem;
 }
 
 .speedometer-copy {
@@ -1084,6 +1134,54 @@ button.danger-button {
   font-size: 1.4rem;
 }
 
+.speedometer-status-strip,
+.speedometer-value-row,
+.motor-trend-legend,
+.motor-temperature-grid,
+.motor-safety-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.direction-chip,
+.speedometer-chip,
+.legend-chip,
+.temperature-pill {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.direction-chip,
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.direction-chip.is-forward,
+.speedometer-chip.is-forward,
+.speedometer-legend.is-forward {
+  color: var(--teal);
+}
+
+.direction-chip.is-reverse,
+.speedometer-chip.is-reverse,
+.speedometer-legend.is-reverse {
+  color: #ff8d5c;
+}
+
+.direction-chip.is-zero,
+.speedometer-chip.is-zero,
+.speedometer-legend.is-zero {
+  color: var(--muted);
+}
+
 #motor-speedometer {
   width: 100%;
   height: auto;
@@ -1097,18 +1195,20 @@ button.danger-button {
   stroke-linecap: round;
 }
 
-.speedometer-progress {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 18;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 14px rgba(241, 135, 72, 0.26));
-}
-
 .speedometer-needle {
-  stroke: #fff3e5;
   stroke-width: 5;
   stroke-linecap: round;
+}
+
+.speedometer-needle.command {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 14px rgba(241, 135, 72, 0.24));
+}
+
+.speedometer-needle.feedback {
+  stroke: var(--teal);
+  stroke-width: 4;
+  filter: drop-shadow(0 0 14px rgba(68, 209, 194, 0.24));
 }
 
 .speedometer-hub {
@@ -1123,7 +1223,8 @@ button.danger-button {
 
 .speedometer-unit,
 .speedometer-tick,
-.speedometer-subcopy {
+.speedometer-subcopy,
+.speedometer-legend {
   fill: var(--muted);
   font-family: var(--ui);
 }
@@ -1133,7 +1234,8 @@ button.danger-button {
 }
 
 .speedometer-tick,
-.speedometer-subcopy {
+.speedometer-subcopy,
+.speedometer-legend {
   font-size: 0.82rem;
 }
 
@@ -1144,6 +1246,29 @@ button.danger-button {
   letter-spacing: 0.08em;
 }
 
+.speedometer-value-row {
+  margin-top: 8px;
+}
+
+.speedometer-chip {
+  flex: 1 1 180px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+}
+
+.speedometer-chip span,
+.speedometer-chip small {
+  color: inherit;
+}
+
+.speedometer-chip strong,
+.motor-pair-list dd,
+.temperature-pill strong {
+  font-family: var(--mono);
+}
+
 .motor-safety-card {
   display: grid;
   gap: 14px;
@@ -1151,14 +1276,170 @@ button.danger-button {
   background:
     linear-gradient(180deg, rgba(255, 107, 107, 0.1), rgba(255, 255, 255, 0.02)),
     var(--panel-strong);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.motor-card-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.motor-trend-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.motor-trend-card,
+.motor-data-card,
+.motor-emphasis-card {
+  padding: 18px;
+  border-radius: 22px;
+}
+
+.motor-trend-svg {
+  width: 100%;
+  height: 150px;
+  margin-top: 12px;
+}
+
+.motor-trend-shell {
+  fill: rgba(255, 255, 255, 0.02);
+  stroke: rgba(255, 255, 255, 0.07);
+}
+
+.motor-trend-baseline {
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-dasharray: 4 6;
+}
+
+.motor-trend-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.motor-trend-line.ref,
+.legend-chip.ref {
+  stroke: var(--accent);
+  color: var(--accent);
+}
+
+.motor-trend-line.fbk,
+.legend-chip.fbk {
+  stroke: var(--teal);
+  color: var(--teal);
+}
+
+.motor-trend-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.motor-electrical-grid {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 1fr);
+  margin-top: 10px;
+}
+
+.motor-emphasis-card {
+  background:
+    radial-gradient(circle at top right, rgba(68, 209, 194, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    var(--panel-strong);
+}
+
+.voltage-card.good {
+  border-color: rgba(68, 209, 194, 0.24);
+}
+
+.voltage-card.warn {
+  border-color: rgba(255, 200, 87, 0.24);
+  background:
+    radial-gradient(circle at top right, rgba(255, 200, 87, 0.14), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    var(--panel-strong);
+}
+
+.voltage-card.danger {
+  border-color: rgba(255, 107, 107, 0.3);
+  background:
+    radial-gradient(circle at top right, rgba(255, 107, 107, 0.16), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    var(--panel-strong);
+}
+
+.motor-pair-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  margin: 14px 0 0;
+}
+
+.motor-pair-list.compact {
+  gap: 12px 16px;
+}
+
+.motor-pair-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.motor-pair-list dt {
+  font-size: 0.8rem;
+}
+
+.motor-pair-list dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.motor-temperature-grid {
+  margin-top: 14px;
+}
+
+.temperature-pill {
+  flex: 1 1 120px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 18px;
+}
+
+.temperature-pill strong {
+  color: var(--text);
+  font-size: 0.96rem;
+}
+
+.power-card {
+  grid-column: span 2;
+}
+
+.power-bar-shell {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  overflow: hidden;
+  margin-top: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.power-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--accent));
+  box-shadow: 0 0 18px rgba(68, 209, 194, 0.22);
 }
 
 .motor-stats-heading {
   margin-top: 18px;
-}
-
-.motor-metric-grid {
-  margin-top: 6px;
 }
 
 .inline-toggle {
@@ -1582,6 +1863,9 @@ button.danger-button {
   .overview-grid,
   .telemetry-workspace,
   .chart-grid,
+  .motor-status-grid,
+  .motor-trend-grid,
+  .motor-electrical-grid,
   .uart-debug-layout,
   .uart-inspector-meta,
   .session-input-row,
@@ -1599,6 +1883,10 @@ button.danger-button {
   .controller-groups,
   .uart-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .power-card {
+    grid-column: span 1;
   }
 
   .tab-button {
@@ -1622,6 +1910,16 @@ button.danger-button {
 
   .tab-strip {
     top: 16px;
+  }
+
+  .speedometer-value-row,
+  .motor-trend-values,
+  .motor-temperature-grid {
+    flex-direction: column;
+  }
+
+  .motor-pair-list {
+    grid-template-columns: 1fr;
   }
 
   .tab-button {

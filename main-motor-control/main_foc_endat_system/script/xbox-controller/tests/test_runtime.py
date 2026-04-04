@@ -196,6 +196,7 @@ class FakeLink:
                 run_motor=1,
                 ctrl_state=CtrlState.RUN,
                 speed_ref=cmd.speed_ref,
+                speed_fbk=max(cmd.speed_ref - 0.02, -1.0),
                 pos_mech_theta=0.25,
                 vdc_bus=36.2,
                 id_fbk=0.01,
@@ -242,6 +243,34 @@ class FakeLink:
     def get_health(self):
         return deepcopy(self._health)
 
+
+class ReleaseBrakeLink(FakeLink):
+    def send(self, cmd):
+        now = time.time()
+        self._sent.append(deepcopy(cmd))
+        self._counters.tx_frames += 1
+        self._health.last_frame_at = now
+        self._frames.append(FrameRecord("tx", 0x01, "motor_cmd", "aa 01", to_payload(cmd), True, now))
+
+        status = MCUStatus(
+            run_motor=1 if cmd.ctrl_state == CtrlState.RUN else 0,
+            ctrl_state=cmd.ctrl_state,
+            speed_ref=cmd.speed_ref,
+            speed_fbk=cmd.speed_ref,
+            pos_mech_theta=0.10,
+            vdc_bus=36.0,
+            id_fbk=cmd.id_ref,
+            iq_fbk=cmd.iq_ref,
+            current_as=0.1,
+            current_bs=-0.05,
+            current_cs=-0.05,
+            isr_ticker=len(self._sent),
+        )
+        self._statuses.append(status)
+        self._frames.append(FrameRecord("rx", FRAME_STATUS, "status", "55 10", to_payload(status), True, now))
+        self._counters.rx_frames += 1
+        self._counters.status_frames += 1
+        self._health.last_status_at = now
 
 def wait_for(predicate, timeout=1.0):
     deadline = time.time() + timeout
@@ -356,6 +385,38 @@ def test_drive_runtime_latches_ui_brake_override_until_stop():
 
     stopped = runtime.stop()
     assert stopped.active_override is None
+
+
+def test_drive_runtime_release_brake_override_forces_stop_and_resets_mapping():
+    runtime = DriveRuntime(controller_factory=FakeController, link_factory=ReleaseBrakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    running = runtime.get_snapshot()
+    assert running.last_host_command.ctrl_state == CtrlState.RUN
+    assert running.last_host_command.speed_ref > 0.0
+
+    runtime.engage_brake_override()
+    runtime.step()
+    braked = runtime.get_snapshot()
+    assert braked.last_host_command.ctrl_state == CtrlState.BRAKE
+    assert braked.active_override == "BRAKE"
+
+    released = runtime.release_brake_override()
+    assert released.active_override is None
+    assert released.last_host_command.ctrl_state == CtrlState.STOP
+    assert released.last_host_command.speed_ref == 0.0
+    assert released.last_host_command.id_ref == 0.0
+    assert released.last_host_command.iq_ref == 0.0
+
+    runtime.step()
+    after_step = runtime.get_snapshot()
+    assert after_step.active_override is None
+    assert after_step.last_host_command.ctrl_state == CtrlState.STOP
+    assert after_step.last_host_command.speed_ref == 0.0
+    assert after_step.counters["tx_frames"] >= 3
+
+    runtime.stop()
 
 
 def test_drive_runtime_surfaces_background_errors():
@@ -516,3 +577,42 @@ def test_drive_runtime_keeps_alive_nonzero_iq_when_running(monkeypatch):
     fake_now["value"] += 0.30
     runtime.step()
     assert runtime.get_snapshot().counters["tx_frames"] == 3
+
+
+def test_drive_runtime_emits_coalesced_ui_tick(monkeypatch):
+    fake_now = {"value": 700.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    streamed = []
+    runtime = DriveRuntime(
+        controller_factory=FakeController,
+        link_factory=FakeLink,
+        event_callback=streamed.append,
+    )
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert streamed == []
+
+    fake_now["value"] += runtime._ui_sample_interval
+    runtime.step()
+
+    ui_ticks = [event for event in streamed if event["type"] == "ui_tick"]
+    assert len(ui_ticks) == 1
+    payload = ui_ticks[0]["payload"]
+
+    assert payload["controller_state"]["buttons"]["dpad_up"] is True
+    assert payload["motor_config"]["base_speed_rpm"] > 0
+    assert payload["last_host_command"]["ctrl_state"] == CtrlState.RUN.name
+    assert payload["latest_mcu_status"]["ctrl_state"] == CtrlState.RUN.name
+    assert payload["latest_mcu_status"]["speed_fbk"] == pytest.approx(payload["latest_mcu_status"]["speed_ref"] - 0.02)
+    assert payload["counters"]["tx_frames"] == 2
+    assert len(payload["new_frames"]) == 4
+    assert len(payload["new_faults"]) == 1
+    assert any(event["kind"] == "fault" for event in payload["new_events"])
+    assert all(event["type"] == "ui_tick" for event in ui_ticks)
+    snapshot = runtime.get_snapshot()
+    assert snapshot.telemetry_samples[-1].speed_fbk == pytest.approx(snapshot.telemetry_samples[-1].speed_ref - 0.02)
+    assert snapshot.telemetry_samples[-1].id_ref == pytest.approx(0.0)
+    assert snapshot.telemetry_samples[-1].iq_ref == pytest.approx(0.0)

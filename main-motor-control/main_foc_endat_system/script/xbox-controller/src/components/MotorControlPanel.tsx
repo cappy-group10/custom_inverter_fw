@@ -1,15 +1,20 @@
 import { Link } from "react-router-dom";
 
 import { InfoHint, UiIcon } from "./UiChrome";
-import { formatFixed, formatSigned, formatTimestamp } from "../lib/selectors";
-import type { SessionSnapshot } from "../lib/types";
+import { formatFixed, formatSigned, formatTimestamp, formatTripFlag, normalizeCtrlState } from "../lib/selectors";
+import type { SessionSnapshot, TelemetrySample } from "../lib/types";
 
 interface MotorControlPanelProps {
   snapshot: SessionSnapshot;
   loadingBrake: boolean;
   onBrake: () => void;
+  onBrakeRelease: () => void;
   dedicatedPage?: boolean;
   detailPath?: string;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
@@ -27,6 +32,16 @@ function describeArc(centerX: number, centerY: number, radius: number, startAngl
   return ["M", start.x, start.y, "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y].join(" ");
 }
 
+function createSparklinePath(values: number[], width: number, height: number, padding: number, min: number, range: number) {
+  return values
+    .map((value, index) => {
+      const x = padding + (index / Math.max(values.length - 1, 1)) * (width - padding * 2);
+      const y = height - padding - ((value - min) / range) * (height - padding * 2);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
 function getTelemetryChip(health: SessionSnapshot["health"]) {
   if (health?.terminal_only) {
     return { text: "TX only", className: "badge warn" };
@@ -40,62 +55,203 @@ function getTelemetryChip(health: SessionSnapshot["health"]) {
   return { text: "No telemetry", className: "badge" };
 }
 
+function getDirectionMeta(valuePu: number) {
+  if (valuePu > 1e-4) {
+    return { label: "FWD", className: "is-forward", color: "#44d1c2" };
+  }
+  if (valuePu < -1e-4) {
+    return { label: "REV", className: "is-reverse", color: "#ff8d5c" };
+  }
+  return { label: "ZERO", className: "is-zero", color: "#9db4bf" };
+}
+
+function getVoltageTone(vdcBus: number, minV: number, maxV: number) {
+  const span = Math.max(maxV - minV, 0);
+  const margin = span * 0.1;
+  if (vdcBus < minV || vdcBus > maxV) {
+    return { label: "Out of range", className: "danger" };
+  }
+  if (span > 0 && (vdcBus <= minV + margin || vdcBus >= maxV - margin)) {
+    return { label: "Near limit", className: "warn" };
+  }
+  return { label: "Nominal", className: "good" };
+}
+
+function formatRpm(valuePu: number, baseSpeedRpm: number) {
+  return Math.round(valuePu * baseSpeedRpm);
+}
+
+function formatTemperature(value: number | null | undefined) {
+  if (value == null) {
+    return "Pending source";
+  }
+  return `${value.toFixed(1)} C`;
+}
+
+function TrendChart({
+  samples,
+  title,
+  refKey,
+  fbkKey,
+}: {
+  samples: TelemetrySample[];
+  title: string;
+  refKey: keyof TelemetrySample;
+  fbkKey: keyof TelemetrySample;
+}) {
+  const safeSamples = samples.length
+    ? samples
+    : [
+        {
+          timestamp: 0,
+          speed_ref: 0,
+          speed_fbk: 0,
+          id_ref: 0,
+          id_fbk: 0,
+          iq_ref: 0,
+          iq_fbk: 0,
+          vdc_bus: 0,
+          current_as: 0,
+          current_bs: 0,
+          current_cs: 0,
+        },
+      ];
+  const values = safeSamples.flatMap((sample) => [Number(sample[refKey] || 0), Number(sample[fbkKey] || 0)]);
+  const width = 360;
+  const height = 140;
+  const padding = 14;
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const range = max - min || 1;
+  const baselineY = height - padding - ((0 - min) / range) * (height - padding * 2);
+
+  return (
+    <article className="motor-trend-card">
+      <div className="motor-card-head">
+        <div>
+          <span className="motor-card-kicker">{title}</span>
+          <strong>{title} Ref vs Feedback</strong>
+        </div>
+        <div className="motor-trend-legend">
+          <span className="legend-chip ref">Reference</span>
+          <span className="legend-chip fbk">Feedback</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 360 140" preserveAspectRatio="none" className="motor-trend-svg" role="img" aria-label={`${title} trend`}>
+        <rect x="1" y="1" width={width - 2} height={height - 2} rx="20" ry="20" className="motor-trend-shell" />
+        <line x1={padding} y1={baselineY} x2={width - padding} y2={baselineY} className="motor-trend-baseline" />
+        <path
+          d={createSparklinePath(
+            safeSamples.map((sample) => Number(sample[refKey] || 0)),
+            width,
+            height,
+            padding,
+            min,
+            range,
+          )}
+          className="motor-trend-line ref"
+        />
+        <path
+          d={createSparklinePath(
+            safeSamples.map((sample) => Number(sample[fbkKey] || 0)),
+            width,
+            height,
+            padding,
+            min,
+            range,
+          )}
+          className="motor-trend-line fbk"
+        />
+      </svg>
+      <div className="motor-trend-values">
+        <span>{`Ref ${formatSigned(Number(safeSamples[safeSamples.length - 1]?.[refKey] || 0), 3)} pu`}</span>
+        <span>{`Fbk ${formatSigned(Number(safeSamples[safeSamples.length - 1]?.[fbkKey] || 0), 3)} pu`}</span>
+      </div>
+    </article>
+  );
+}
+
 function MotorSpeedometer({
-  value,
+  speedRefPu,
+  speedFbkPu,
+  baseSpeedRpm,
   hostState,
   mcuState,
   brakeLatched,
 }: {
-  value: number;
+  speedRefPu: number;
+  speedFbkPu: number;
+  baseSpeedRpm: number;
   hostState: string;
   mcuState: string;
   brakeLatched: boolean;
 }) {
-  const min = -0.3;
-  const max = 0.3;
-  const clamped = Math.max(min, Math.min(max, Number(value || 0)));
-  const ratio = (clamped - min) / (max - min);
-  const angle = -120 + ratio * 240;
-  const needle = polarToCartesian(170, 168, 94, angle);
-  const track = describeArc(170, 168, 104, -120, 120);
-  const progress = describeArc(170, 168, 104, -120, angle);
+  const speedRefMeta = getDirectionMeta(speedRefPu);
+  const speedFbkMeta = getDirectionMeta(speedFbkPu);
+  const commandAngle = -120 + ((clamp(speedRefPu, -1, 1) + 1) / 2) * 240;
+  const feedbackAngle = -120 + ((clamp(speedFbkPu, -1, 1) + 1) / 2) * 240;
+  const commandNeedle = polarToCartesian(170, 168, 102, commandAngle);
+  const feedbackNeedle = polarToCartesian(170, 168, 82, feedbackAngle);
+  const track = describeArc(170, 168, 110, -120, 120);
 
   return (
     <article className="speedometer-card" data-testid="speedometer">
       <div className="speedometer-copy">
-        <span className="speedometer-label">Reference Speed</span>
-        <strong>{formatSigned(clamped, 3)}</strong>
-        <small>per-unit speed_ref</small>
+        <span className="speedometer-label">Dual Speedometer</span>
+        <strong>{`${formatRpm(speedFbkPu, baseSpeedRpm)} RPM`}</strong>
+        <small>{`Feedback ${formatSigned(speedFbkPu, 3)} pu`}</small>
       </div>
-      <svg id="motor-speedometer" viewBox="0 0 340 240" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Reference speed gauge">
+      <div className="speedometer-status-strip">
+        <span className={`direction-chip ${speedRefMeta.className}`}>{`Command ${speedRefMeta.label}`}</span>
+        <span className={`direction-chip ${speedFbkMeta.className}`}>{`Feedback ${speedFbkMeta.label}`}</span>
+      </div>
+      <svg id="motor-speedometer" viewBox="0 0 340 248" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Command and motor speed gauge">
         <path d={track} className="speedometer-track" />
-        <path d={progress} className="speedometer-progress" />
-        <line x1="170" y1="168" x2={needle.x} y2={needle.y} className="speedometer-needle" />
+        <line x1="170" y1="168" x2={commandNeedle.x} y2={commandNeedle.y} className="speedometer-needle command" />
+        <line x1="170" y1="168" x2={feedbackNeedle.x} y2={feedbackNeedle.y} className="speedometer-needle feedback" />
         <circle cx="170" cy="168" r="10" className="speedometer-hub" />
-        <text x="170" y="112" textAnchor="middle" className="speedometer-value">
-          {formatSigned(clamped, 3)}
-        </text>
-        <text x="170" y="136" textAnchor="middle" className="speedometer-unit">
-          per-unit speed_ref
-        </text>
         <text x="54" y="190" textAnchor="middle" className="speedometer-tick">
-          {min.toFixed(2)}
+          {`${Math.round(-baseSpeedRpm)}`}
         </text>
         <text x="170" y="44" textAnchor="middle" className="speedometer-tick">
-          0.00
+          0
         </text>
         <text x="286" y="190" textAnchor="middle" className="speedometer-tick">
-          {max.toFixed(2)}
+          {`${Math.round(baseSpeedRpm)}`}
         </text>
-        <text x="170" y="208" textAnchor="middle" className="speedometer-subcopy">
-          {`Host ${hostState} · MCU ${mcuState}`}
+        <text x="170" y="106" textAnchor="middle" className="speedometer-value">
+          {`${formatRpm(speedFbkPu, baseSpeedRpm)} RPM`}
+        </text>
+        <text x="170" y="128" textAnchor="middle" className="speedometer-unit">
+          {`Command ${formatSigned(speedRefPu, 3)} pu | Feedback ${formatSigned(speedFbkPu, 3)} pu`}
+        </text>
+        <text x="78" y="84" textAnchor="middle" className={`speedometer-legend ${speedRefMeta.className}`}>
+          CMD
+        </text>
+        <text x="262" y="84" textAnchor="middle" className={`speedometer-legend ${speedFbkMeta.className}`}>
+          FBK
+        </text>
+        <text x="170" y="214" textAnchor="middle" className="speedometer-subcopy">
+          {`Host ${hostState} | MCU ${mcuState}`}
         </text>
         {brakeLatched ? (
-          <text x="170" y="64" textAnchor="middle" className="speedometer-override">
+          <text x="170" y="66" textAnchor="middle" className="speedometer-override">
             BRAKE LATCHED
           </text>
         ) : null}
       </svg>
+      <div className="speedometer-value-row">
+        <div className={`speedometer-chip ${speedRefMeta.className}`}>
+          <span>Command</span>
+          <strong>{`${formatRpm(speedRefPu, baseSpeedRpm)} RPM`}</strong>
+          <small>{`${formatSigned(speedRefPu, 3)} pu`}</small>
+        </div>
+        <div className={`speedometer-chip ${speedFbkMeta.className}`}>
+          <span>Feedback</span>
+          <strong>{`${formatRpm(speedFbkPu, baseSpeedRpm)} RPM`}</strong>
+          <small>{`${formatSigned(speedFbkPu, 3)} pu`}</small>
+        </div>
+      </div>
     </article>
   );
 }
@@ -104,18 +260,44 @@ export function MotorControlPanel({
   snapshot,
   loadingBrake,
   onBrake,
+  onBrakeRelease,
   dedicatedPage = false,
   detailPath = "/mcu/primary",
 }: MotorControlPanelProps) {
   const health = snapshot.health || {};
   const status = snapshot.latest_mcu_status || {};
   const command = snapshot.last_host_command || {};
-  const speedRef = Number(status.speed_ref ?? command.speed_ref ?? 0);
-  const hostState = String(command.ctrl_state || "STOP");
-  const mcuState = String(status.ctrl_state || command.ctrl_state || "STOP");
+  const motorConfig = snapshot.motor_config || {
+    base_speed_rpm: 0,
+    base_current_a: 0,
+    vdcbus_min_v: 0,
+    vdcbus_max_v: 0,
+    rated_input_power_w: 0,
+  };
+
+  const hostState = normalizeCtrlState(command.ctrl_state ?? "STOP");
+  const mcuState = normalizeCtrlState(status.ctrl_state ?? command.ctrl_state ?? "STOP");
   const brakeLatched = snapshot.active_override === "BRAKE";
   const telemetryChip = getTelemetryChip(health);
   const canBrake = snapshot.session_state === "running";
+  const canReleaseBrake = canBrake && brakeLatched;
+  const speedRefPu = Number(command.speed_ref ?? status.speed_ref ?? 0);
+  const speedFbkPu = Number(status.speed_fbk ?? 0);
+  const idRefPu = Number(command.id_ref ?? 0);
+  const idFbkPu = Number(status.id_fbk ?? 0);
+  const iqRefPu = Number(command.iq_ref ?? 0);
+  const iqFbkPu = Number(status.iq_fbk ?? 0);
+  const inputCurrentA = Math.hypot(idFbkPu, iqFbkPu) * Number(motorConfig.base_current_a || 0);
+  const inputPowerW = Number(status.vdc_bus ?? 0) * inputCurrentA;
+  const powerPercent = motorConfig.rated_input_power_w > 0 ? (inputPowerW / motorConfig.rated_input_power_w) * 100 : 0;
+  const powerFillPercent = clamp(powerPercent, 0, 100);
+  const voltageTone = getVoltageTone(
+    Number(status.vdc_bus ?? 0),
+    Number(motorConfig.vdcbus_min_v || 0),
+    Number(motorConfig.vdcbus_max_v || 0),
+  );
+  const latestFault = snapshot.recent_faults[snapshot.recent_faults.length - 1] || null;
+  const phaseMagnitudePu = Math.hypot(idFbkPu, iqFbkPu);
 
   return (
     <div className="motor-workspace">
@@ -125,40 +307,83 @@ export function MotorControlPanel({
             <div className="heading-line">
               <UiIcon name="motor" className="heading-icon" />
               <h2>Motor Control</h2>
-              <InfoHint text="A compact operator surface for reference speed, electrical feedback, and the latching emergency brake override." />
+              <InfoHint text="Operator view for transmitted command vs MCU feedback, d/q-axis behavior, safety override state, and electrical loading." />
             </div>
             <p className="panel-copy">
-              A compact drive-focused view with a speedometer dial, live electrical stats, and a hard-stop brake
-              override.
+              A drive-focused operator surface for commanded vs actual motion, d/q-axis current tracking, safety state, and electrical load.
             </p>
           </div>
           <span className={`badge ${brakeLatched ? "danger" : "muted"}`}>{brakeLatched ? "BRAKE latched" : "No override"}</span>
         </div>
 
+        <div className="motor-status-grid">
+          <article className="motor-status-card">
+            <span>Host Control State</span>
+            <strong>{hostState}</strong>
+            <small>{`Port ${snapshot.port || "demo"}`}</small>
+          </article>
+          <article className="motor-status-card">
+            <span>MCU Control State</span>
+            <strong>{mcuState}</strong>
+            <small>{`runMotor ${Number(status.run_motor ?? 0)}`}</small>
+          </article>
+          <article className="motor-status-card">
+            <span>Trip Flag</span>
+            <strong>{formatTripFlag(status.trip_flag)}</strong>
+            <small>{latestFault ? `Fault count ${latestFault.trip_count ?? 0}` : "No recent fault frame"}</small>
+          </article>
+          <article className="motor-status-card">
+            <span>Brake Override</span>
+            <strong>{brakeLatched ? "Latched" : "Released"}</strong>
+            <small>{`Last frame ${formatTimestamp(health.last_frame_at)}`}</small>
+          </article>
+        </div>
+
         <div className="motor-hero-grid">
-          <MotorSpeedometer value={speedRef} hostState={hostState} mcuState={mcuState} brakeLatched={brakeLatched} />
+          <MotorSpeedometer
+            speedRefPu={speedRefPu}
+            speedFbkPu={speedFbkPu}
+            baseSpeedRpm={Number(motorConfig.base_speed_rpm || 0)}
+            hostState={hostState}
+            mcuState={mcuState}
+            brakeLatched={brakeLatched}
+          />
 
           <article className="motor-safety-card">
-            <div>
-              <h3>Emergency Brake</h3>
-              <p className="panel-copy">
-                This latches a BRAKE override above the controller mapping. Stop or restart the session to clear it.
-              </p>
+            <div className="motor-card-head">
+              <div>
+                <span className="motor-card-kicker">Safety</span>
+                <strong>Brake Latch & Unlatch</strong>
+              </div>
+              <span className={telemetryChip.className}>{telemetryChip.text}</span>
             </div>
-            <button
-              className="primary danger-button"
-              disabled={!canBrake || brakeLatched || loadingBrake}
-              onClick={onBrake}
-            >
-              <UiIcon name="shield" />
-              {loadingBrake ? "Engaging Brake..." : brakeLatched ? "Brake Latched" : "Emergency Brake"}
-            </button>
+            <p className="panel-copy">
+              Emergency brake latches above the controller mapping. Releasing it sends an immediate STOP with zeroed speed, Id, and Iq references.
+            </p>
+            <div className="button-row motor-safety-actions">
+              <button
+                className="primary danger-button"
+                disabled={!canBrake || brakeLatched || loadingBrake}
+                onClick={onBrake}
+              >
+                <UiIcon name="shield" />
+                {loadingBrake ? "Updating Brake..." : brakeLatched ? "Brake Latched" : "Emergency Brake"}
+              </button>
+              <button
+                className="panel-link-button"
+                disabled={!canReleaseBrake || loadingBrake}
+                onClick={onBrakeRelease}
+              >
+                <UiIcon name="cancel" />
+                Unlatch Brake (Send STOP)
+              </button>
+            </div>
             <p className="control-help">
               {brakeLatched
-                ? "BRAKE is currently latched. Stop or restart the session to clear the override."
+                ? "BRAKE is latched. Releasing it clears the override and immediately transmits STOP."
                 : canBrake
-                  ? "Available while the drive runtime is running."
-                  : "Start the drive session to enable the brake override."}
+                  ? "Brake controls are available while the runtime is active."
+                  : "Start the drive session before using brake controls."}
             </p>
             <dl className="meta-list compact">
               <div>
@@ -166,12 +391,12 @@ export function MotorControlPanel({
                 <dd>{snapshot.session_state || "idle"}</dd>
               </div>
               <div>
-                <dt>Port</dt>
-                <dd>{snapshot.port || "demo"}</dd>
+                <dt>Last Status</dt>
+                <dd>{formatTimestamp(health.last_status_at)}</dd>
               </div>
               <div>
-                <dt>Last Frame</dt>
-                <dd>{formatTimestamp(health.last_frame_at)}</dd>
+                <dt>Fault Frames</dt>
+                <dd>{String(snapshot.counters.fault_frames ?? 0)}</dd>
               </div>
             </dl>
             {!dedicatedPage ? (
@@ -185,51 +410,144 @@ export function MotorControlPanel({
           </article>
         </div>
 
+        <div className="motor-trend-grid">
+          <TrendChart samples={snapshot.telemetry_samples || []} title="Id" refKey="id_ref" fbkKey="id_fbk" />
+          <TrendChart samples={snapshot.telemetry_samples || []} title="Iq" refKey="iq_ref" fbkKey="iq_fbk" />
+        </div>
+
         <div className="panel-heading motor-stats-heading">
           <div>
             <div className="heading-line">
               <UiIcon name="telemetry" className="heading-icon" />
               <h3>Electrical Snapshot</h3>
-              <InfoHint text="Fast-glance live values for control state, rotor position, DC bus, and the three phase currents." />
+              <InfoHint text="Color-coded DC bus visibility, phase currents, future temperature slots, and an approximate electrical input-power bar from Vdc and d/q current magnitude." />
             </div>
-            <p className="panel-copy">Fast-glance values for the motor, DC bus, and control state.</p>
+            <p className="panel-copy">Organized live feedback for bus health, phase currents, thermal sources, and estimated electrical loading.</p>
           </div>
           <span className={telemetryChip.className}>{telemetryChip.text}</span>
         </div>
 
-        <div className="metric-grid motor-metric-grid">
-          <div className="metric-card">
-            <span>Host State</span>
-            <strong>{hostState}</strong>
-          </div>
-          <div className="metric-card">
-            <span>MCU State</span>
-            <strong>{mcuState}</strong>
-          </div>
-          <div className="metric-card">
-            <span>Rotor Theta</span>
-            <strong>{formatSigned(status.pos_mech_theta, 4)}</strong>
-          </div>
-          <div className="metric-card">
-            <span>DC Bus</span>
-            <strong>{formatFixed(status.vdc_bus, 1)}</strong>
-          </div>
-          <div className="metric-card">
-            <span>Phase A</span>
-            <strong>{formatSigned(status.current_as, 3)}</strong>
-          </div>
-          <div className="metric-card">
-            <span>Phase B</span>
-            <strong>{formatSigned(status.current_bs, 3)}</strong>
-          </div>
-          <div className="metric-card">
-            <span>Phase C</span>
-            <strong>{formatSigned(status.current_cs, 3)}</strong>
-          </div>
-          <div className="metric-card">
-            <span>Temperature</span>
-            <strong>N/A yet</strong>
-          </div>
+        <div className="motor-electrical-grid">
+          <article className={`motor-emphasis-card voltage-card ${voltageTone.className}`}>
+            <div className="motor-card-head">
+              <div>
+                <span className="motor-card-kicker">DC Bus</span>
+                <strong>{`${formatFixed(status.vdc_bus, 1)} V`}</strong>
+              </div>
+              <span className={`badge ${voltageTone.className}`}>{voltageTone.label}</span>
+            </div>
+            <p className="panel-copy">
+              {`Configured band ${formatFixed(motorConfig.vdcbus_min_v, 1)} V to ${formatFixed(motorConfig.vdcbus_max_v, 1)} V`}
+            </p>
+          </article>
+
+          <article className="motor-data-card">
+            <div className="motor-card-head">
+              <div>
+                <span className="motor-card-kicker">d/q Axis</span>
+                <strong>Reference vs Feedback</strong>
+              </div>
+            </div>
+            <dl className="motor-pair-list">
+              <div>
+                <dt>Id Ref</dt>
+                <dd>{`${formatSigned(idRefPu, 3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Id Fbk</dt>
+                <dd>{`${formatSigned(idFbkPu, 3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Iq Ref</dt>
+                <dd>{`${formatSigned(iqRefPu, 3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Iq Fbk</dt>
+                <dd>{`${formatSigned(iqFbkPu, 3)} pu`}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article className="motor-data-card">
+            <div className="motor-card-head">
+              <div>
+                <span className="motor-card-kicker">Phase Currents</span>
+                <strong>Instantaneous Snapshot</strong>
+              </div>
+            </div>
+            <dl className="motor-pair-list">
+              <div>
+                <dt>Phase A</dt>
+                <dd>{`${formatSigned(status.current_as, 3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Phase B</dt>
+                <dd>{`${formatSigned(status.current_bs, 3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Phase C</dt>
+                <dd>{`${formatSigned(status.current_cs, 3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Rotor Theta</dt>
+                <dd>{`${formatSigned(status.pos_mech_theta, 4)} pu`}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <article className="motor-data-card">
+            <div className="motor-card-head">
+              <div>
+                <span className="motor-card-kicker">Temperature</span>
+                <strong>Future Thermal Sources</strong>
+              </div>
+            </div>
+            <div className="motor-temperature-grid">
+              <div className="temperature-pill">
+                <span>Motor Winding</span>
+                <strong>{formatTemperature(status.temp_motor_winding_c)}</strong>
+              </div>
+              <div className="temperature-pill">
+                <span>MCU</span>
+                <strong>{formatTemperature(status.temp_mcu_c)}</strong>
+              </div>
+              <div className="temperature-pill">
+                <span>IGBTs</span>
+                <strong>{formatTemperature(status.temp_igbts_c)}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="motor-data-card power-card">
+            <div className="motor-card-head">
+              <div>
+                <span className="motor-card-kicker">Input Electrical Power</span>
+                <strong>{`${Math.round(inputPowerW)} W`}</strong>
+              </div>
+              <span className="badge muted">{`${Math.round(powerPercent)}% of base`}</span>
+            </div>
+            <div className="power-bar-shell" aria-label="Input electrical power">
+              <div className="power-bar-fill" style={{ width: `${powerFillPercent}%` }} />
+            </div>
+            <dl className="motor-pair-list compact">
+              <div>
+                <dt>|I_dq|</dt>
+                <dd>{`${phaseMagnitudePu.toFixed(3)} pu`}</dd>
+              </div>
+              <div>
+                <dt>Base Current</dt>
+                <dd>{`${formatFixed(motorConfig.base_current_a, 2)} A`}</dd>
+              </div>
+              <div>
+                <dt>Estimated Input Current</dt>
+                <dd>{`${inputCurrentA.toFixed(2)} A`}</dd>
+              </div>
+              <div>
+                <dt>Rated Base Power</dt>
+                <dd>{`${Math.round(motorConfig.rated_input_power_w || 0)} W`}</dd>
+              </div>
+            </dl>
+          </article>
         </div>
       </section>
     </div>

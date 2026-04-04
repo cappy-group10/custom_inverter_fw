@@ -64,11 +64,20 @@ export interface HostCommand {
   iq_ref?: number;
 }
 
+export interface MotorConfig {
+  base_speed_rpm: number;
+  base_current_a: number;
+  vdcbus_min_v: number;
+  vdcbus_max_v: number;
+  rated_input_power_w: number;
+}
+
 export interface MCUStatus {
   run_motor?: number;
   ctrl_state?: string | number;
   trip_flag?: number;
   speed_ref?: number;
+  speed_fbk?: number;
   pos_mech_theta?: number;
   vdc_bus?: number;
   id_fbk?: number;
@@ -76,6 +85,9 @@ export interface MCUStatus {
   current_as?: number;
   current_bs?: number;
   current_cs?: number;
+  temp_motor_winding_c?: number | null;
+  temp_mcu_c?: number | null;
+  temp_igbts_c?: number | null;
   isr_ticker?: number;
 }
 
@@ -105,7 +117,10 @@ export interface EventRecord {
 export interface TelemetrySample {
   timestamp: number;
   speed_ref: number;
+  speed_fbk: number;
+  id_ref: number;
   id_fbk: number;
+  iq_ref: number;
   iq_fbk: number;
   vdc_bus: number;
   current_as: number;
@@ -135,6 +150,7 @@ export interface SessionSnapshot {
   controller_connected: boolean;
   controller_state: ControllerState | null;
   controller_layout: ControllerLayoutDescriptor[];
+  motor_config: MotorConfig;
   last_host_command: HostCommand | null;
   latest_mcu_status: MCUStatus | null;
   active_override: ActiveOverride;
@@ -176,16 +192,23 @@ export interface McuDetail extends McuSummary {
   baudrate: number;
   joystick_index: number;
   joystick_name: string;
+  motor_config: MotorConfig;
   command: HostCommand | null;
   status: MCUStatus | null;
   telemetry: {
     speed_ref: number;
+    speed_fbk: number;
+    id_ref: number;
+    id_fbk: number;
+    iq_ref: number;
+    iq_fbk: number;
     current_as: number;
     current_bs: number;
     current_cs: number;
     vdc_bus: number;
-    temperature_c: number | null;
-    temperature_available: boolean;
+    temp_motor_winding_c: number | null;
+    temp_mcu_c: number | null;
+    temp_igbts_c: number | null;
   };
   transport: {
     tx_frames: number;

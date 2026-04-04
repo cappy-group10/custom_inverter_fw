@@ -52,7 +52,7 @@
 // Frame sizes in bytes
 #define MOTOR_CMD_LEN       16U     // sync+id+ctrl+3*float+chk
 #define MUSIC_CMD_LEN       17U     // sync+id+ctrl+3*float+sustain+chk
-#define STATUS_FRAME_LEN    43U     // sync+id+runMotor+ctrl+trip+7*float+ticker+chk
+#define STATUS_FRAME_LEN    47U     // sync+id+runMotor+ctrl+trip+8*float+ticker+chk
 #define FAULT_FRAME_LEN     8U      // sync+id+tripFlag+tripCount+chk
 
 // RX buffer size (must hold the largest incoming frame)
@@ -87,8 +87,8 @@ extern void UART_Link_echoTask(void);
 //  API — Phase 2: TX status frame to host
 // ---------------------------------------------------------------------------
 
-//! Build and transmit a 43-byte status frame to the host.
-//! All multi-byte fields are sent big-endian to match Python ">BBBBHffffffffIB".
+//! Build and transmit a 47-byte status frame to the host.
+//! All multi-byte fields are sent big-endian to match Python ">BBBBHfffffffffIB".
 //! Call from a background state task (e.g. C2) at a moderate rate.
 extern void UART_Link_sendStatus(MOTOR_Vars_t *pMotor);
 

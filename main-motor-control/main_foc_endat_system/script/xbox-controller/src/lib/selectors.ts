@@ -25,6 +25,13 @@ export function createEmptySnapshot(): SessionSnapshot {
     controller_connected: false,
     controller_state: null,
     controller_layout: [],
+    motor_config: {
+      base_speed_rpm: 0,
+      base_current_a: 0,
+      vdcbus_min_v: 0,
+      vdcbus_max_v: 0,
+      rated_input_power_w: 0,
+    },
     last_host_command: null,
     latest_mcu_status: null,
     active_override: null,
@@ -70,64 +77,183 @@ export function mergeStreamEvent(
     return payload as SessionSnapshot;
   }
 
-  const snapshot = previous ? structuredClone(previous) : createEmptySnapshot();
-  snapshot.updated_at = Date.now() / 1000;
+  const snapshot = previous ?? createEmptySnapshot();
+  const updatedAt = Date.now() / 1000;
 
   switch (type) {
     case "controller_state":
-      snapshot.controller_state = payload;
-      return snapshot;
+      return {
+        ...snapshot,
+        updated_at: updatedAt,
+        controller_state: payload,
+      };
     case "host_command":
-      snapshot.last_host_command = payload;
-      return snapshot;
+      return {
+        ...snapshot,
+        updated_at: updatedAt,
+        last_host_command: payload,
+      };
     case "tx_frame":
-      return appendFrame(snapshot, payload);
+      return appendFrame(snapshot, payload, updatedAt);
     case "mcu_status":
-      snapshot.latest_mcu_status = payload.status;
-      if (payload.frame) {
-        appendFrame(snapshot, payload.frame);
-      }
-      appendTelemetrySample(snapshot, payload.status, lastChartSampleMsRef);
-      return snapshot;
+      return mergeStatusEvent(snapshot, payload, lastChartSampleMsRef, updatedAt);
     case "fault":
-      snapshot.recent_faults = limitList([...(snapshot.recent_faults || []), payload.fault], EVENT_LIMIT);
-      if (payload.frame) {
-        appendFrame(snapshot, payload.frame);
-      }
-      return snapshot;
+      return mergeFaultEvent(snapshot, payload, updatedAt);
     case "health":
-      snapshot.health = payload;
-      return snapshot;
+      return {
+        ...snapshot,
+        updated_at: updatedAt,
+        health: payload,
+      };
     case "event":
-      snapshot.recent_events = limitList([...(snapshot.recent_events || []), payload], EVENT_LIMIT);
-      return snapshot;
+      return appendEvents(snapshot, [payload], updatedAt);
+    case "ui_tick":
+      return mergeUiTick(snapshot, payload, lastChartSampleMsRef, updatedAt);
     default:
-      return snapshot;
+      return {
+        ...snapshot,
+        updated_at: updatedAt,
+      };
   }
 }
 
-function appendFrame(snapshot: SessionSnapshot, frame: FrameRecord): SessionSnapshot {
-  snapshot.recent_frames = limitList([...(snapshot.recent_frames || []), frame], FRAME_LIMIT);
-  const nextCounters = { ...(snapshot.counters || {}) };
-  if (frame.direction === "tx") {
-    nextCounters.tx_frames = (nextCounters.tx_frames ?? 0) + 1;
-  } else {
-    nextCounters.rx_frames = (nextCounters.rx_frames ?? 0) + 1;
-  }
-  if (!frame.checksum_ok) {
-    nextCounters.checksum_errors = (nextCounters.checksum_errors ?? 0) + 1;
-  }
-  snapshot.counters = nextCounters;
-  snapshot.health = {
-    ...(snapshot.health || {}),
-    last_frame_at: frame.timestamp,
+function mergeUiTick(
+  snapshot: SessionSnapshot,
+  payload: any,
+  lastChartSampleMsRef: { current: number },
+  updatedAt: number,
+): SessionSnapshot {
+  let nextSnapshot: SessionSnapshot = {
+    ...snapshot,
+    updated_at: updatedAt,
+    controller_state: payload.controller_state ?? snapshot.controller_state,
+    motor_config: payload.motor_config ?? snapshot.motor_config,
+    last_host_command: payload.last_host_command ?? snapshot.last_host_command,
+    latest_mcu_status: payload.latest_mcu_status ?? snapshot.latest_mcu_status,
+    health: payload.health ?? snapshot.health,
+    counters: payload.counters ? { ...(snapshot.counters || {}), ...payload.counters } : snapshot.counters,
   };
-  return snapshot;
+
+  nextSnapshot = appendFrames(nextSnapshot, payload.new_frames || [], updatedAt, !payload.counters);
+  nextSnapshot = appendFaults(nextSnapshot, payload.new_faults || [], updatedAt);
+  nextSnapshot = appendEvents(nextSnapshot, payload.new_events || [], updatedAt);
+
+  if (payload.latest_mcu_status) {
+    appendTelemetrySample(
+      nextSnapshot,
+      payload.latest_mcu_status,
+      payload.last_host_command ?? snapshot.last_host_command,
+      lastChartSampleMsRef,
+    );
+  }
+
+  return nextSnapshot;
+}
+
+function mergeStatusEvent(
+  snapshot: SessionSnapshot,
+  payload: any,
+  lastChartSampleMsRef: { current: number },
+  updatedAt: number,
+): SessionSnapshot {
+  let nextSnapshot: SessionSnapshot = {
+    ...snapshot,
+    updated_at: updatedAt,
+    latest_mcu_status: payload.status,
+  };
+
+  if (payload.frame) {
+    nextSnapshot = appendFrame(nextSnapshot, payload.frame, updatedAt);
+  }
+
+  appendTelemetrySample(nextSnapshot, payload.status, snapshot.last_host_command, lastChartSampleMsRef);
+  return nextSnapshot;
+}
+
+function mergeFaultEvent(snapshot: SessionSnapshot, payload: any, updatedAt: number): SessionSnapshot {
+  let nextSnapshot = appendFaults(snapshot, [payload.fault], updatedAt);
+  if (payload.frame) {
+    nextSnapshot = appendFrame(nextSnapshot, payload.frame, updatedAt);
+  }
+  return nextSnapshot;
+}
+
+function appendFrames(
+  snapshot: SessionSnapshot,
+  frames: FrameRecord[],
+  updatedAt: number,
+  updateCountersFromFrames: boolean,
+): SessionSnapshot {
+  if (!frames.length) {
+    return snapshot;
+  }
+
+  const nextFrames = limitList([...(snapshot.recent_frames || []), ...frames], FRAME_LIMIT);
+  const nextHealth = {
+    ...(snapshot.health || {}),
+    last_frame_at: frames[frames.length - 1]?.timestamp ?? snapshot.health?.last_frame_at ?? null,
+  };
+
+  if (!updateCountersFromFrames) {
+    return {
+      ...snapshot,
+      updated_at: updatedAt,
+      recent_frames: nextFrames,
+      health: nextHealth,
+    };
+  }
+
+  const nextCounters = { ...(snapshot.counters || {}) };
+  for (const frame of frames) {
+    if (frame.direction === "tx") {
+      nextCounters.tx_frames = (nextCounters.tx_frames ?? 0) + 1;
+    } else {
+      nextCounters.rx_frames = (nextCounters.rx_frames ?? 0) + 1;
+    }
+    if (!frame.checksum_ok) {
+      nextCounters.checksum_errors = (nextCounters.checksum_errors ?? 0) + 1;
+    }
+  }
+
+  return {
+    ...snapshot,
+    updated_at: updatedAt,
+    recent_frames: nextFrames,
+    counters: nextCounters,
+    health: nextHealth,
+  };
+}
+
+function appendFrame(snapshot: SessionSnapshot, frame: FrameRecord, updatedAt: number): SessionSnapshot {
+  return appendFrames(snapshot, [frame], updatedAt, true);
+}
+
+function appendFaults(snapshot: SessionSnapshot, faults: SessionSnapshot["recent_faults"], updatedAt: number): SessionSnapshot {
+  if (!faults.length) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    updated_at: updatedAt,
+    recent_faults: limitList([...(snapshot.recent_faults || []), ...faults], EVENT_LIMIT),
+  };
+}
+
+function appendEvents(snapshot: SessionSnapshot, events: SessionSnapshot["recent_events"], updatedAt: number): SessionSnapshot {
+  if (!events.length) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    updated_at: updatedAt,
+    recent_events: limitList([...(snapshot.recent_events || []), ...events], EVENT_LIMIT),
+  };
 }
 
 function appendTelemetrySample(
   snapshot: SessionSnapshot,
   status: SessionSnapshot["latest_mcu_status"],
+  command: SessionSnapshot["last_host_command"],
   lastChartSampleMsRef: { current: number },
 ) {
   const nowMs = Date.now();
@@ -141,7 +267,10 @@ function appendTelemetrySample(
       {
         timestamp: nowMs / 1000,
         speed_ref: Number(status?.speed_ref || 0),
+        speed_fbk: Number(status?.speed_fbk || 0),
+        id_ref: Number(command?.id_ref || 0),
         id_fbk: Number(status?.id_fbk || 0),
+        iq_ref: Number(command?.iq_ref || 0),
         iq_fbk: Number(status?.iq_fbk || 0),
         vdc_bus: Number(status?.vdc_bus || 0),
         current_as: Number(status?.current_as || 0),
@@ -188,16 +317,23 @@ export function derivePrimaryMcuDetail(snapshot: SessionSnapshot | null): McuDet
     baudrate: snapshot.baudrate,
     joystick_index: snapshot.joystick_index,
     joystick_name: snapshot.joystick_name,
+    motor_config: snapshot.motor_config,
     command,
     status,
     telemetry: {
       speed_ref: Number(status?.speed_ref ?? command?.speed_ref ?? 0),
+      speed_fbk: Number(status?.speed_fbk ?? 0),
+      id_ref: Number(command?.id_ref ?? 0),
+      id_fbk: Number(status?.id_fbk ?? 0),
+      iq_ref: Number(command?.iq_ref ?? 0),
+      iq_fbk: Number(status?.iq_fbk ?? 0),
       current_as: Number(status?.current_as ?? 0),
       current_bs: Number(status?.current_bs ?? 0),
       current_cs: Number(status?.current_cs ?? 0),
       vdc_bus: Number(status?.vdc_bus ?? 0),
-      temperature_c: null,
-      temperature_available: false,
+      temp_motor_winding_c: status?.temp_motor_winding_c ?? null,
+      temp_mcu_c: status?.temp_mcu_c ?? null,
+      temp_igbts_c: status?.temp_igbts_c ?? null,
     },
     transport: {
       tx_frames: Number(snapshot.counters?.tx_frames ?? 0),

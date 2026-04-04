@@ -31,6 +31,7 @@ interface DashboardContextValue {
   startSession: (payload: StartSessionPayload) => Promise<void>;
   stopSession: () => Promise<void>;
   engageBrake: () => Promise<void>;
+  releaseBrake: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -134,6 +135,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setSnapshot((current) => ({
         ...current,
         active_override: detail.active_override,
+        motor_config: detail.motor_config ?? current.motor_config,
         last_host_command: detail.command ?? current.last_host_command,
         latest_mcu_status: detail.status ?? current.latest_mcu_status,
       }));
@@ -143,6 +145,31 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         error: err instanceof Error ? err.message : "Unknown error",
       });
       setError(err instanceof Error ? err.message : "Unable to engage brake override");
+      throw err;
+    } finally {
+      setLoading((current) => ({ ...current, brake: false }));
+    }
+  };
+
+  const releaseBrake = async () => {
+    setLoading((current) => ({ ...current, brake: true }));
+    try {
+      setError(null);
+      frontendLogger.info("frontend", "Brake release requested", { mcu_id: "primary" });
+      const detail = await api.releaseBrake("primary");
+      setSnapshot((current) => ({
+        ...current,
+        active_override: detail.active_override,
+        motor_config: detail.motor_config ?? current.motor_config,
+        last_host_command: detail.command ?? current.last_host_command,
+        latest_mcu_status: detail.status ?? current.latest_mcu_status,
+      }));
+      frontendLogger.info("frontend", "Brake released", { mcu_id: "primary" });
+    } catch (err) {
+      frontendLogger.error("frontend", "Brake release failed", {
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+      setError(err instanceof Error ? err.message : "Unable to release brake override");
       throw err;
     } finally {
       setLoading((current) => ({ ...current, brake: false }));
@@ -218,6 +245,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       startSession,
       stopSession,
       engageBrake,
+      releaseBrake,
       clearError: () => setError(null),
     }),
     [snapshot, ports, wsConnected, loading, error],

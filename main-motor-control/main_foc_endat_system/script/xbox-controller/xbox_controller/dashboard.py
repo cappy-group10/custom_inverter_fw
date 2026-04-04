@@ -62,9 +62,13 @@ class EventHub:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._subscribers: set[asyncio.Queue] = set()
         self._lock = asyncio.Lock()
+        self._inbound: asyncio.Queue | None = None
+        self._pump_task: asyncio.Task | None = None
 
     async def bind_loop(self):
         self._loop = asyncio.get_running_loop()
+        self._inbound = asyncio.Queue(maxsize=512)
+        self._pump_task = asyncio.create_task(self._pump_inbound())
 
     async def subscribe(self) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=256)
@@ -91,9 +95,40 @@ class EventHub:
                 pass
 
     def publish_from_thread(self, event: dict):
-        if self._loop is None:
+        if self._loop is None or self._inbound is None:
             return
-        self._loop.call_soon_threadsafe(asyncio.create_task, self.publish(event))
+        self._loop.call_soon_threadsafe(self._enqueue_inbound, event)
+
+    def _enqueue_inbound(self, event: dict):
+        if self._inbound is None:
+            return
+        if self._inbound.full():
+            try:
+                self._inbound.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            self._inbound.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
+
+    async def _pump_inbound(self):
+        if self._inbound is None:
+            return
+        try:
+            while True:
+                event = await self._inbound.get()
+                await self.publish(event)
+        except asyncio.CancelledError:
+            return
+
+    async def shutdown(self):
+        if self._pump_task is not None:
+            self._pump_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._pump_task
+            self._pump_task = None
+        self._inbound = None
 
 
 class DashboardServer(uvicorn.Server):
@@ -351,16 +386,23 @@ def _build_mcu_detail(snapshot, mcu_id: str) -> dict:
         "baudrate": snapshot.baudrate,
         "joystick_index": snapshot.joystick_index,
         "joystick_name": snapshot.joystick_name,
+        "motor_config": to_payload(snapshot.motor_config),
         "command": to_payload(command) if command is not None else None,
         "status": to_payload(latest_status) if latest_status is not None else None,
         "telemetry": {
             "speed_ref": float(getattr(latest_status, "speed_ref", getattr(command, "speed_ref", 0.0))),
+            "speed_fbk": float(getattr(latest_status, "speed_fbk", 0.0)),
+            "id_ref": float(getattr(command, "id_ref", 0.0)),
+            "id_fbk": float(getattr(latest_status, "id_fbk", 0.0)),
+            "iq_ref": float(getattr(command, "iq_ref", 0.0)),
+            "iq_fbk": float(getattr(latest_status, "iq_fbk", 0.0)),
             "current_as": float(getattr(latest_status, "current_as", 0.0)),
             "current_bs": float(getattr(latest_status, "current_bs", 0.0)),
             "current_cs": float(getattr(latest_status, "current_cs", 0.0)),
             "vdc_bus": float(getattr(latest_status, "vdc_bus", 0.0)),
-            "temperature_c": None,
-            "temperature_available": False,
+            "temp_motor_winding_c": getattr(latest_status, "temp_motor_winding_c", None),
+            "temp_mcu_c": getattr(latest_status, "temp_mcu_c", None),
+            "temp_igbts_c": getattr(latest_status, "temp_igbts_c", None),
         },
         "transport": {
             "tx_frames": int(counters.get("tx_frames", 0)),
@@ -402,6 +444,7 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
             if snapshot.session_state in {"running", "starting", "error"}:
                 runtime.set_event_callback(None)
                 await runtime.stop_async()
+            await hub.shutdown()
             backend_logger.log("info", "backend", "Dashboard application shutdown complete", route="shutdown")
             backend_logger.close()
             frontend_logger.close()
@@ -537,6 +580,30 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
             "session",
             "Brake override engaged",
             route=f"/api/mcus/{mcu_id}/brake",
+            metadata={"mcu_id": mcu_id},
+        )
+        return _build_mcu_detail(snapshot, mcu_id)
+
+    @app.post("/api/mcus/{mcu_id}/brake/release")
+    async def release_mcu_brake(mcu_id: str):
+        if mcu_id != PRIMARY_MCU_ID:
+            raise HTTPException(status_code=404, detail="MCU not found")
+        try:
+            snapshot = app.state.runtime.release_brake_override()
+        except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Brake release rejected",
+                route=f"/api/mcus/{mcu_id}/brake/release",
+                metadata={"error": str(exc)},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        backend_logger.log(
+            "info",
+            "session",
+            "Brake override released",
+            route=f"/api/mcus/{mcu_id}/brake/release",
             metadata={"mcu_id": mcu_id},
         )
         return _build_mcu_detail(snapshot, mcu_id)

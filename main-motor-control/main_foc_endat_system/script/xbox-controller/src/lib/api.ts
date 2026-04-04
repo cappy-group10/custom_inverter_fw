@@ -41,6 +41,10 @@ export const api = {
     fetchJSON<McuDetail>(`/api/mcus/${mcuId}/brake`, {
       method: "POST",
     }),
+  releaseBrake: (mcuId = "primary") =>
+    fetchJSON<McuDetail>(`/api/mcus/${mcuId}/brake/release`, {
+      method: "POST",
+    }),
   postFrontendLogs: (records: FrontendLogRecord[]) =>
     fetchJSON<{ accepted: number }>("/api/logs/frontend", {
       method: "POST",

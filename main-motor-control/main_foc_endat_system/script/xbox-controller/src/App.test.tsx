@@ -57,6 +57,7 @@ function buildContext(snapshot: SessionSnapshot): DashboardContextValue {
     startSession: vi.fn(async () => undefined),
     stopSession: vi.fn(async () => undefined),
     engageBrake: vi.fn(async () => undefined),
+    releaseBrake: vi.fn(async () => undefined),
     clearError: vi.fn(),
   };
 }

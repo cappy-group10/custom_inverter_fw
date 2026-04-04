@@ -6,7 +6,7 @@
 //
 // DESCRIPTION:
 //   Phase 1: SCI-A initialization and byte-level echo.
-//   Phase 2: Transmit status frames (43 bytes, big-endian) to host PC.
+//   Phase 2: Transmit status frames (47 bytes, big-endian) to host PC.
 //
 // Target: F2837xD  (SCIA, GPIO42=TX, GPIO43=RX — via FT2232H)
 // Baud:   115200, 8-bit, no parity, 1 stop bit, FIFO enabled
@@ -148,7 +148,7 @@ void UART_Link_echoTask(void)
 // ---------------------------------------------------------------------------
 //  Byte-order helpers for big-endian transmission
 //
-//  Python expects ">BBBBHffffffffIB" (big-endian).
+//  Python expects ">BBBBHfffffffffIB" (big-endian).
 //  C2000 is little-endian at the word level:
 //    float32_t occupies 2 x 16-bit words: w[0]=bits[15:0], w[1]=bits[31:16]
 //    uint32_t  same layout.
@@ -210,13 +210,13 @@ static uint16_t txBufChecksum(void)
 // ---------------------------------------------------------------------------
 //  UART_Link_sendStatus()
 //
-//  Phase 2: Build and transmit a 43-byte status frame.
-//  Format (must match Python RX_STATUS_FMT = ">BBBBHffffffffIB"):
+//  Phase 2: Build and transmit a 47-byte status frame.
+//  Format (must match Python RX_STATUS_FMT = ">BBBBHfffffffffIB"):
 //    [0x55][0x10][runMotor][ctrlState][tripFlag:2][speedRef:4]
-//    [posMechTheta:4][Vdcbus:4][IdFbk:4][IqFbk:4]
+//    [speedFbk:4][posMechTheta:4][Vdcbus:4][IdFbk:4][IqFbk:4]
 //    [currentAs:4][currentBs:4][currentCs:4][isrTicker:4][checksum:1]
 //
-//  Uses blocking FIFO writes — at 115200 baud, 43 bytes = ~3.7 ms.
+//  Uses blocking FIFO writes — at 115200 baud, 47 bytes = ~4.1 ms.
 //  Call from a slow background task (C2, every ~450 us cycle) with a
 //  rate divider so you don't saturate the link.
 // ---------------------------------------------------------------------------
@@ -235,6 +235,7 @@ void UART_Link_sendStatus(MOTOR_Vars_t *pMotor)
 
     // Float telemetry (each 4 bytes, big-endian)
     txBufPutFloatBE(pMotor->speedRef);
+    txBufPutFloatBE(pMotor->speed.Speed);
     txBufPutFloatBE(pMotor->posMechTheta);
     txBufPutFloatBE(pMotor->Vdcbus);
     txBufPutFloatBE(pMotor->pi_id.fbk);          // Id feedback

@@ -257,7 +257,10 @@ function Sparkline({
         {
           timestamp: 0,
           speed_ref: 0,
+          speed_fbk: 0,
+          id_ref: 0,
           id_fbk: 0,
+          iq_ref: 0,
           iq_fbk: 0,
           vdc_bus: 0,
           current_as: 0,
@@ -889,7 +892,8 @@ function EventsTab({ events }: { events: EventRecord[] }) {
 }
 
 export function DashboardPage() {
-  const { snapshot, ports, wsConnected, loading, startSession, stopSession, reloadPorts, engageBrake } = useDashboard();
+  const { snapshot, ports, wsConnected, loading, startSession, stopSession, reloadPorts, engageBrake, releaseBrake } =
+    useDashboard();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -923,8 +927,21 @@ export function DashboardPage() {
   }, [instanceId, location.hash, location.pathname, navigate]);
 
   useEffect(() => {
-    updateConnectionInstanceFromSnapshot(instanceId, snapshot);
-  }, [instanceId, snapshot]);
+    updateConnectionInstanceFromSnapshot(instanceId, {
+      session_state: snapshot.session_state,
+      port: snapshot.port,
+      joystick_name: snapshot.joystick_name,
+      health: {
+        last_frame_at: snapshot.health.last_frame_at ?? null,
+      },
+    });
+  }, [
+    instanceId,
+    snapshot.session_state,
+    snapshot.port,
+    snapshot.joystick_name,
+    snapshot.health.last_frame_at,
+  ]);
 
   useEffect(() => {
     frontendLogger.info("tabs", "Dashboard tab changed", { tab: activeTab });
@@ -1055,6 +1072,9 @@ export function DashboardPage() {
             detailPath={motorPagePath}
             onBrake={() => {
               void engageBrake().catch(() => undefined);
+            }}
+            onBrakeRelease={() => {
+              void releaseBrake().catch(() => undefined);
             }}
           />
         </section>

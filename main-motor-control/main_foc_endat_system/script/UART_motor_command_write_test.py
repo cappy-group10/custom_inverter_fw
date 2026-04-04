@@ -13,7 +13,7 @@ TX_FRAME_SIZE = 16
 
 RX_SYNC = 0x55
 RX_FRAME_ID = 0x10
-RX_FRAME_SIZE = 43
+RX_FRAME_SIZE = 47
 
 MAX_HISTORY = 5
 
@@ -89,7 +89,7 @@ def build_motor_cmd_frame(ctrl_state, speed_ref, id_ref, iq_ref):
 
 
 def parse_status_frame(frame):
-    """Parse a 43-byte Phase 2 status frame."""
+    """Parse a 47-byte status frame."""
     if len(frame) != RX_FRAME_SIZE:
         return None
 
@@ -105,14 +105,15 @@ def parse_status_frame(frame):
         "ctrlState": frame[3],
         "tripFlag": struct.unpack(">H", frame[4:6])[0],
         "speedRef": struct.unpack(">f", frame[6:10])[0],
-        "posMechTheta": struct.unpack(">f", frame[10:14])[0],
-        "Vdcbus": struct.unpack(">f", frame[14:18])[0],
-        "IdFbk": struct.unpack(">f", frame[18:22])[0],
-        "IqFbk": struct.unpack(">f", frame[22:26])[0],
-        "currentAs": struct.unpack(">f", frame[26:30])[0],
-        "currentBs": struct.unpack(">f", frame[30:34])[0],
-        "currentCs": struct.unpack(">f", frame[34:38])[0],
-        "isrTicker": struct.unpack(">I", frame[38:42])[0],
+        "speedFbk": struct.unpack(">f", frame[10:14])[0],
+        "posMechTheta": struct.unpack(">f", frame[14:18])[0],
+        "Vdcbus": struct.unpack(">f", frame[18:22])[0],
+        "IdFbk": struct.unpack(">f", frame[22:26])[0],
+        "IqFbk": struct.unpack(">f", frame[26:30])[0],
+        "currentAs": struct.unpack(">f", frame[30:34])[0],
+        "currentBs": struct.unpack(">f", frame[34:38])[0],
+        "currentCs": struct.unpack(">f", frame[38:42])[0],
+        "isrTicker": struct.unpack(">I", frame[42:46])[0],
         "checksum": checksum,
     }
 
@@ -160,6 +161,7 @@ def print_status_frames(frames):
             f"ctrlState={ctrl_state_name(frame['ctrlState'])}({frame['ctrlState']}), "
             f"tripFlag=0x{frame['tripFlag']:04X}, "
             f"speedRef={frame['speedRef']:.3f}, "
+            f"speedFbk={frame['speedFbk']:.3f}, "
             f"IdFbk={frame['IdFbk']:.3f}, "
             f"IqFbk={frame['IqFbk']:.3f}, "
             f"Vdcbus={frame['Vdcbus']:.3f}, "

@@ -154,7 +154,7 @@ MOTOR_Vars_t motorVars[2] = {MOTOR1_DEFAULTS_NO_IU};
 //
 // Flag variables
 //
-volatile uint16_t enableFlag = true;
+volatile uint16_t enableFlag = false;
 
 uint16_t backTicker = 0;
 
@@ -372,8 +372,7 @@ void main(void)
     dlog_4ch1.status = 2;
 
 #ifdef _FLASH
-    enableFlag = true;
-
+    enableFlag = true; // enableFlag is used as a UART command handshake to start the controller.
     flagSyncRun = true;
     ctrlState = CTRL_STOP;
 #endif
@@ -417,7 +416,6 @@ void main(void)
     endat21_readPosition();       // publish one valid sample before the control ISR starts
     endatInitDone = 1;
     endat21_startProducer();
-    (void)updateMotorPositionFeedback(MTR_1);
 #endif
 
     // Configure interrupt for motor_1
