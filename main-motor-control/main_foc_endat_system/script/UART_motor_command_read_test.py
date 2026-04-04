@@ -1,7 +1,7 @@
 import serial
 import struct
-import time
 import sys
+import time
 from collections import deque
 
 SERIAL_PORT = '/dev/tty.usbserial-TI9PSUYY1'
@@ -11,13 +11,19 @@ HEADER = bytes([0x55, 0x10])
 MAX_HISTORY = 5  # number of frames to keep in display
 
 def print_status_lines(frames):
-    """Print stacked lines, keeping the display updated."""
+    """Print all fields stacked, last MAX_HISTORY frames."""
     # Move cursor up to overwrite previous lines
     sys.stdout.write("\033[F" * len(frames))
     sys.stdout.flush()
+
     for f in frames:
-        line = (f"ticker={f['isrTicker']}, speedRef={f['speedRef']:.2f}, "
-                f"Vdc={f['Vdcbus']:.2f}, Iq={f['IqFbk']:.2f}")
+        line = (
+            f"ticker={f['isrTicker']}, runMotor={f['runMotor']}, ctrlState={f['ctrlState']}, "
+            f"tripFlag={f['tripFlag']}, speedRef={f['speedRef']:.3f}, posMechTheta={f['posMechTheta']:.3f}, "
+            f"Vdcbus={f['Vdcbus']:.3f}, IdFbk={f['IdFbk']:.3f}, IqFbk={f['IqFbk']:.3f}, "
+            f"currentAs={f['currentAs']:.3f}, currentBs={f['currentBs']:.3f}, currentCs={f['currentCs']:.3f}, "
+            f"checksum={f['checksum']:02X}"
+        )
         sys.stdout.write("\033[K" + line + "\n")  # clear line then print
     sys.stdout.flush()
 
@@ -73,7 +79,7 @@ def main():
     history = deque(maxlen=MAX_HISTORY)
 
     print_log_line("Listening for Phase 2 status frames... Press Ctrl+C to exit.")
-    # Print empty lines for initial history display
+    # Print empty lines for initial display
     for _ in range(MAX_HISTORY):
         print()
 
@@ -93,11 +99,9 @@ def main():
                         print_status_lines(list(history))
                         buffer = buffer[FRAME_SIZE:]
                     else:
-                        # Bad checksum
-                        buffer = buffer[1:]
+                        buffer = buffer[1:]  # bad checksum
                 else:
-                    # Header mismatch
-                    buffer = buffer[1:]
+                    buffer = buffer[1:]  # header mismatch
 
     except KeyboardInterrupt:
         print_log_line("\nExiting.")
