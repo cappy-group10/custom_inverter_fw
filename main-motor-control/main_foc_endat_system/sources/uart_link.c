@@ -19,6 +19,15 @@
 #include "cpu_cla_shared_dm.h"
 
 // ---------------------------------------------------------------------------
+//  Extern globals written by RX parser, consumed by runSyncControl()
+//  (defined in dual_axis_servo_drive.c)
+// ---------------------------------------------------------------------------
+extern float32_t speedRef;
+extern float32_t IdRef;
+extern float32_t IqRef;
+extern CtrlState_e ctrlState;
+
+// ---------------------------------------------------------------------------
 //  Diagnostic counters — place in a named section so CCS can find them easily
 // ---------------------------------------------------------------------------
 volatile UART_Link_Stats_t uartStats = {0, 0, 0, 0, 0, 0};
@@ -245,4 +254,164 @@ void UART_Link_sendStatus(MOTOR_Vars_t *pMotor)
 
     uartStats.txBytes += STATUS_FRAME_LEN;
     uartStats.txFrames++;
+}
+
+// ---------------------------------------------------------------------------
+//  RX helpers — big-endian deserialization
+// ---------------------------------------------------------------------------
+
+static inline float32_t rxParseFloatBE(const uint16_t *buf)
+{
+    // buf[0..3] each hold one byte (lower 8 bits), MSB first
+    uint32_t raw = ((uint32_t)buf[0] << 24) |
+                   ((uint32_t)buf[1] << 16) |
+                   ((uint32_t)buf[2] <<  8) |
+                   ((uint32_t)buf[3]);
+    float32_t f;
+    memcpy(&f, &raw, sizeof(f));
+    return f;
+}
+
+// ---------------------------------------------------------------------------
+//  RX state machine
+//
+//  Accumulates bytes one at a time from the SCI FIFO into rxBuf[].
+//  States:
+//    RX_WAIT_SYNC  — scanning for 0xAA
+//    RX_WAIT_ID    — next byte must be a valid frame ID
+//    RX_ACCUM      — collecting remaining payload bytes
+//    (frame complete → validate checksum → apply)
+// ---------------------------------------------------------------------------
+typedef enum {
+    RX_WAIT_SYNC = 0,
+    RX_WAIT_ID   = 1,
+    RX_ACCUM     = 2
+} RxState_e;
+
+static uint16_t rxBuf[UART_RX_BUF_SIZE];
+static uint16_t rxPos   = 0;
+static uint16_t rxExpected = 0;   // total frame length we're collecting
+static RxState_e rxState = RX_WAIT_SYNC;
+
+// ---------------------------------------------------------------------------
+//  applyMotorCmd()
+//
+//  Frame layout (16 bytes, big-endian):
+//    [0] 0xAA  sync
+//    [1] 0x01  frame ID
+//    [2] ctrlState   (1 byte)
+//    [3..6]  speedRef  (float32, big-endian)
+//    [7..10] idRef     (float32, big-endian)
+//    [11..14] iqRef    (float32, big-endian)
+//    [15] checksum
+// ---------------------------------------------------------------------------
+static void applyMotorCmd(void)
+{
+    ctrlState = (CtrlState_e)rxBuf[2];
+    speedRef  = rxParseFloatBE(&rxBuf[3]);
+    IdRef     = rxParseFloatBE(&rxBuf[7]);
+    IqRef     = rxParseFloatBE(&rxBuf[11]);
+}
+
+// ---------------------------------------------------------------------------
+//  UART_Link_pollCommand()
+//
+//  Drains the SCI RX FIFO and feeds bytes into the state machine.
+//  Returns true when a valid motor-command frame has been applied.
+// ---------------------------------------------------------------------------
+bool UART_Link_pollCommand(void)
+{
+    bool applied = false;
+    uint16_t byte;
+
+    //
+    // Check for FIFO overflow (diagnostic)
+    //
+    if(SCI_getOverflowStatus(UART_LINK_BASE))
+    {
+        SCI_clearOverflowStatus(UART_LINK_BASE);
+        SCI_resetRxFIFO(UART_LINK_BASE);
+        uartStats.overflowErrors++;
+        rxState = RX_WAIT_SYNC;
+        rxPos   = 0;
+    }
+
+    //
+    // Process all available bytes
+    //
+    while(SCI_getRxFIFOStatus(UART_LINK_BASE) != SCI_FIFO_RX0)
+    {
+        byte = SCI_readCharNonBlocking(UART_LINK_BASE) & 0xFFU;
+        uartStats.rxBytes++;
+
+        switch(rxState)
+        {
+        case RX_WAIT_SYNC:
+            if(byte == TX_SYNC_BYTE)    // 0xAA from host
+            {
+                rxBuf[0] = byte;
+                rxPos = 1;
+                rxState = RX_WAIT_ID;
+            }
+            break;
+
+        case RX_WAIT_ID:
+            if(byte == FRAME_ID_MOTOR_CMD)
+            {
+                rxBuf[1] = byte;
+                rxPos = 2;
+                rxExpected = MOTOR_CMD_LEN;     // 16
+                rxState = RX_ACCUM;
+            }
+            else if(byte == TX_SYNC_BYTE)
+            {
+                // Another sync — restart (handles back-to-back syncs)
+                rxBuf[0] = byte;
+                rxPos = 1;
+                // stay in RX_WAIT_ID
+            }
+            else
+            {
+                // Unknown frame ID — discard and resync
+                rxState = RX_WAIT_SYNC;
+                rxPos = 0;
+            }
+            break;
+
+        case RX_ACCUM:
+            rxBuf[rxPos++] = byte;
+
+            if(rxPos >= rxExpected)
+            {
+                // Frame complete — validate checksum
+                uint16_t i;
+                uint16_t sum = 0;
+
+                for(i = 0; i < rxExpected - 1; i++)
+                {
+                    sum += rxBuf[i];
+                }
+                sum &= 0xFFU;
+
+                if(sum == rxBuf[rxExpected - 1])
+                {
+                    // Valid frame — apply
+                    applyMotorCmd();
+                    uartStats.rxFrames++;
+                    applied = true;
+                }
+                else
+                {
+                    uartStats.checksumErrors++;
+                }
+
+                // Reset for next frame
+                rxState = RX_WAIT_SYNC;
+                rxPos = 0;
+            }
+            break;
+        }
+    }
+
+    return applied;
 }

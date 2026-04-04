@@ -93,11 +93,23 @@ extern void UART_Link_echoTask(void);
 extern void UART_Link_sendStatus(MOTOR_Vars_t *pMotor);
 
 // ---------------------------------------------------------------------------
-//  API — Phase 3+  (stubs for now)
+//  API — Phase 3: RX command frame parsing
 // ---------------------------------------------------------------------------
 
-// Phase 3: poll for a complete command frame and apply it
-// extern bool UART_Link_pollCommand(void);
+//! Poll the SCI RX FIFO for incoming bytes and attempt to assemble a
+//! complete motor-command frame (16 bytes: 0xAA 0x01 ctrlState speedRef
+//! idRef iqRef checksum). When a valid frame arrives, the global
+//! variables speedRef, IdRef, IqRef, and ctrlState in
+//! dual_axis_servo_drive.c are updated.
+//!
+//! runSyncControl() then mirrors those globals into motorVars[0] on the
+//! next pass. Note that the current implementation applies ctrlState in
+//! all build levels, applies speedRef in all build levels except
+//! FCL_LEVEL5, and applies IdRef/IqRef only when BUILDLEVEL == FCL_LEVEL3.
+//!
+//! Call from a background state task (e.g. B2) every cycle.
+//! Returns true when a complete, checksum-valid frame was applied.
+extern bool UART_Link_pollCommand(void);
 
 // ---------------------------------------------------------------------------
 //  Access to diagnostic counters (for CCS watch / debug)

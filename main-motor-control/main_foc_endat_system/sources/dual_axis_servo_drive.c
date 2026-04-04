@@ -583,10 +583,10 @@ void B1(void) // Toggle GPIO-00
 }
 
 //----------------------------------------
-void B2(void) // UART echo (Phase 1) / RX polling (Phase 3+)
+void B2(void) // UART RX command parsing (Phase 3)
 //----------------------------------------
 {
-    UART_Link_echoTask();
+    UART_Link_pollCommand();
 
     //-----------------
     //the next time CpuTimer1 'counter' reaches Period value go to B3
@@ -1906,7 +1906,9 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
 // runSyncControl()
 void runSyncControl(void)
 {
-    
+    // Mirror host/debug-owned globals into the motor state.
+    // ctrlState is always applied, speedRef is skipped at FCL_LEVEL5,
+    // and IdRef/IqRef are only consumed at FCL_LEVEL3.
     if(flagSyncRun == true)
     {
         if(motorVars[0].tripFlagDMC == 0)
