@@ -634,9 +634,24 @@ void C1(void)   // Toggle GPIO-34
 }
 
 //----------------------------------------
-void C2(void) // SPARE
+void C2(void) // UART TX: send status frame to host (Phase 2)
 //----------------------------------------
 {
+    //
+    // Rate divider: C2 runs every ~450 us (C-task cycle = 3 * 150 us).
+    // At 115200 baud, a 43-byte frame takes ~3.7 ms to transmit.
+    // Send one frame every ~50 ms (~22 Hz) to avoid saturating the link.
+    // 50 ms / 0.45 ms ≈ 111 calls between transmits.
+    //
+    static uint16_t txDivider = 0;
+
+    txDivider++;
+
+    if(txDivider >= 111U)
+    {
+        txDivider = 0;
+        UART_Link_sendStatus(&motorVars[0]);
+    }
 
     //-----------------
     //the next time CpuTimer2 'counter' reaches Period value go to C3

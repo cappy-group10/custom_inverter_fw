@@ -5,16 +5,18 @@
 // TITLE:   UART communication link — MCU side
 //
 // DESCRIPTION:
-//   Phase 1 implementation: SCI-A initialization and byte-level echo.
-//   Proves that the physical UART path (MCU <-> XDS110 <-> USB <-> PC)
-//   is working before adding framed protocol parsing.
+//   Phase 1: SCI-A initialization and byte-level echo.
+//   Phase 2: Transmit status frames (43 bytes, big-endian) to host PC.
 //
-// Target: F2837xD  (SCIA, GPIO42=TX, GPIO43=RX — via XDS110)
+// Target: F2837xD  (SCIA, GPIO42=TX, GPIO43=RX — via FT2232H)
 // Baud:   115200, 8-bit, no parity, 1 stop bit, FIFO enabled
 //
 //#############################################################################
 
+#include <string.h>
+
 #include "uart_link.h"
+#include "cpu_cla_shared_dm.h"
 
 // ---------------------------------------------------------------------------
 //  Diagnostic counters — place in a named section so CCS can find them easily
@@ -132,4 +134,115 @@ void UART_Link_echoTask(void)
         SCI_writeCharBlockingFIFO(UART_LINK_BASE, rxByte);
         uartStats.txBytes++;
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Byte-order helpers for big-endian transmission
+//
+//  Python expects ">BBBBHffffffffIB" (big-endian).
+//  C2000 is little-endian at the word level:
+//    float32_t occupies 2 x 16-bit words: w[0]=bits[15:0], w[1]=bits[31:16]
+//    uint32_t  same layout.
+//  SCI transmits only the lower 8 bits of each uint16_t write.
+// ---------------------------------------------------------------------------
+
+// TX frame buffer — each element holds one byte (in lower 8 bits)
+static uint16_t txBuf[STATUS_FRAME_LEN];
+static uint16_t txIdx;
+
+static inline void txBufReset(void)
+{
+    txIdx = 0;
+}
+
+static inline void txBufPutByte(uint16_t b)
+{
+    txBuf[txIdx++] = b & 0xFFU;
+}
+
+static inline void txBufPutU16BE(uint16_t val)
+{
+    txBuf[txIdx++] = (val >> 8) & 0xFFU;   // MSB
+    txBuf[txIdx++] = val & 0xFFU;           // LSB
+}
+
+static inline void txBufPutU32BE(uint32_t val)
+{
+    uint16_t hi = (uint16_t)(val >> 16);
+    uint16_t lo = (uint16_t)(val & 0xFFFFU);
+
+    txBuf[txIdx++] = (hi >> 8) & 0xFFU;    // byte [31:24]
+    txBuf[txIdx++] = hi & 0xFFU;            // byte [23:16]
+    txBuf[txIdx++] = (lo >> 8) & 0xFFU;    // byte [15:8]
+    txBuf[txIdx++] = lo & 0xFFU;            // byte [7:0]
+}
+
+static inline void txBufPutFloatBE(float32_t f)
+{
+    // Reinterpret float bits as uint32_t without undefined behavior
+    uint32_t raw;
+    memcpy(&raw, &f, sizeof(raw));
+    txBufPutU32BE(raw);
+}
+
+static uint16_t txBufChecksum(void)
+{
+    uint16_t i;
+    uint16_t sum = 0;
+
+    for(i = 0; i < txIdx; i++)
+    {
+        sum += txBuf[i];
+    }
+
+    return sum & 0xFFU;
+}
+
+// ---------------------------------------------------------------------------
+//  UART_Link_sendStatus()
+//
+//  Phase 2: Build and transmit a 43-byte status frame.
+//  Format (must match Python RX_STATUS_FMT = ">BBBBHffffffffIB"):
+//    [0x55][0x10][runMotor][ctrlState][tripFlag:2][speedRef:4]
+//    [posMechTheta:4][Vdcbus:4][IdFbk:4][IqFbk:4]
+//    [currentAs:4][currentBs:4][currentCs:4][isrTicker:4][checksum:1]
+//
+//  Uses blocking FIFO writes — at 115200 baud, 43 bytes = ~3.7 ms.
+//  Call from a slow background task (C2, every ~450 us cycle) with a
+//  rate divider so you don't saturate the link.
+// ---------------------------------------------------------------------------
+void UART_Link_sendStatus(MOTOR_Vars_t *pMotor)
+{
+    txBufReset();
+
+    // Header
+    txBufPutByte(RX_SYNC_BYTE);                 // 0x55
+    txBufPutByte(FRAME_ID_STATUS);              // 0x10
+
+    // Motor state
+    txBufPutByte((uint16_t)pMotor->runMotor);   // 1 byte
+    txBufPutByte((uint16_t)pMotor->ctrlState);  // 1 byte
+    txBufPutU16BE(pMotor->tripFlagDMC);         // 2 bytes
+
+    // Float telemetry (each 4 bytes, big-endian)
+    txBufPutFloatBE(pMotor->speedRef);
+    txBufPutFloatBE(pMotor->posMechTheta);
+    txBufPutFloatBE(pMotor->Vdcbus);
+    txBufPutFloatBE(pMotor->pi_id.fbk);          // Id feedback
+    txBufPutFloatBE(pMotor->ptrFCL->pi_iq.fbk);  // Iq feedback
+    txBufPutFloatBE(pMotor->currentAs);
+    txBufPutFloatBE(pMotor->currentBs);
+    txBufPutFloatBE(pMotor->currentCs);
+
+    // ISR heartbeat (4 bytes, big-endian)
+    txBufPutU32BE(pMotor->isrTicker);
+
+    // Checksum (sum of all preceding bytes, lower 8 bits)
+    txBufPutByte(txBufChecksum());
+
+    // Transmit the complete frame
+    SCI_writeCharArray(UART_LINK_BASE, txBuf, STATUS_FRAME_LEN);
+
+    uartStats.txBytes += STATUS_FRAME_LEN;
+    uartStats.txFrames++;
 }

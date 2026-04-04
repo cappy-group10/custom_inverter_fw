@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include "driverlib.h"
 #include "device.h"
+#include "fcl_cpu_cla_dm.h"
 
 //
 // Configuration
@@ -83,11 +84,17 @@ extern void UART_Link_init(void);
 extern void UART_Link_echoTask(void);
 
 // ---------------------------------------------------------------------------
-//  API — Phase 2+  (stubs for now, will be filled in later phases)
+//  API — Phase 2: TX status frame to host
 // ---------------------------------------------------------------------------
 
-// Phase 2: transmit a status frame to the host
-// extern void UART_Link_sendStatus(const MOTOR_Vars_t *pMotor);
+//! Build and transmit a 43-byte status frame to the host.
+//! All multi-byte fields are sent big-endian to match Python ">BBBBHffffffffIB".
+//! Call from a background state task (e.g. C2) at a moderate rate.
+extern void UART_Link_sendStatus(MOTOR_Vars_t *pMotor);
+
+// ---------------------------------------------------------------------------
+//  API — Phase 3+  (stubs for now)
+// ---------------------------------------------------------------------------
 
 // Phase 3: poll for a complete command frame and apply it
 // extern bool UART_Link_pollCommand(void);
