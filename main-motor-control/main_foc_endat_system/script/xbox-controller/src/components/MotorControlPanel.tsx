@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { InfoHint, UiIcon } from "./UiChrome";
 import { formatFixed, formatSigned, formatTimestamp } from "../lib/selectors";
 import type { SessionSnapshot } from "../lib/types";
 
@@ -121,7 +122,11 @@ export function MotorControlPanel({
       <section className="panel motor-panel">
         <div className="panel-heading">
           <div>
-            <h2>Motor Control</h2>
+            <div className="heading-line">
+              <UiIcon name="motor" className="heading-icon" />
+              <h2>Motor Control</h2>
+              <InfoHint text="A compact operator surface for reference speed, electrical feedback, and the latching emergency brake override." />
+            </div>
             <p className="panel-copy">
               A compact drive-focused view with a speedometer dial, live electrical stats, and a hard-stop brake
               override.
@@ -145,6 +150,7 @@ export function MotorControlPanel({
               disabled={!canBrake || brakeLatched || loadingBrake}
               onClick={onBrake}
             >
+              <UiIcon name="shield" />
               {loadingBrake ? "Engaging Brake..." : brakeLatched ? "Brake Latched" : "Emergency Brake"}
             </button>
             <p className="control-help">
@@ -171,6 +177,7 @@ export function MotorControlPanel({
             {!dedicatedPage ? (
               <div className="button-row compact">
                 <Link className="panel-link-button" to={detailPath}>
+                  <UiIcon name="open" />
                   Open Dedicated Motor Page
                 </Link>
               </div>
@@ -180,7 +187,11 @@ export function MotorControlPanel({
 
         <div className="panel-heading motor-stats-heading">
           <div>
-            <h3>Electrical Snapshot</h3>
+            <div className="heading-line">
+              <UiIcon name="telemetry" className="heading-icon" />
+              <h3>Electrical Snapshot</h3>
+              <InfoHint text="Fast-glance live values for control state, rotor position, DC bus, and the three phase currents." />
+            </div>
             <p className="panel-copy">Fast-glance values for the motor, DC bus, and control state.</p>
           </div>
           <span className={telemetryChip.className}>{telemetryChip.text}</span>

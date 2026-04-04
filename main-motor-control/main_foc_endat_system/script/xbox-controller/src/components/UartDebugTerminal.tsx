@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { InfoHint, UiIcon } from "./UiChrome";
 import {
   compactDecoded,
   compactRawHex,
@@ -99,7 +100,11 @@ export function UartDebugTerminal({ snapshot }: UartDebugTerminalProps) {
     <section className="panel uart-debug-panel wide-panel">
       <div className="panel-heading">
         <div>
-          <h2>UART Debug Terminal</h2>
+          <div className="heading-line">
+            <UiIcon name="uart" className="heading-icon" />
+            <h2>UART Debug Terminal</h2>
+            <InfoHint text="Inspect the live serial stream with TX/RX filtering, searchable frame previews, and a decoded inspector for the selected packet." />
+          </div>
           <p className="panel-copy">A terminal-style TX/RX stream with raw bytes, decoded payloads, and per-frame inspection.</p>
         </div>
         <div className="button-row compact">
@@ -117,6 +122,7 @@ export function UartDebugTerminal({ snapshot }: UartDebugTerminalProps) {
               setPaused((current) => !current);
             }}
           >
+            <UiIcon name={paused ? "open" : "events"} />
             {paused ? "Resume" : "Pause"}
           </button>
           <button
@@ -128,6 +134,7 @@ export function UartDebugTerminal({ snapshot }: UartDebugTerminalProps) {
               setSelectedFrameKey(null);
             }}
           >
+            <UiIcon name="delete" />
             Clear
           </button>
         </div>

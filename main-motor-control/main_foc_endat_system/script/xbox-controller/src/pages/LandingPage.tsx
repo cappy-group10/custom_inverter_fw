@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { InfoHint, UiIcon } from "../components/UiChrome";
 import { useDashboard } from "../context/DashboardContext";
 import { frontendLogger } from "../lib/frontendLogger";
 import {
@@ -8,6 +9,7 @@ import {
   deleteConnectionInstance,
   loadConnectionInstances,
   markConnectionInstanceOpened,
+  renameConnectionInstance,
 } from "../lib/instances";
 import { formatTimestamp } from "../lib/selectors";
 import type { ConnectionInstance } from "../lib/types";
@@ -24,6 +26,9 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { primaryMcu, snapshot } = useDashboard();
   const [instances, setInstances] = useState<ConnectionInstance[]>([]);
+  const [newInstanceName, setNewInstanceName] = useState("");
+  const [editingInstanceId, setEditingInstanceId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   useEffect(() => {
     setInstances(loadConnectionInstances());
@@ -47,12 +52,13 @@ export function LandingPage() {
   }
 
   function createInstanceAndOpen() {
-    const instance = createConnectionInstance();
+    const instance = createConnectionInstance(newInstanceName);
     refreshInstances();
     frontendLogger.info("instances", "Connection instance created", {
       instance_id: instance.id,
       instance_name: instance.name,
     });
+    setNewInstanceName("");
     navigate(buildInstanceConfigurePath(instance.id));
   }
 
@@ -63,6 +69,22 @@ export function LandingPage() {
     frontendLogger.warn("instances", "Connection instance deleted", {
       instance_id: instanceId,
       instance_name: instance?.name || null,
+    });
+  }
+
+  function startRename(instance: ConnectionInstance) {
+    setEditingInstanceId(instance.id);
+    setEditingName(instance.name);
+  }
+
+  function saveRename(instanceId: string) {
+    const updated = renameConnectionInstance(instanceId, editingName);
+    refreshInstances();
+    setEditingInstanceId(null);
+    setEditingName("");
+    frontendLogger.info("instances", "Connection instance renamed", {
+      instance_id: instanceId,
+      instance_name: updated?.name || null,
     });
   }
 
@@ -78,8 +100,12 @@ export function LandingPage() {
           </p>
         </div>
         <div className="hero-status">
-          <span className="status-chip muted">Drive Mode</span>
+          <span className="status-chip muted">
+            <UiIcon name="controller-pad" />
+            Drive Mode
+          </span>
           <span className={`status-chip ${hasInstances ? "good" : "muted"}`}>
+            <UiIcon name="instances" />
             {hasInstances ? `${instances.length} instance${instances.length === 1 ? "" : "s"} ready` : "Ready to launch"}
           </span>
         </div>
@@ -94,18 +120,37 @@ export function LandingPage() {
         <section className="panel landing-panel landing-panel-primary">
           <div className="panel-heading">
             <div>
-              <h2>Connection Instances</h2>
+              <div className="heading-line">
+                <UiIcon name="instances" className="heading-icon" />
+                <h2>Connection Instances</h2>
+                <InfoHint text="Create a polished demo launcher entry before opening the live dashboard. These instances are UI-only and do not create separate backend runtimes." />
+              </div>
               <p className="panel-copy">
                 Each instance is a demo-only launcher record stored in the browser. Use it to keep the expo flow tidy
                 without creating multiple real MCU runtimes.
               </p>
             </div>
-            <span className="badge muted">Operator Entry</span>
+            <span className="badge muted">
+              <UiIcon name="session" />
+              Operator Entry
+            </span>
           </div>
 
-          <button className="primary landing-cta-button" onClick={createInstanceAndOpen}>
-            Create connection instance
-          </button>
+          <div className="instance-create-form">
+            <label className="control-field control-field-wide">
+              Instance Name
+              <input
+                type="text"
+                value={newInstanceName}
+                onChange={(event) => setNewInstanceName(event.target.value)}
+                placeholder="Connection Instance 03"
+              />
+            </label>
+            <button className="primary landing-cta-button" onClick={createInstanceAndOpen}>
+              <UiIcon name="create" />
+              <span>Create connection instance</span>
+            </button>
+          </div>
 
           <div className="landing-note-grid">
             <article className="landing-note-card">
@@ -124,12 +169,17 @@ export function LandingPage() {
 
           {primaryMcu && latestInstance ? (
             <div className="landing-resume-row">
-              <span className="badge good">Active session detected</span>
+              <span className="badge good">
+                <UiIcon name="shield" />
+                Active session detected
+              </span>
               <div className="landing-link-row">
                 <Link className="panel-link-button" to={buildInstanceConfigurePath(latestInstance.id)}>
+                  <UiIcon name="open" />
                   Resume dashboard
                 </Link>
                 <Link className="panel-link-button" to={buildInstanceMotorPath(latestInstance.id)}>
+                  <UiIcon name="motor" />
                   Open motor page
                 </Link>
               </div>
@@ -140,7 +190,11 @@ export function LandingPage() {
         <section className="panel landing-panel">
           <div className="panel-heading">
             <div>
-              <h2>Saved Instances</h2>
+              <div className="heading-line">
+                <UiIcon name="overview" className="heading-icon" />
+                <h2>Saved Instances</h2>
+                <InfoHint text="Open an existing demo instance, rename it for the next presenter, or delete it to keep the launcher clean." />
+              </div>
               <p className="panel-copy">
                 Reopen a prepared demo context, or delete it if you want a cleaner launcher view for the next audience.
               </p>
@@ -154,7 +208,32 @@ export function LandingPage() {
                 <article key={instance.id} className="instance-card">
                   <div className="instance-card-header">
                     <div>
-                      <h3>{instance.name}</h3>
+                      {editingInstanceId === instance.id ? (
+                        <div className="instance-rename-row">
+                          <input value={editingName} onChange={(event) => setEditingName(event.target.value)} aria-label="Rename connection instance" />
+                          <button className="icon-button primary" onClick={() => saveRename(instance.id)} aria-label="Save instance name">
+                            <UiIcon name="save" />
+                          </button>
+                          <button
+                            className="icon-button"
+                            onClick={() => {
+                              setEditingInstanceId(null);
+                              setEditingName("");
+                            }}
+                            aria-label="Cancel rename"
+                          >
+                            <UiIcon name="cancel" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="instance-title-row">
+                          <UiIcon name="instances" className="heading-icon" />
+                          <h3>{instance.name}</h3>
+                          <button className="icon-button" onClick={() => startRename(instance)} aria-label={`Rename ${instance.name}`}>
+                            <UiIcon name="edit" />
+                          </button>
+                        </div>
+                      )}
                       <p className="panel-copy">Created {formatTimestamp(instance.created_at)} · Last opened {formatTimestamp(instance.last_opened_at)}</p>
                     </div>
                     <span className={`badge ${instance.session_state === "running" ? "good" : "muted"}`}>
@@ -179,9 +258,13 @@ export function LandingPage() {
 
                   <div className="instance-action-row">
                     <button className="primary" onClick={() => openInstance(instance.id)}>
+                      <UiIcon name="open" />
                       Open instance
                     </button>
-                    <button onClick={() => removeInstance(instance.id)}>Delete</button>
+                    <button onClick={() => removeInstance(instance.id)}>
+                      <UiIcon name="delete" />
+                      Delete
+                    </button>
                   </div>
                 </article>
               ))

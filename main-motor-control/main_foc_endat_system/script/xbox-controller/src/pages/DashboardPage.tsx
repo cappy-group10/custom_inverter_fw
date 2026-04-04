@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { MotorControlPanel } from "../components/MotorControlPanel";
+import { InfoHint, UiIcon, type IconName } from "../components/UiChrome";
 import { UartDebugTerminal } from "../components/UartDebugTerminal";
 import { useDashboard } from "../context/DashboardContext";
 import { frontendLogger } from "../lib/frontendLogger";
@@ -88,12 +89,12 @@ const controllerControlOrder = [
   "b",
 ];
 const tabs = [
-  { id: "overview", title: "Overview", copy: "Session, transport, and host command" },
-  { id: "controller", title: "Controller", copy: "Sticks, triggers, and button state" },
-  { id: "telemetry", title: "Telemetry", copy: "MCU status and rolling charts" },
-  { id: "motor", title: "Motor Control", copy: "Speedometer, electrical stats, and emergency brake" },
-  { id: "uart", title: "UART Debug", copy: "Live TX/RX terminal and frame inspector" },
-  { id: "events", title: "Events", copy: "Faults and runtime activity" },
+  { id: "overview", title: "Overview", copy: "Session, transport, and host command", icon: "overview" },
+  { id: "controller", title: "Controller", copy: "Sticks, triggers, and button state", icon: "controller" },
+  { id: "telemetry", title: "Telemetry", copy: "MCU status and rolling charts", icon: "telemetry" },
+  { id: "motor", title: "Motor Control", copy: "Speedometer, electrical stats, and emergency brake", icon: "motor" },
+  { id: "uart", title: "UART Debug", copy: "Live TX/RX terminal and frame inspector", icon: "uart" },
+  { id: "events", title: "Events", copy: "Faults and runtime activity", icon: "events" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -108,6 +109,27 @@ function getTabFromHash(hash: string): TabId {
 
 function normalizeTrigger(value: number | undefined | null) {
   return Math.max(0, Math.min(100, ((Number(value || 0) + 1) / 2) * 100));
+}
+
+function HeadingLine({
+  icon,
+  title,
+  hint,
+  level = "h2",
+}: {
+  icon: IconName;
+  title: string;
+  hint: string;
+  level?: "h2" | "h3";
+}) {
+  const Tag = level;
+  return (
+    <div className="heading-line">
+      <UiIcon name={icon} className="heading-icon" />
+      <Tag>{title}</Tag>
+      <InfoHint text={hint} />
+    </div>
+  );
 }
 
 function getHealthBanner(snapshot: SessionSnapshot) {
@@ -340,7 +362,11 @@ function OverviewTab({
       <section className="panel controls-panel">
         <div className="panel-heading">
           <div>
-            <h2>Session Control</h2>
+            <HeadingLine
+              icon="session"
+              title="Session Control"
+              hint="Choose the controller, select the serial target, and start or stop the drive-mode runtime for this instance."
+            />
             <p className="panel-copy">Connect the controller, choose the UART target, and start the drive loop.</p>
           </div>
           <span className={`badge ${wsConnected ? "online" : "offline"}`}>{wsConnected ? "Socket live" : "Socket offline"}</span>
@@ -420,7 +446,11 @@ function OverviewTab({
       <section className="panel summary-panel">
         <div className="panel-heading">
           <div>
-            <h2>Transport Health</h2>
+            <HeadingLine
+              icon="transport"
+              title="Transport Health"
+              hint="Monitor frame counts, checksum health, and how recently the host or MCU exchanged serial data."
+            />
             <p className="panel-copy">Live counters and link freshness for the host-to-MCU serial path.</p>
           </div>
           <span className={telemetryChip.className}>{telemetryChip.text}</span>
@@ -458,7 +488,11 @@ function OverviewTab({
       <section className="panel command-panel">
         <div className="panel-heading">
           <div>
-            <h2>Host Command</h2>
+            <HeadingLine
+              icon="command"
+              title="Host Command"
+              hint="Shows the latest command values being encoded on the laptop before they are transmitted over UART."
+            />
             <p className="panel-copy">The latest control command being packed and sent from the laptop.</p>
           </div>
           <span className="badge">{String(snapshot.last_host_command?.ctrl_state || "STOP")}</span>
@@ -539,7 +573,11 @@ function ControllerTab({ snapshot }: { snapshot: SessionSnapshot }) {
     <section className="panel controller-panel">
       <div className="panel-heading">
         <div>
-          <h2>Controller View</h2>
+          <HeadingLine
+            icon="controller"
+            title="Controller View"
+            hint="Inspect stick motion, trigger position, face buttons, D-pad actions, and the exact drive-mode variable each control maps to."
+          />
           <p className="panel-copy">
             Inspect the live Xbox layout, grouped mappings, and the exact drive variable each input affects.
           </p>
@@ -699,7 +737,11 @@ function TelemetryTab({ snapshot }: { snapshot: SessionSnapshot }) {
       <section className="panel telemetry-panel">
         <div className="panel-heading">
           <div>
-            <h2>MCU Telemetry</h2>
+            <HeadingLine
+              icon="telemetry"
+              title="MCU Telemetry"
+              hint="Decoded status feedback from the MCU, including electrical values, state flags, and recent fault captures."
+            />
             <p className="panel-copy">Decoded status feedback from the motor-control MCU.</p>
           </div>
           <span className="badge">{String(status.ctrl_state || "STOP")}</span>
@@ -733,7 +775,11 @@ function TelemetryTab({ snapshot }: { snapshot: SessionSnapshot }) {
       <section className="panel charts-panel">
         <div className="panel-heading">
           <div>
-            <h2>Rolling Charts</h2>
+            <HeadingLine
+              icon="charts"
+              title="Rolling Charts"
+              hint="A compact 10 Hz trend view for the values that are most useful when validating live motion and electrical response."
+            />
             <p className="panel-copy">A 10 Hz view of the values that change most during driving.</p>
           </div>
           <span className="badge muted">10 Hz UI samples</span>
@@ -788,7 +834,11 @@ function EventsTab({ events }: { events: EventRecord[] }) {
     <section className="panel events-panel wide-panel">
       <div className="panel-heading">
         <div>
-          <h2>Event Feed</h2>
+          <HeadingLine
+            icon="events"
+            title="Event Feed"
+            hint="Review session lifecycle events, button-edge records, runtime notices, and fault entries captured during operation."
+          />
           <p className="panel-copy">Fault notifications, session lifecycle events, and runtime notices.</p>
         </div>
         <div className="button-row compact">
@@ -907,11 +957,21 @@ export function DashboardPage() {
         </div>
         <div className="hero-status">
           <Link className="status-chip muted page-link-chip" to="/">
+            <UiIcon name="back" />
             Back to Instances
           </Link>
-          <span className={`status-chip ${instanceId ? "good" : "muted"}`}>{activeInstanceName}</span>
-          <span className="status-chip">{snapshot.session_state || "Idle"}</span>
-          <span className="status-chip muted">{snapshot.mode === "drive" ? "Drive Mode" : snapshot.mode || "Mode"}</span>
+          <span className={`status-chip ${instanceId ? "good" : "muted"}`}>
+            <UiIcon name="instances" />
+            {activeInstanceName}
+          </span>
+          <span className="status-chip">
+            <UiIcon name="shield" />
+            {snapshot.session_state || "Idle"}
+          </span>
+          <span className="status-chip muted">
+            <UiIcon name="controller-pad" />
+            {snapshot.mode === "drive" ? "Drive Mode" : snapshot.mode || "Mode"}
+          </span>
         </div>
       </header>
 
@@ -933,7 +993,11 @@ export function DashboardPage() {
               aria-controls={`tab-panel-${tab.id}`}
               onClick={() => setTab(tab.id)}
             >
-              <strong>{tab.title}</strong>
+              <strong className="tab-title-line">
+                <UiIcon name={tab.icon} />
+                {tab.title}
+                <InfoHint text={tab.copy} interactive={false} />
+              </strong>
               <span>{tab.copy}</span>
             </button>
           ))}

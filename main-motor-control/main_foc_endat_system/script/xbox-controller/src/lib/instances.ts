@@ -43,18 +43,24 @@ function nextInstanceName(instances: ConnectionInstance[]) {
   return `Connection Instance ${String(maxIndex + 1).padStart(2, "0")}`;
 }
 
+function normalizeInstanceName(name: string | null | undefined, fallback: string) {
+  const trimmed = String(name || "").trim().replace(/\s+/g, " ");
+  return trimmed || fallback;
+}
+
 function createInstanceId() {
   const stamp = Date.now().toString(36);
   const suffix = Math.random().toString(36).slice(2, 8);
   return `instance-${stamp}-${suffix}`;
 }
 
-export function createConnectionInstance(): ConnectionInstance {
+export function createConnectionInstance(name?: string): ConnectionInstance {
   const existing = loadConnectionInstances();
   const now = Date.now() / 1000;
+  const fallbackName = nextInstanceName(existing);
   const instance: ConnectionInstance = {
     id: createInstanceId(),
-    name: nextInstanceName(existing),
+    name: normalizeInstanceName(name, fallbackName),
     created_at: now,
     last_opened_at: now,
   };
@@ -64,6 +70,22 @@ export function createConnectionInstance(): ConnectionInstance {
 
 export function deleteConnectionInstance(instanceId: string) {
   persist(loadConnectionInstances().filter((instance) => instance.id !== instanceId));
+}
+
+export function renameConnectionInstance(instanceId: string, name: string): ConnectionInstance | null {
+  let renamedInstance: ConnectionInstance | null = null;
+  const updated = loadConnectionInstances().map((instance) => {
+    if (instance.id !== instanceId) {
+      return instance;
+    }
+    renamedInstance = {
+      ...instance,
+      name: normalizeInstanceName(name, instance.name),
+    };
+    return renamedInstance;
+  });
+  persist(updated);
+  return renamedInstance;
 }
 
 export function markConnectionInstanceOpened(instanceId: string): ConnectionInstance | null {

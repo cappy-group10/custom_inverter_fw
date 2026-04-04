@@ -273,4 +273,8 @@ def test_dashboard_frontend_log_ingestion_creates_timestamped_log_files(tmp_path
 
     assert len(backend_logs) == 1
     assert len(frontend_logs) == 1
-    assert "Route changed" in frontend_logs[0].read_text(encoding="utf-8")
+    frontend_text = frontend_logs[0].read_text(encoding="utf-8")
+    assert "Route changed" in frontend_text
+    assert "INFO" in frontend_text
+    assert "frontend" in frontend_text
+    assert not frontend_text.lstrip().startswith("{")

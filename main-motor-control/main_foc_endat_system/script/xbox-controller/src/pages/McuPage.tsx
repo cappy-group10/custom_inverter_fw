@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { MotorControlPanel } from "../components/MotorControlPanel";
+import { InfoHint, UiIcon } from "../components/UiChrome";
 import { useDashboard } from "../context/DashboardContext";
 import { frontendLogger } from "../lib/frontendLogger";
 import { getConnectionInstance, getMostRecentlyOpenedInstance, markConnectionInstanceOpened, updateConnectionInstanceFromSnapshot } from "../lib/instances";
@@ -106,10 +107,20 @@ export function McuPage() {
           </p>
         </div>
         <div className="hero-status">
-          <span className={`status-chip ${activeInstance ? "good" : "muted"}`}>{activeInstance?.name || "No instance selected"}</span>
-          <span className="status-chip">{snapshot.session_state || "Idle"}</span>
-          <span className="status-chip muted">{snapshot.port || "demo"}</span>
+          <span className={`status-chip ${activeInstance ? "good" : "muted"}`}>
+            <UiIcon name="instances" />
+            {activeInstance?.name || "No instance selected"}
+          </span>
+          <span className="status-chip">
+            <UiIcon name="shield" />
+            {snapshot.session_state || "Idle"}
+          </span>
+          <span className="status-chip muted">
+            <UiIcon name="port" />
+            {snapshot.port || "demo"}
+          </span>
           <Link className="status-chip muted page-link-chip" to={dashboardPath}>
+            <UiIcon name="back" />
             Back to Dashboard
           </Link>
         </div>
@@ -133,7 +144,11 @@ export function McuPage() {
         <section className="panel dedicated-meta-panel">
           <div className="panel-heading">
             <div>
-              <h2>Session Context</h2>
+              <div className="heading-line">
+                <UiIcon name="session" className="heading-icon" />
+                <h2>Session Context</h2>
+                <InfoHint text="A compact summary of the current controller, timing, and last known telemetry timestamps for this motor session." />
+              </div>
               <p className="panel-copy">A compact reference strip so the dedicated motor page still shows the session essentials.</p>
             </div>
             <span className="badge muted">Primary MCU</span>
