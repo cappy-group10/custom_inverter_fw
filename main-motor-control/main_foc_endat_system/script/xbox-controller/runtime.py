@@ -329,8 +329,6 @@ class DriveRuntime:
             return True
         if abs(command.speed_ref) >= SPEED_TX_THRESHOLD_PU:
             return True
-        if abs(command.id_ref) > 1e-9 or abs(command.iq_ref) > 1e-9:
-            return True
         return False
 
     def _get_transmit_reason(self, controller_state, button_events, command: MotorCommand, now: float) -> str | None:

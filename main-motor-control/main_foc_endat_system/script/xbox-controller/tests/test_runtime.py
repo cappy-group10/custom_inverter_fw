@@ -126,6 +126,27 @@ class RightStickOnlyController(FakeController):
             self.state.right_x = 0.0
 
 
+class DpadIqTrimController(FakeController):
+    def poll(self):
+        self._poll_count += 1
+        self._events = []
+        if self._poll_count == 2:
+            self.state.buttons["dpad_up"] = True
+            self._events.append(ButtonEvent("dpad_up", ButtonEdge.PRESSED))
+
+
+class RunThenIqTrimController(FakeController):
+    def poll(self):
+        self._poll_count += 1
+        self._events = []
+        if self._poll_count == 1:
+            self.state.buttons["a"] = True
+            self._events.append(ButtonEvent("a", ButtonEdge.PRESSED))
+        elif self._poll_count == 2:
+            self.state.buttons["dpad_up"] = True
+            self._events.append(ButtonEvent("dpad_up", ButtonEdge.PRESSED))
+
+
 class FakeLink:
     def __init__(self, port=None, baudrate=115200):
         self.port = port
@@ -394,3 +415,50 @@ def test_drive_runtime_does_not_transmit_for_unmapped_right_stick_motion(monkeyp
     fake_now["value"] += 0.05
     runtime.step()
     assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+
+def test_drive_runtime_does_not_keepalive_for_nonzero_iq_outside_run(monkeypatch):
+    fake_now = {"value": 500.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    runtime = DriveRuntime(controller_factory=DpadIqTrimController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+    assert runtime.get_snapshot().last_host_command.iq_ref == 0.0
+    assert runtime.get_snapshot().last_host_command.ctrl_state == CtrlState.STOP
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 2
+    assert runtime.get_snapshot().last_host_command.iq_ref > 0.0
+    assert runtime.get_snapshot().last_host_command.ctrl_state == CtrlState.STOP
+
+    fake_now["value"] += 0.30
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 2
+
+
+def test_drive_runtime_keeps_alive_nonzero_iq_when_running(monkeypatch):
+    fake_now = {"value": 600.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    runtime = DriveRuntime(controller_factory=RunThenIqTrimController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+    assert runtime.get_snapshot().last_host_command.ctrl_state == CtrlState.RUN
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 2
+    assert runtime.get_snapshot().last_host_command.ctrl_state == CtrlState.RUN
+    assert runtime.get_snapshot().last_host_command.iq_ref > 0.0
+
+    fake_now["value"] += 0.30
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 3
