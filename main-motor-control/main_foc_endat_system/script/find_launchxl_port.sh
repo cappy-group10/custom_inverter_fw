@@ -17,7 +17,7 @@ system_profiler SPUSBDataType 2>/dev/null | grep -A 10 -i "texas\|XDS\|F2837\|04
 echo ""
 echo "--- Matching ports to TI Vendor ID ($TI_VENDOR) ---"
 # Cross-reference ioreg for vendor/product IDs
-PORTS=$(ls /dev/tty.usbmodem* 2>/dev/null)
+PORTS=$(ls /dev/tty.usbmodem* /dev/tty.usbserial* 2>/dev/null)
 if [ -z "$PORTS" ]; then
     echo "No usbmodem ports found"
 else
