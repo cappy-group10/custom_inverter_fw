@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+import uvicorn
 
 import dashboard
-from dashboard import create_app
-from runtime_models import ControllerLayoutDescriptor, SessionSnapshot
+from dashboard import DashboardServer, create_app
+from runtime_models import ControllerLayoutDescriptor, SessionSnapshot, to_payload
 
 
 class StubRuntime:
@@ -12,6 +13,8 @@ class StubRuntime:
         self.callback = None
         self.started = []
         self.stop_calls = 0
+        self.brake_calls = 0
+        self.shutdown_requests = 0
         self.snapshot = SessionSnapshot(
             session_state="idle",
             mode="drive",
@@ -48,6 +51,16 @@ class StubRuntime:
         self.stop_calls += 1
         self.snapshot.session_state = "stopped"
         return self.snapshot
+
+    def engage_brake_override(self):
+        self.brake_calls += 1
+        self.snapshot.active_override = "BRAKE"
+        if self.callback is not None:
+            self.callback({"type": "snapshot", "payload": to_payload(self.get_snapshot())})
+        return self.snapshot
+
+    def request_shutdown(self):
+        self.shutdown_requests += 1
 
     def get_snapshot(self):
         return self.snapshot
@@ -118,6 +131,54 @@ def test_dashboard_shutdown_stops_active_runtime():
         assert started.status_code == 200
 
     assert runtime.stop_calls == 1
+
+
+def test_dashboard_server_signal_requests_runtime_shutdown():
+    runtime = StubRuntime()
+    app = create_app(runtime=runtime)
+    server = DashboardServer(runtime=runtime, config=uvicorn.Config(app))
+
+    server.handle_exit(2, None)
+
+    assert runtime.shutdown_requests == 1
+    assert server.should_exit is True
+
+
+def test_dashboard_serves_react_routes_and_mcu_endpoints():
+    runtime = StubRuntime()
+    runtime.snapshot.session_state = "running"
+    runtime.snapshot.started_at = 100.0
+    runtime.snapshot.port = "/dev/cu.usbmodem123401"
+    runtime.snapshot.baudrate = 115200
+    runtime.snapshot.active_override = None
+    runtime.snapshot.health = {
+        "terminal_only": False,
+        "has_mcu_telemetry": True,
+        "telemetry_stale": False,
+        "last_frame_at": 123.0,
+        "last_status_at": 123.0,
+        "last_error": None,
+    }
+    runtime.snapshot.counters = {"tx_frames": 4, "rx_frames": 2, "checksum_errors": 0, "serial_errors": 0}
+
+    with TestClient(create_app(runtime=runtime)) as client:
+        for route in ("/", "/configure", "/mcu/primary"):
+            response = client.get(route)
+            assert response.status_code == 200
+            assert "text/html" in response.headers["content-type"]
+
+        mcus = client.get("/api/mcus")
+        assert mcus.status_code == 200
+        assert mcus.json()["mcus"][0]["id"] == "primary"
+
+        detail = client.get("/api/mcus/primary")
+        assert detail.status_code == 200
+        assert detail.json()["telemetry"]["temperature_available"] is False
+
+        brake = client.post("/api/mcus/primary/brake")
+        assert brake.status_code == 200
+        assert brake.json()["active_override"] == "BRAKE"
+        assert runtime.brake_calls == 1
 
 
 def test_dashboard_port_labels_are_operator_friendly(monkeypatch):

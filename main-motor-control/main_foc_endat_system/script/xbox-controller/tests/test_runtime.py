@@ -224,6 +224,26 @@ def test_drive_runtime_defaults_to_deeper_uart_history():
     assert runtime._frame_history.maxlen == 1000
 
 
+def test_drive_runtime_latches_ui_brake_override_until_stop():
+    runtime = DriveRuntime(controller_factory=FakeController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    override_snapshot = runtime.engage_brake_override()
+    assert override_snapshot.active_override == "BRAKE"
+
+    runtime.step()
+    stepped = runtime.get_snapshot()
+
+    assert stepped.last_host_command.ctrl_state == CtrlState.BRAKE
+    assert stepped.last_host_command.speed_ref == 0.0
+    assert stepped.last_host_command.id_ref == 0.0
+    assert stepped.last_host_command.iq_ref == 0.0
+    assert stepped.active_override == "BRAKE"
+
+    stopped = runtime.stop()
+    assert stopped.active_override is None
+
+
 def test_drive_runtime_surfaces_background_errors():
     runtime = DriveRuntime(controller_factory=BrokenController, link_factory=FakeLink)
     runtime.start(port="demo", baudrate=115200, joystick_index=0)

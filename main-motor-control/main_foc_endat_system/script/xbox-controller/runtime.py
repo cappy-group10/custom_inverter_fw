@@ -10,7 +10,7 @@ from collections import deque
 from copy import deepcopy
 from typing import Any, Callable
 
-from commands import MotorCommand
+from commands import CtrlState, MotorCommand
 from controller import ButtonEdge, XboxController
 from mapping import DriveMapping
 from runtime_models import EventRecord, SessionSnapshot, TelemetrySample, to_payload
@@ -70,6 +70,7 @@ class DriveRuntime:
         self._controller_layout = []
         self._last_host_command = MotorCommand()
         self._latest_mcu_status: MCUStatus | None = None
+        self._active_override: str | None = None
         self._counters: dict[str, int] = {}
         self._health: dict[str, Any] = {}
         self._started_at: float | None = None
@@ -153,6 +154,15 @@ class DriveRuntime:
         self._async_task = asyncio.create_task(self._run_loop_async())
         self._emit("snapshot", to_payload(self.get_snapshot()))
 
+    def request_shutdown(self):
+        """Synchronously ask the runtime loop to stop without waiting for cleanup.
+
+        This is used from process signal handlers so the async drive loop can wind
+        down before the ASGI server starts waiting for background tasks to finish.
+        """
+        self._stop_event.set()
+        self.set_event_callback(None)
+
     def stop(self):
         """Stop the runtime and return the final snapshot."""
         self._stop_event.set()
@@ -187,6 +197,7 @@ class DriveRuntime:
                 controller_layout=deepcopy(self._controller_layout),
                 last_host_command=deepcopy(self._last_host_command),
                 latest_mcu_status=deepcopy(self._latest_mcu_status),
+                active_override=self._active_override,
                 recent_faults=deepcopy(list(self._fault_history)),
                 recent_frames=deepcopy(list(self._frame_history)),
                 recent_events=deepcopy(list(self._event_history)),
@@ -213,6 +224,7 @@ class DriveRuntime:
         controller_state = deepcopy(controller.state)
         button_events = controller.drain_events()
         command = deepcopy(mapping.process(controller_state, button_events))
+        command = self._apply_override(command)
         link.send(command)
 
         frames = link.pop_frame_records()
@@ -284,6 +296,35 @@ class DriveRuntime:
                 message=f"{edge.lower()} {event.button}",
                 data={"button": event.button, "edge": event.edge.name},
             )
+
+    def engage_brake_override(self) -> SessionSnapshot:
+        """Latch a BRAKE override until the session stops or restarts."""
+        with self._lock:
+            if self._session_state not in {"starting", "running", "error"} or self._link is None:
+                raise RuntimeError("Drive runtime is not active")
+            is_new_override = self._active_override != "BRAKE"
+            self._active_override = "BRAKE"
+            self._updated_at = time.time()
+            if is_new_override:
+                self._record_event_locked(
+                    kind="override",
+                    title="Emergency Brake Engaged",
+                    message="UI brake override latched for this drive session.",
+                    data={"override": "BRAKE"},
+                )
+            snapshot = to_payload(self.get_snapshot())
+        self._emit("snapshot", snapshot)
+        return self.get_snapshot()
+
+    def _apply_override(self, command: MotorCommand) -> MotorCommand:
+        override = self._active_override
+        if override != "BRAKE":
+            return command
+        command.ctrl_state = CtrlState.BRAKE
+        command.speed_ref = 0.0
+        command.id_ref = 0.0
+        command.iq_ref = 0.0
+        return command
 
     def _ingest_frames_locked(self, frames):
         for frame in frames:
@@ -397,6 +438,7 @@ class DriveRuntime:
             self._controller_state = None
             self._last_host_command = MotorCommand()
             self._latest_mcu_status = None
+            self._active_override = None
             self._counters = {
                 "loop_iterations": 0,
                 "tx_frames": 0,
@@ -451,6 +493,7 @@ class DriveRuntime:
             self._mapping = None
             self._link = None
             self._controller_connected = False
+            self._active_override = None
             if self._session_state != "error":
                 self._session_state = "stopped"
                 self._record_event_locked("session", "Session Stopped", "Drive control loop stopped")

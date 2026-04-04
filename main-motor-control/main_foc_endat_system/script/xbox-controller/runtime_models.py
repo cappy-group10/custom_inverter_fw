@@ -74,6 +74,7 @@ class SessionSnapshot:
     controller_layout: list[ControllerLayoutDescriptor] = field(default_factory=list)
     last_host_command: Any = None
     latest_mcu_status: Any = None
+    active_override: str | None = None
     recent_faults: list[Any] = field(default_factory=list)
     recent_frames: list[FrameRecord] = field(default_factory=list)
     recent_events: list[EventRecord] = field(default_factory=list)

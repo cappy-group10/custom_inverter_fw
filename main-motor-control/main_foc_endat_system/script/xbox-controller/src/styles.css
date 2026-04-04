@@ -23,6 +23,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -44,6 +50,11 @@ body::before {
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 36px 36px;
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 .page-shell {
@@ -190,7 +201,8 @@ body::before {
 }
 
 .overview-grid,
-.telemetry-workspace {
+.telemetry-workspace,
+.motor-workspace {
   display: grid;
   gap: 18px;
   align-items: start;
@@ -202,6 +214,10 @@ body::before {
 
 .telemetry-workspace {
   grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+}
+
+.motor-workspace {
+  grid-template-columns: 1fr;
 }
 
 .wide-panel {
@@ -363,6 +379,12 @@ button:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 .control-node:hover {
   transform: none;
 }
@@ -372,6 +394,11 @@ button.primary {
   color: #1f1208;
   border-color: transparent;
   font-weight: 700;
+}
+
+button.danger-button {
+  background: linear-gradient(135deg, #ff7767, #ff5b5b);
+  color: #fff4f3;
 }
 
 .metric-grid {
@@ -461,7 +488,9 @@ button.primary {
 .control-node,
 .thumb-module,
 .controller-group-card,
-.status-mini-card {
+.status-mini-card,
+.motor-safety-card,
+.speedometer-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -521,7 +550,12 @@ button.primary {
 .controller-body {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(210px, 0.98fr) minmax(128px, 0.6fr) minmax(156px, 0.72fr) minmax(128px, 0.6fr) minmax(210px, 0.98fr);
+  grid-template-columns:
+    minmax(210px, 0.98fr)
+    minmax(128px, 0.6fr)
+    minmax(156px, 0.72fr)
+    minmax(128px, 0.6fr)
+    minmax(210px, 0.98fr);
   gap: 16px;
   align-items: center;
   padding: 24px 24px 22px;
@@ -679,6 +713,7 @@ button.primary {
   padding: 10px 12px;
   border-radius: 18px;
   color: var(--muted);
+  font-weight: 600;
   font-size: 0.86rem;
   line-height: 1.15;
   text-align: center;
@@ -927,6 +962,119 @@ button.primary {
   width: 100%;
   height: 180px;
   margin-top: 12px;
+}
+
+.motor-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.speedometer-card,
+.motor-safety-card {
+  padding: 18px;
+  border-radius: 22px;
+}
+
+.speedometer-card {
+  background:
+    radial-gradient(circle at center, rgba(68, 209, 194, 0.06), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+    var(--panel-strong);
+}
+
+.speedometer-copy {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.speedometer-label,
+.speedometer-copy small {
+  color: var(--muted);
+}
+
+.speedometer-copy strong {
+  font-family: var(--mono);
+  font-size: 1.4rem;
+}
+
+#motor-speedometer {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.speedometer-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 18;
+  stroke-linecap: round;
+}
+
+.speedometer-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 18;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 14px rgba(241, 135, 72, 0.26));
+}
+
+.speedometer-needle {
+  stroke: #fff3e5;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.speedometer-hub {
+  fill: var(--accent);
+}
+
+.speedometer-value {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 1.7rem;
+}
+
+.speedometer-unit,
+.speedometer-tick,
+.speedometer-subcopy {
+  fill: var(--muted);
+  font-family: var(--ui);
+}
+
+.speedometer-unit {
+  font-size: 0.85rem;
+}
+
+.speedometer-tick,
+.speedometer-subcopy {
+  font-size: 0.82rem;
+}
+
+.speedometer-override {
+  fill: #ff9a9a;
+  font-size: 0.82rem;
+  font-family: var(--mono);
+  letter-spacing: 0.08em;
+}
+
+.motor-safety-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  background:
+    linear-gradient(180deg, rgba(255, 107, 107, 0.1), rgba(255, 255, 255, 0.02)),
+    var(--panel-strong);
+}
+
+.motor-stats-heading {
+  margin-top: 18px;
+}
+
+.motor-metric-grid {
+  margin-top: 6px;
 }
 
 .inline-toggle {
@@ -1353,7 +1501,11 @@ button.primary {
   .uart-debug-layout,
   .uart-inspector-meta,
   .session-input-row,
-  .button-row {
+  .button-row,
+  .motor-hero-grid,
+  .landing-workspace,
+  .landing-note-grid,
+  .landing-link-row {
     grid-template-columns: 1fr;
   }
 
@@ -1423,4 +1575,110 @@ button.primary {
   .face-cluster {
     justify-self: center;
   }
+}
+
+.panel-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.panel-link-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.page-link-chip {
+  cursor: pointer;
+}
+
+.dedicated-meta-panel,
+.empty-panel {
+  animation: fade-up 560ms ease-out;
+}
+
+.landing-workspace {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(420px, 1.02fr) minmax(360px, 0.98fr);
+}
+
+.landing-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.landing-panel-primary {
+  align-content: start;
+}
+
+.landing-cta-button {
+  min-height: 72px;
+  font-size: 1.08rem;
+  letter-spacing: 0.01em;
+}
+
+.landing-note-grid,
+.landing-link-row,
+.landing-stage-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.landing-note-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-note-card,
+.landing-stage-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+.landing-note-card span,
+.landing-stage-index {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+}
+
+.landing-note-card strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 1.02rem;
+}
+
+.landing-resume-row {
+  display: grid;
+  gap: 14px;
+}
+
+.landing-link-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-stage-grid {
+  grid-template-columns: 1fr;
+}
+
+.landing-stage-card h3 {
+  margin: 0 0 8px;
+}
+
+.landing-stage-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
 }
