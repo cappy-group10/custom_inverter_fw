@@ -1505,7 +1505,9 @@ button.danger-button {
   .motor-hero-grid,
   .landing-workspace,
   .landing-note-grid,
-  .landing-link-row {
+  .landing-link-row,
+  .instance-card-meta,
+  .instance-action-row {
     grid-template-columns: 1fr;
   }
 
@@ -1663,6 +1665,50 @@ button.danger-button {
 .landing-resume-row {
   display: grid;
   gap: 14px;
+}
+
+.instance-list {
+  display: grid;
+  gap: 14px;
+}
+
+.instance-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+.instance-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.instance-card-header h3 {
+  margin: 0;
+}
+
+.instance-card-meta {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.instance-action-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.large-placeholder {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  text-align: center;
 }
 
 .landing-link-row {

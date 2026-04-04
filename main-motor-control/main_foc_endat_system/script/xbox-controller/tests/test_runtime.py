@@ -82,6 +82,50 @@ class BrokenController(FakeController):
         raise RuntimeError("controller poll failed")
 
 
+class IdleController(FakeController):
+    def poll(self):
+        self._poll_count += 1
+        self._events = []
+        self.state.left_y = 0.0
+        self.state.right_x = 0.0
+
+
+class ButtonEdgeController(FakeController):
+    def poll(self):
+        self._poll_count += 1
+        self._events = []
+        if self._poll_count == 2:
+            self.state.buttons["a"] = True
+            self._events.append(ButtonEvent("a", ButtonEdge.PRESSED))
+        elif self._poll_count == 3:
+            self.state.buttons["a"] = False
+            self._events.append(ButtonEvent("a", ButtonEdge.RELEASED))
+
+
+class LeftStickController(FakeController):
+    def poll(self):
+        self._poll_count += 1
+        self._events = []
+        if self._poll_count == 2:
+            self.state.left_y = -0.20
+        elif self._poll_count == 3:
+            self.state.left_y = -0.20
+        elif self._poll_count >= 4:
+            self.state.left_y = 0.0
+
+
+class RightStickOnlyController(FakeController):
+    def poll(self):
+        self._poll_count += 1
+        self._events = []
+        if self._poll_count == 2:
+            self.state.right_x = 0.35
+        elif self._poll_count == 3:
+            self.state.right_x = -0.35
+        else:
+            self.state.right_x = 0.0
+
+
 class FakeLink:
     def __init__(self, port=None, baudrate=115200):
         self.port = port
@@ -192,6 +236,13 @@ def test_dpad_hat_generates_normalized_button_edges(monkeypatch):
     assert controller.state.buttons["dpad_up"] is False
 
 
+def test_controller_trigger_rest_state_defaults_to_negative_one():
+    state = ControllerState()
+
+    assert state.left_trigger == -1.0
+    assert state.right_trigger == -1.0
+
+
 def test_drive_runtime_runs_and_bounds_history():
     runtime = DriveRuntime(
         controller_factory=FakeController,
@@ -253,3 +304,93 @@ def test_drive_runtime_surfaces_background_errors():
 
     assert snapshot.session_state == "error"
     assert "controller poll failed" in snapshot.last_error
+
+
+def test_drive_runtime_does_not_keepalive_when_command_is_idle(monkeypatch):
+    fake_now = {"value": 100.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    runtime = DriveRuntime(controller_factory=IdleController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+    fake_now["value"] += 0.10
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+    fake_now["value"] += 0.16
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+
+def test_drive_runtime_transmits_on_button_press_and_release(monkeypatch):
+    fake_now = {"value": 200.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    runtime = DriveRuntime(controller_factory=ButtonEdgeController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 2
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 3
+
+    fake_now["value"] += 0.30
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 4
+
+
+def test_drive_runtime_transmits_when_left_stick_command_changes_and_returns_to_neutral(monkeypatch):
+    fake_now = {"value": 300.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    runtime = DriveRuntime(controller_factory=LeftStickController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 2
+    assert runtime.get_snapshot().last_host_command.speed_ref > 0.01
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 2
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 3
+    assert runtime.get_snapshot().last_host_command.speed_ref == 0.0
+
+
+def test_drive_runtime_does_not_transmit_for_unmapped_right_stick_motion(monkeypatch):
+    fake_now = {"value": 400.0}
+
+    monkeypatch.setattr(time, "time", lambda: fake_now["value"])
+
+    runtime = DriveRuntime(controller_factory=RightStickOnlyController, link_factory=FakeLink)
+    runtime.open(port="demo", baudrate=115200, joystick_index=0)
+
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1
+
+    fake_now["value"] += 0.05
+    runtime.step()
+    assert runtime.get_snapshot().counters["tx_frames"] == 1

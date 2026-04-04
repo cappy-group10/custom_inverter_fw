@@ -1,6 +1,27 @@
 export type SessionState = "idle" | "starting" | "running" | "stopped" | "error";
 export type ActiveOverride = "BRAKE" | null;
 
+export interface FrontendLogRecord {
+  timestamp?: number;
+  level: "debug" | "info" | "warn" | "error";
+  source: string;
+  route: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  client_session_id?: string;
+}
+
+export interface ConnectionInstance {
+  id: string;
+  name: string;
+  created_at: number;
+  last_opened_at: number;
+  port?: string | null;
+  session_state?: SessionState | null;
+  controller_name?: string | null;
+  last_frame_at?: number | null;
+}
+
 export interface PortOption {
   port: string;
   label: string;

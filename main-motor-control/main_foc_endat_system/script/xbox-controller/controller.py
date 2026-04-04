@@ -15,8 +15,8 @@ class ControllerState:
     left_y: float = 0.0
     right_x: float = 0.0
     right_y: float = 0.0
-    left_trigger: float = 0.0
-    right_trigger: float = 0.0
+    left_trigger: float = -1.0
+    right_trigger: float = -1.0
 
     # Button states (True = pressed)
     buttons: dict[str, bool] = field(default_factory=dict)

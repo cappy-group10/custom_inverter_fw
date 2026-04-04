@@ -1,4 +1,4 @@
-import type { McuDetail, McuSummary, PortOption, SessionSnapshot, StartSessionPayload } from "./types";
+import type { FrontendLogRecord, McuDetail, McuSummary, PortOption, SessionSnapshot, StartSessionPayload } from "./types";
 
 async function fetchJSON<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
@@ -40,5 +40,10 @@ export const api = {
   engageBrake: (mcuId = "primary") =>
     fetchJSON<McuDetail>(`/api/mcus/${mcuId}/brake`, {
       method: "POST",
+    }),
+  postFrontendLogs: (records: FrontendLogRecord[]) =>
+    fetchJSON<{ accepted: number }>("/api/logs/frontend", {
+      method: "POST",
+      body: JSON.stringify({ records }),
     }),
 };

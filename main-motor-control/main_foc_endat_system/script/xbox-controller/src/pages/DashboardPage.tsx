@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { MotorControlPanel } from "../components/MotorControlPanel";
 import { UartDebugTerminal } from "../components/UartDebugTerminal";
 import { useDashboard } from "../context/DashboardContext";
+import { frontendLogger } from "../lib/frontendLogger";
+import {
+  getConnectionInstance,
+  getMostRecentlyOpenedInstance,
+  markConnectionInstanceOpened,
+  updateConnectionInstanceFromSnapshot,
+} from "../lib/instances";
 import {
   formatFixed,
   formatSigned,
@@ -835,17 +842,57 @@ export function DashboardPage() {
   const { snapshot, ports, wsConnected, loading, startSession, stopSession, reloadPorts, engageBrake } = useDashboard();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>(getTabFromHash(location.hash));
+  const [activeInstanceName, setActiveInstanceName] = useState("No instance selected");
+  const instanceId = searchParams.get("instance");
 
   useEffect(() => {
     setActiveTab(getTabFromHash(location.hash));
   }, [location.hash]);
 
+  useEffect(() => {
+    if (instanceId) {
+      const instance = markConnectionInstanceOpened(instanceId) || getConnectionInstance(instanceId);
+      setActiveInstanceName(instance?.name || "No instance selected");
+      return;
+    }
+    const mostRecent = getMostRecentlyOpenedInstance();
+    if (mostRecent) {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: `?instance=${encodeURIComponent(mostRecent.id)}`,
+          hash: location.hash,
+        },
+        { replace: true },
+      );
+      return;
+    }
+    setActiveInstanceName("No instance selected");
+  }, [instanceId, location.hash, location.pathname, navigate]);
+
+  useEffect(() => {
+    updateConnectionInstanceFromSnapshot(instanceId, snapshot);
+  }, [instanceId, snapshot]);
+
+  useEffect(() => {
+    frontendLogger.info("tabs", "Dashboard tab changed", { tab: activeTab });
+  }, [activeTab]);
+
   const healthBanner = getHealthBanner(snapshot);
+  const motorPagePath = instanceId ? `/mcu/primary?instance=${encodeURIComponent(instanceId)}` : "/mcu/primary";
 
   function setTab(tab: TabId) {
     setActiveTab(tab);
-    navigate(`${location.pathname}#${tab}`, { replace: true });
+      navigate(
+        {
+          pathname: location.pathname,
+          search: location.search,
+          hash: `#${tab}`,
+        },
+        { replace: true },
+      );
   }
 
   return (
@@ -859,6 +906,10 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="hero-status">
+          <Link className="status-chip muted page-link-chip" to="/">
+            Back to Instances
+          </Link>
+          <span className={`status-chip ${instanceId ? "good" : "muted"}`}>{activeInstanceName}</span>
           <span className="status-chip">{snapshot.session_state || "Idle"}</span>
           <span className="status-chip muted">{snapshot.mode === "drive" ? "Drive Mode" : snapshot.mode || "Mode"}</span>
         </div>
@@ -937,6 +988,7 @@ export function DashboardPage() {
           <MotorControlPanel
             snapshot={snapshot}
             loadingBrake={loading.brake}
+            detailPath={motorPagePath}
             onBrake={() => {
               void engageBrake().catch(() => undefined);
             }}

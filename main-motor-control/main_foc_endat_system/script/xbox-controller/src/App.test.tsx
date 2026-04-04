@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -80,6 +80,7 @@ function renderRoute(route: string, snapshot: SessionSnapshot) {
 describe("React dashboard routes", () => {
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
   });
 
   test("renders the landing page on /", () => {
@@ -87,15 +88,41 @@ describe("React dashboard routes", () => {
 
     expect(screen.getByRole("heading", { name: /inverter os/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /create connection instance/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /demo flow/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /saved instances/i })).toBeInTheDocument();
   });
 
   test("renders the dashboard page on /configure", () => {
-    renderRoute("/configure", buildSnapshot());
+    window.localStorage.setItem(
+      "inverter-os.connection-instances.v1",
+      JSON.stringify([
+        {
+          id: "instance-01",
+          name: "Connection Instance 01",
+          created_at: 100,
+          last_opened_at: 100,
+        },
+      ]),
+    );
+
+    renderRoute("/configure?instance=instance-01", buildSnapshot());
 
     expect(screen.getByRole("heading", { name: /inverter os/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /session control/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /transport health/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /back to instances/i })).toBeInTheDocument();
+    expect(screen.getByText(/connection instance 01/i)).toBeInTheDocument();
+  });
+
+  test("creates a connection instance from the landing page and opens the dashboard", () => {
+    renderRoute("/", buildSnapshot());
+
+    fireEvent.click(screen.getByRole("button", { name: /create connection instance/i }));
+
+    expect(screen.getByRole("heading", { name: /session control/i })).toBeInTheDocument();
+
+    const stored = JSON.parse(window.localStorage.getItem("inverter-os.connection-instances.v1") || "[]");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].name).toMatch(/connection instance 01/i);
   });
 
   test("renders the dedicated motor control page on /mcu/primary", () => {

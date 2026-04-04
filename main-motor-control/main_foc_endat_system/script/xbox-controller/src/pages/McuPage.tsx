@@ -1,7 +1,10 @@
-import { Link, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { MotorControlPanel } from "../components/MotorControlPanel";
 import { useDashboard } from "../context/DashboardContext";
+import { frontendLogger } from "../lib/frontendLogger";
+import { getConnectionInstance, getMostRecentlyOpenedInstance, markConnectionInstanceOpened, updateConnectionInstanceFromSnapshot } from "../lib/instances";
 import { formatTimestamp } from "../lib/selectors";
 
 function getHealthCopy(snapshot: ReturnType<typeof useDashboard>["snapshot"]) {
@@ -52,8 +55,29 @@ function getHealthCopy(snapshot: ReturnType<typeof useDashboard>["snapshot"]) {
 
 export function McuPage() {
   const { mcuId } = useParams();
+  const [searchParams] = useSearchParams();
   const { snapshot, loading, engageBrake } = useDashboard();
   const banner = getHealthCopy(snapshot);
+  const instanceId = searchParams.get("instance");
+  const activeInstance = instanceId ? getConnectionInstance(instanceId) : getMostRecentlyOpenedInstance();
+  const dashboardPath = activeInstance ? `/configure?instance=${encodeURIComponent(activeInstance.id)}` : "/configure";
+
+  useEffect(() => {
+    if (instanceId) {
+      markConnectionInstanceOpened(instanceId);
+    }
+  }, [instanceId]);
+
+  useEffect(() => {
+    frontendLogger.info("motor_page", "Motor page viewed", {
+      mcu_id: mcuId || "unknown",
+      instance_id: activeInstance?.id || null,
+    });
+  }, [activeInstance?.id, mcuId]);
+
+  useEffect(() => {
+    updateConnectionInstanceFromSnapshot(activeInstance?.id, snapshot);
+  }, [activeInstance?.id, snapshot]);
 
   if (mcuId !== "primary") {
     return (
@@ -62,7 +86,7 @@ export function McuPage() {
           <h2>Unknown MCU route</h2>
           <p className="panel-copy">The current backend only exposes one live MCU page at `/mcu/primary`.</p>
           <div className="button-row">
-            <Link className="panel-link-button" to="/">
+            <Link className="panel-link-button" to={dashboardPath}>
               Back to Dashboard
             </Link>
           </div>
@@ -82,9 +106,10 @@ export function McuPage() {
           </p>
         </div>
         <div className="hero-status">
+          <span className={`status-chip ${activeInstance ? "good" : "muted"}`}>{activeInstance?.name || "No instance selected"}</span>
           <span className="status-chip">{snapshot.session_state || "Idle"}</span>
           <span className="status-chip muted">{snapshot.port || "demo"}</span>
-          <Link className="status-chip muted page-link-chip" to="/">
+          <Link className="status-chip muted page-link-chip" to={dashboardPath}>
             Back to Dashboard
           </Link>
         </div>

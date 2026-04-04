@@ -4,16 +4,18 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from serial.tools import list_ports
 
+from app_logging import create_timestamped_loggers
 from commands import CtrlState
 from runtime import DriveRuntime
 from runtime_models import to_payload
@@ -21,6 +23,7 @@ from runtime_models import to_payload
 
 STATIC_DIR = Path(__file__).with_name("dashboard_static")
 FRONTEND_ENTRY = STATIC_DIR / "index.html"
+LOG_DIR = Path(__file__).with_name("log")
 UNKNOWN_PORT_TEXT = {"", "n/a", "none", "unknown"}
 PRIMARY_MCU_ID = "primary"
 
@@ -31,6 +34,24 @@ class StartSessionRequest(BaseModel):
     port: str | None = None
     baudrate: int = Field(default=115200, ge=1)
     joystick_index: int = Field(default=0, ge=0)
+
+
+class FrontendLogRecordRequest(BaseModel):
+    """Structured frontend log record posted by the React client."""
+
+    timestamp: float | None = None
+    level: str = Field(default="info")
+    source: str = Field(default="frontend")
+    route: str = Field(default="")
+    message: str
+    metadata: dict = Field(default_factory=dict)
+    client_session_id: str | None = None
+
+
+class FrontendLogBatchRequest(BaseModel):
+    """Batch of frontend log records."""
+
+    records: list[FrontendLogRecordRequest] = Field(default_factory=list)
 
 
 class EventHub:
@@ -351,29 +372,80 @@ def _build_mcu_detail(snapshot, mcu_id: str) -> dict:
     }
 
 
-def create_app(runtime: DriveRuntime | None = None) -> FastAPI:
+def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None) -> FastAPI:
     """Create the FastAPI application."""
 
     hub = EventHub()
     runtime = runtime or DriveRuntime()
+    backend_logger, frontend_logger = create_timestamped_loggers(log_dir or LOG_DIR)
+    if hasattr(runtime, "set_logger"):
+        runtime.set_logger(backend_logger)
     if hasattr(runtime, "set_event_callback"):
         runtime.set_event_callback(hub.publish_from_thread)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await hub.bind_loop()
+        backend_logger.log(
+            "info",
+            "backend",
+            "Dashboard application startup complete",
+            route="startup",
+            metadata={"static_dir": STATIC_DIR, "frontend_entry": FRONTEND_ENTRY},
+        )
         try:
             yield
         finally:
+            backend_logger.log("info", "backend", "Dashboard shutdown requested", route="shutdown")
             snapshot = runtime.get_snapshot()
             if snapshot.session_state in {"running", "starting", "error"}:
                 runtime.set_event_callback(None)
                 await runtime.stop_async()
+            backend_logger.log("info", "backend", "Dashboard application shutdown complete", route="shutdown")
+            backend_logger.close()
+            frontend_logger.close()
 
     app = FastAPI(title="Xbox Drive Dashboard", lifespan=lifespan)
 
     app.state.runtime = runtime
     app.state.hub = hub
+    app.state.backend_logger = backend_logger
+    app.state.frontend_logger = frontend_logger
+
+    @app.middleware("http")
+    async def log_api_requests(request: Request, call_next):
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
+
+        started_at = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            backend_logger.log(
+                "error",
+                "api",
+                "API request failed",
+                route=request.url.path,
+                metadata={
+                    "method": request.method,
+                    "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+                    "error": str(exc),
+                },
+            )
+            raise
+
+        backend_logger.log(
+            "info",
+            "api",
+            "API request completed",
+            route=request.url.path,
+            metadata={
+                "method": request.method,
+                "status_code": response.status_code,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+            },
+        )
+        return response
 
     @app.get("/api/ports")
     async def get_ports():
@@ -385,6 +457,17 @@ def create_app(runtime: DriveRuntime | None = None) -> FastAPI:
 
     @app.post("/api/session/start")
     async def start_session(request: StartSessionRequest):
+        backend_logger.log(
+            "info",
+            "session",
+            "Session start requested",
+            route="/api/session/start",
+            metadata={
+                "port": request.port or "demo",
+                "baudrate": request.baudrate,
+                "joystick_index": request.joystick_index,
+            },
+        )
         try:
             await app.state.runtime.start_async(
                 port=request.port,
@@ -392,13 +475,29 @@ def create_app(runtime: DriveRuntime | None = None) -> FastAPI:
                 joystick_index=request.joystick_index,
             )
         except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Session start rejected",
+                route="/api/session/start",
+                metadata={"error": str(exc)},
+            )
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
+            backend_logger.log(
+                "error",
+                "session",
+                "Session start failed",
+                route="/api/session/start",
+                metadata={"error": str(exc)},
+            )
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        backend_logger.log("info", "session", "Session start succeeded", route="/api/session/start")
         return to_payload(app.state.runtime.get_snapshot())
 
     @app.post("/api/session/stop")
     async def stop_session():
+        backend_logger.log("info", "session", "Session stop requested", route="/api/session/stop")
         return to_payload(await app.state.runtime.stop_async())
 
     @app.get("/api/mcus")
@@ -424,12 +523,59 @@ def create_app(runtime: DriveRuntime | None = None) -> FastAPI:
         try:
             snapshot = app.state.runtime.engage_brake_override()
         except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Brake override rejected",
+                route=f"/api/mcus/{mcu_id}/brake",
+                metadata={"error": str(exc)},
+            )
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        backend_logger.log(
+            "warning",
+            "session",
+            "Brake override engaged",
+            route=f"/api/mcus/{mcu_id}/brake",
+            metadata={"mcu_id": mcu_id},
+        )
         return _build_mcu_detail(snapshot, mcu_id)
+
+    @app.post("/api/logs/frontend")
+    async def ingest_frontend_logs(payload: FrontendLogBatchRequest):
+        accepted = 0
+        for record in payload.records:
+            frontend_logger.log(
+                record.level,
+                record.source,
+                record.message,
+                route=record.route,
+                metadata={
+                    **record.metadata,
+                    "client_session_id": record.client_session_id,
+                    "client_timestamp": record.timestamp,
+                },
+            )
+            accepted += 1
+        if accepted:
+            backend_logger.log(
+                "info",
+                "frontend_logs",
+                "Frontend log batch ingested",
+                route="/api/logs/frontend",
+                metadata={"accepted": accepted},
+            )
+        return {"accepted": accepted}
 
     @app.websocket("/api/stream")
     async def stream(websocket: WebSocket):
         await websocket.accept()
+        backend_logger.log(
+            "info",
+            "websocket",
+            "Dashboard websocket connected",
+            route="/api/stream",
+            metadata={"client": getattr(websocket.client, "host", "unknown")},
+        )
         queue = await app.state.hub.subscribe()
         try:
             await websocket.send_json(
@@ -457,9 +603,10 @@ def create_app(runtime: DriveRuntime | None = None) -> FastAPI:
                 event = queue_task.result()
                 await websocket.send_json(event)
         except WebSocketDisconnect:
-            pass
+            backend_logger.log("info", "websocket", "Dashboard websocket disconnected", route="/api/stream")
         finally:
             await app.state.hub.unsubscribe(queue)
+            backend_logger.log("info", "websocket", "Dashboard websocket cleanup complete", route="/api/stream")
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

@@ -26,4 +26,4 @@ xbox-ctrl = "main:main"
 xbox-dashboard = "dashboard:main"
 
 [tool.setuptools]
-py-modules = ["main", "controller", "commands", "mapping", "uart", "runtime", "runtime_models", "dashboard"]
+py-modules = ["main", "controller", "commands", "mapping", "uart", "runtime", "runtime_models", "dashboard", "app_logging"]

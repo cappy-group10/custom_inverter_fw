@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import serial
 
+from app_logging import NullStructuredLogger
 from commands import MotorCommand, MusicCommand, CtrlState
 from runtime_models import FrameRecord, to_payload
 
@@ -160,10 +161,15 @@ class UARTLink:
         self._latest_status: MCUStatus | None = None
         self._counters = UARTCounters()
         self._health = UARTHealth(terminal_only=port is None)
+        self._logger = NullStructuredLogger()
 
         self._rx_thread: threading.Thread | None = None
         self._running = False
         self._rx_buf = bytearray()
+
+    def set_logger(self, logger):
+        """Attach a structured logger used for UART diagnostics."""
+        self._logger = logger or NullStructuredLogger()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -175,6 +181,13 @@ class UARTLink:
                 self._health.port_open = False
                 self._health.last_error = None
             print("[UART] terminal-only mode (no serial port)")
+            self._logger.log(
+                "info",
+                "uart",
+                "UART opened in terminal-only mode",
+                route="/uart/open",
+                metadata={"port": "demo", "baudrate": self._baudrate},
+            )
             return
 
         self._ser = serial.Serial(
@@ -190,6 +203,13 @@ class UARTLink:
             self._health.terminal_only = False
             self._health.last_error = None
         print(f"[UART] opened {self._port_name} @ {self._baudrate}")
+        self._logger.log(
+            "info",
+            "uart",
+            "UART serial port opened",
+            route="/uart/open",
+            metadata={"port": self._port_name, "baudrate": self._baudrate},
+        )
 
     def close(self):
         """Stop the RX thread and close the port."""
@@ -202,6 +222,13 @@ class UARTLink:
             self._ser = None
         with self._lock:
             self._health.port_open = False
+        self._logger.log(
+            "info",
+            "uart",
+            "UART link closed",
+            route="/uart/close",
+            metadata={"port": self._port_name or "demo"},
+        )
 
     # -- TX: command -> wire -----------------------------------------------
 
@@ -289,6 +316,13 @@ class UARTLink:
                 with self._lock:
                     self._counters.serial_errors += 1
                     self._health.last_error = str(exc)
+                self._logger.log(
+                    "error",
+                    "uart",
+                    "UART serial write failed",
+                    route="/uart/send",
+                    metadata={"port": self._port_name or "demo", "error": str(exc)},
+                )
 
     # -- RX: wire -> parsed data -------------------------------------------
 
@@ -301,6 +335,13 @@ class UARTLink:
                 with self._lock:
                     self._counters.serial_errors += 1
                     self._health.last_error = str(exc)
+                self._logger.log(
+                    "error",
+                    "uart",
+                    "UART serial read failed",
+                    route="/uart/read",
+                    metadata={"port": self._port_name or "demo", "error": str(exc)},
+                )
                 break
             if chunk:
                 self._rx_buf.extend(chunk)
@@ -339,6 +380,13 @@ class UARTLink:
                         decoded={"error": "status checksum mismatch"},
                         checksum_ok=False,
                     )
+                    self._logger.log(
+                        "warning",
+                        "uart",
+                        "Status frame checksum mismatch",
+                        route="/uart/rx",
+                        metadata={"frame_id": frame_id, "raw_hex": frame.hex(" ")},
+                    )
                     print("[UART] status frame checksum mismatch")
 
             elif frame_id == FRAME_FAULT:
@@ -356,6 +404,13 @@ class UARTLink:
                         frame=frame,
                         decoded={"error": "fault checksum mismatch"},
                         checksum_ok=False,
+                    )
+                    self._logger.log(
+                        "warning",
+                        "uart",
+                        "Fault frame checksum mismatch",
+                        route="/uart/rx",
+                        metadata={"frame_id": frame_id, "raw_hex": frame.hex(" ")},
                     )
                     print("[UART] fault frame checksum mismatch")
 
@@ -398,6 +453,13 @@ class UARTLink:
             decoded=to_payload(status),
             checksum_ok=True,
         )
+        self._logger.log(
+            "info",
+            "uart",
+            "MCU status frame parsed",
+            route="/uart/rx",
+            metadata={"frame_id": FRAME_STATUS, "decoded": to_payload(status)},
+        )
 
     def _handle_fault(self, frame: bytes):
         vals = struct.unpack(RX_FAULT_FMT, frame)
@@ -412,6 +474,13 @@ class UARTLink:
             frame=frame,
             decoded=to_payload(fault),
             checksum_ok=True,
+        )
+        self._logger.log(
+            "warning",
+            "uart",
+            "MCU fault frame parsed",
+            route="/uart/rx",
+            metadata={"frame_id": FRAME_FAULT, "decoded": to_payload(fault)},
         )
         print(f"\r\n[RX] {fault}")
 

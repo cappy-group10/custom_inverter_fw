@@ -8,6 +8,7 @@ interface MotorControlPanelProps {
   loadingBrake: boolean;
   onBrake: () => void;
   dedicatedPage?: boolean;
+  detailPath?: string;
 }
 
 function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
@@ -103,6 +104,7 @@ export function MotorControlPanel({
   loadingBrake,
   onBrake,
   dedicatedPage = false,
+  detailPath = "/mcu/primary",
 }: MotorControlPanelProps) {
   const health = snapshot.health || {};
   const status = snapshot.latest_mcu_status || {};
@@ -168,7 +170,7 @@ export function MotorControlPanel({
             </dl>
             {!dedicatedPage ? (
               <div className="button-row compact">
-                <Link className="panel-link-button" to="/mcu/primary">
+                <Link className="panel-link-button" to={detailPath}>
                   Open Dedicated Motor Page
                 </Link>
               </div>

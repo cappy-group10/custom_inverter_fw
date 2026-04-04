@@ -244,3 +244,33 @@ def test_dashboard_port_labels_mark_launchxl_app_uart(monkeypatch):
     assert app_port["possible_mcu_uart"] is True
     assert debug_port["label"] == "LaunchXL Debug UART (Usually Console Only) (cu.usbmodem123400)"
     assert debug_port["recommended"] is False
+
+
+def test_dashboard_frontend_log_ingestion_creates_timestamped_log_files(tmp_path):
+    runtime = StubRuntime()
+    with TestClient(create_app(runtime=runtime, log_dir=tmp_path)) as client:
+        posted = client.post(
+            "/api/logs/frontend",
+            json={
+                "records": [
+                    {
+                        "timestamp": 123.0,
+                        "level": "info",
+                        "source": "frontend",
+                        "route": "/configure?instance=instance-01",
+                        "message": "Route changed",
+                        "metadata": {"tab": "overview"},
+                        "client_session_id": "frontend-test",
+                    }
+                ]
+            },
+        )
+        assert posted.status_code == 200
+        assert posted.json()["accepted"] == 1
+
+    backend_logs = list(tmp_path.glob("backend-*.log"))
+    frontend_logs = list(tmp_path.glob("frontend-*.log"))
+
+    assert len(backend_logs) == 1
+    assert len(frontend_logs) == 1
+    assert "Route changed" in frontend_logs[0].read_text(encoding="utf-8")
