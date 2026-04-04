@@ -30,7 +30,7 @@ class DriveRuntime:
         poll_rate_hz: int = POLL_RATE_HZ,
         ui_sample_hz: int = UI_SAMPLE_HZ,
         deadzone: float = 0.08,
-        frame_history: int = 200,
+        frame_history: int = 1000,
         event_history: int = 50,
         telemetry_history: int = 300,
         controller_factory: Callable[..., Any] | None = None,

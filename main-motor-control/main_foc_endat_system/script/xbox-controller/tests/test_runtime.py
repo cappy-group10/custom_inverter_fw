@@ -219,6 +219,11 @@ def test_drive_runtime_runs_and_bounds_history():
     assert stopped.controller_connected is False
 
 
+def test_drive_runtime_defaults_to_deeper_uart_history():
+    runtime = DriveRuntime(controller_factory=FakeController, link_factory=FakeLink)
+    assert runtime._frame_history.maxlen == 1000
+
+
 def test_drive_runtime_surfaces_background_errors():
     runtime = DriveRuntime(controller_factory=BrokenController, link_factory=FakeLink)
     runtime.start(port="demo", baudrate=115200, joystick_index=0)

@@ -66,16 +66,16 @@
             <span>MCU status and rolling charts</span>
           </button>
           <button
-            id="tab-button-frames"
+            id="tab-button-uart"
             class="tab-button"
             type="button"
             role="tab"
             aria-selected="false"
-            aria-controls="tab-panel-frames"
-            data-tab-target="frames"
+            aria-controls="tab-panel-uart"
+            data-tab-target="uart"
           >
-            <strong>Frames</strong>
-            <span>Raw transport timeline</span>
+            <strong>UART Debug</strong>
+            <span>Live TX/RX terminal and frame inspector</span>
           </button>
           <button
             id="tab-button-events"
@@ -362,24 +362,77 @@
         </section>
 
         <section
-          id="tab-panel-frames"
+          id="tab-panel-uart"
           class="tab-panel"
           role="tabpanel"
-          aria-labelledby="tab-button-frames"
-          data-tab-panel="frames"
+          aria-labelledby="tab-button-uart"
+          data-tab-panel="uart"
         >
-          <section class="panel timeline-panel wide-panel">
+          <section class="panel uart-debug-panel wide-panel">
             <div class="panel-heading">
               <div>
-                <h2>Frame Timeline</h2>
-                <p class="panel-copy">Decoded TX/RX frames with raw payload bytes for transport debugging.</p>
+                <h2>UART Debug Terminal</h2>
+                <p class="panel-copy">A terminal-style TX/RX stream with raw bytes, decoded payloads, and per-frame inspection.</p>
               </div>
               <div class="button-row compact">
-                <button id="toggle-frame-pause">Pause</button>
-                <button id="clear-frames">Clear</button>
+                <label class="inline-toggle">
+                  <input id="uart-autoscroll" type="checkbox" checked />
+                  <span>Auto-scroll</span>
+                </label>
+                <button id="toggle-uart-pause">Pause</button>
+                <button id="clear-uart">Clear</button>
               </div>
             </div>
-            <div class="log-list tall-log" id="frame-list"></div>
+            <div class="uart-summary-grid">
+              <div class="uart-summary-card"><span>Port</span><strong id="uart-summary-port">demo</strong></div>
+              <div class="uart-summary-card"><span>Baud</span><strong id="uart-summary-baud">115200</strong></div>
+              <div class="uart-summary-card"><span>TX</span><strong id="uart-summary-tx">0</strong></div>
+              <div class="uart-summary-card"><span>RX</span><strong id="uart-summary-rx">0</strong></div>
+              <div class="uart-summary-card"><span>Checksum Errors</span><strong id="uart-summary-checksum">0</strong></div>
+              <div class="uart-summary-card"><span>Serial Errors</span><strong id="uart-summary-serial">0</strong></div>
+              <div class="uart-summary-card wide"><span>Last Frame</span><strong id="uart-summary-last-frame">-</strong></div>
+            </div>
+
+            <div class="uart-toolbar">
+              <div class="uart-filter-group">
+                <label class="inline-toggle">
+                  <input id="uart-filter-tx" type="checkbox" checked />
+                  <span>TX</span>
+                </label>
+                <label class="inline-toggle">
+                  <input id="uart-filter-rx" type="checkbox" checked />
+                  <span>RX</span>
+                </label>
+                <label class="inline-toggle">
+                  <input id="uart-errors-only" type="checkbox" />
+                  <span>Errors only</span>
+                </label>
+              </div>
+              <label class="uart-search-field">
+                <span>Search</span>
+                <input id="uart-search" type="search" placeholder="frame name, hex, or decoded JSON" />
+              </label>
+            </div>
+
+            <div class="uart-debug-layout">
+              <section class="uart-terminal-panel">
+                <div class="uart-terminal-header">
+                  <span>Live terminal stream</span>
+                  <span class="mono-muted">newest at bottom</span>
+                </div>
+                <div class="uart-terminal" id="uart-terminal"></div>
+              </section>
+
+              <aside class="uart-inspector-panel">
+                <div class="uart-terminal-header">
+                  <span>Selected frame</span>
+                  <span class="mono-muted">decoded + raw</span>
+                </div>
+                <div class="uart-inspector" id="uart-inspector">
+                  <div class="placeholder">Select a UART frame to inspect its decoded fields and byte layout.</div>
+                </div>
+              </aside>
+            </div>
           </section>
         </section>
 

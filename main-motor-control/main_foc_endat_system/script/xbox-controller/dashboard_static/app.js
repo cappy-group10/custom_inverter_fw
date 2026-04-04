@@ -17,6 +17,8 @@ const buttonNames = [
 ];
 
 const LOG_RENDER_INTERVAL_MS = 140;
+const FRAME_SCROLLBACK_LIMIT = 1000;
+const EVENT_SCROLLBACK_LIMIT = 50;
 
 const controllerGroupMeta = {
   face_buttons: {
@@ -67,6 +69,17 @@ const state = {
   portOptions: [],
   activeTab: "overview",
   controlNodes: {},
+  uartFilters: {
+    tx: true,
+    rx: true,
+    errorsOnly: false,
+    search: "",
+  },
+  uartAutoScroll: true,
+  uartNeedsFullRender: true,
+  uartRenderedFrameCount: 0,
+  uartRenderedFirstKey: null,
+  uartSelectedFrameKey: null,
   framePaused: false,
   eventPaused: false,
   frameListDirty: false,
@@ -148,11 +161,24 @@ function bindElements() {
     "chart-dq",
     "chart-vdc",
     "chart-phase",
-    "frame-list",
+    "uart-summary-port",
+    "uart-summary-baud",
+    "uart-summary-tx",
+    "uart-summary-rx",
+    "uart-summary-checksum",
+    "uart-summary-serial",
+    "uart-summary-last-frame",
+    "uart-search",
+    "uart-filter-tx",
+    "uart-filter-rx",
+    "uart-errors-only",
+    "uart-autoscroll",
+    "uart-terminal",
+    "uart-inspector",
     "event-list",
-    "toggle-frame-pause",
+    "toggle-uart-pause",
     "toggle-event-pause",
-    "clear-frames",
+    "clear-uart",
     "clear-events",
   ];
 
@@ -173,12 +199,46 @@ function bindControls() {
   els["port-select"].addEventListener("change", renderPortHelp);
   els["start-button"].addEventListener("click", startSession);
   els["stop-button"].addEventListener("click", stopSession);
-  els["toggle-frame-pause"].addEventListener("click", () => {
+  els["toggle-uart-pause"].addEventListener("click", () => {
     state.framePaused = !state.framePaused;
-    els["toggle-frame-pause"].textContent = state.framePaused ? "Resume" : "Pause";
+    els["toggle-uart-pause"].textContent = state.framePaused ? "Resume" : "Pause";
     if (!state.framePaused) {
-      queueFrameRender();
+      queueFrameRender({ forceFull: true });
     }
+  });
+  els["uart-autoscroll"].checked = state.uartAutoScroll;
+  els["uart-autoscroll"].addEventListener("change", () => {
+    state.uartAutoScroll = Boolean(els["uart-autoscroll"].checked);
+    if (state.uartAutoScroll) {
+      scrollUartTerminalToBottom();
+    }
+  });
+  ["uart-filter-tx", "uart-filter-rx", "uart-errors-only"].forEach((id) => {
+    els[id].addEventListener("change", () => {
+      updateUartFiltersFromControls();
+      state.uartNeedsFullRender = true;
+      if (state.activeTab === "uart") {
+        renderUartTerminal(state.snapshot?.recent_frames || [], { forceFull: true });
+      } else {
+        state.frameListDirty = true;
+      }
+    });
+  });
+  els["uart-search"].addEventListener("input", () => {
+    updateUartFiltersFromControls();
+    state.uartNeedsFullRender = true;
+    if (state.activeTab === "uart") {
+      renderUartTerminal(state.snapshot?.recent_frames || [], { forceFull: true });
+    } else {
+      state.frameListDirty = true;
+    }
+  });
+  els["uart-terminal"].addEventListener("click", (event) => {
+    const row = event.target.closest("[data-frame-key]");
+    if (!row) {
+      return;
+    }
+    selectUartFrame(row.dataset.frameKey);
   });
   els["toggle-event-pause"].addEventListener("click", () => {
     state.eventPaused = !state.eventPaused;
@@ -187,7 +247,7 @@ function bindControls() {
       queueEventRender();
     }
   });
-  els["clear-frames"].addEventListener("click", () => {
+  els["clear-uart"].addEventListener("click", () => {
     if (state.snapshot) {
       state.snapshot.recent_frames = [];
     }
@@ -196,7 +256,15 @@ function bindControls() {
       state.frameRenderTimer = null;
     }
     state.frameListDirty = false;
-    renderFrames([]);
+    state.uartNeedsFullRender = true;
+    state.uartRenderedFrameCount = 0;
+    state.uartRenderedFirstKey = null;
+    state.uartSelectedFrameKey = null;
+    renderUartTerminal([]);
+    renderUartInspector(null);
+    if (state.snapshot) {
+      renderSummary(state.snapshot);
+    }
   });
   els["clear-events"].addEventListener("click", () => {
     if (state.snapshot) {
@@ -209,6 +277,17 @@ function bindControls() {
     state.eventListDirty = false;
     renderEvents([]);
   });
+
+  updateUartFiltersFromControls();
+}
+
+function updateUartFiltersFromControls() {
+  state.uartFilters = {
+    tx: Boolean(els["uart-filter-tx"]?.checked),
+    rx: Boolean(els["uart-filter-rx"]?.checked),
+    errorsOnly: Boolean(els["uart-errors-only"]?.checked),
+    search: (els["uart-search"]?.value || "").trim().toLowerCase(),
+  };
 }
 
 function bindTabs() {
@@ -228,7 +307,10 @@ function bindTabs() {
 
 function getTabFromHash() {
   const hash = window.location.hash.replace(/^#/, "").trim().toLowerCase();
-  const validTabs = new Set(["overview", "controller", "telemetry", "frames", "events"]);
+  if (hash === "frames") {
+    return "uart";
+  }
+  const validTabs = new Set(["overview", "controller", "telemetry", "uart", "events"]);
   return validTabs.has(hash) ? hash : "overview";
 }
 
@@ -255,8 +337,8 @@ function setActiveTab(tabName, { updateHash = true } = {}) {
     }
   }
 
-  if (tabName === "frames" && state.frameListDirty && !state.framePaused) {
-    renderFrames(state.snapshot?.recent_frames || []);
+  if (tabName === "uart" && state.frameListDirty) {
+    renderUartTerminal(state.snapshot?.recent_frames || [], { forceFull: true });
   }
   if (tabName === "events" && state.eventListDirty && !state.eventPaused) {
     renderEvents(state.snapshot?.recent_events || []);
@@ -419,15 +501,17 @@ function applySnapshot(snapshot) {
   state.chartSampleMs = 0;
   renderSession(snapshot);
   renderSummary(snapshot);
+  renderUartSummary(snapshot);
   renderCommand(snapshot.last_host_command || {});
   renderControllerLayout(snapshot.controller_layout || []);
   renderController(snapshot.controller_state || {});
   renderTelemetry(snapshot.latest_mcu_status || null);
   renderFaults(snapshot.recent_faults || []);
-  if (state.activeTab === "frames") {
-    renderFrames(snapshot.recent_frames || []);
+  if (state.activeTab === "uart") {
+    renderUartTerminal(snapshot.recent_frames || [], { forceFull: true });
   } else {
     state.frameListDirty = true;
+    state.uartNeedsFullRender = true;
   }
   if (state.activeTab === "events") {
     renderEvents(snapshot.recent_events || []);
@@ -516,6 +600,19 @@ function renderSummary(snapshot) {
   }
   els["telemetry-chip"].textContent = telemetryText;
   els["telemetry-chip"].className = telemetryClass;
+  renderUartSummary(snapshot);
+}
+
+function renderUartSummary(snapshot) {
+  const counters = snapshot?.counters || {};
+  const health = snapshot?.health || {};
+  els["uart-summary-port"].textContent = snapshot?.port || "demo";
+  els["uart-summary-baud"].textContent = String(snapshot?.baudrate || 115200);
+  els["uart-summary-tx"].textContent = counters.tx_frames ?? 0;
+  els["uart-summary-rx"].textContent = counters.rx_frames ?? 0;
+  els["uart-summary-checksum"].textContent = counters.checksum_errors ?? 0;
+  els["uart-summary-serial"].textContent = counters.serial_errors ?? 0;
+  els["uart-summary-last-frame"].textContent = formatTimestamp(health.last_frame_at);
 }
 
 function renderHealth(snapshot) {
@@ -717,17 +814,37 @@ function renderFaults(faults) {
   els["fault-list"].innerHTML = items;
 }
 
-function renderFrames(frames) {
+function renderUartTerminal(frames, { forceFull = false } = {}) {
   state.frameListDirty = false;
-  if (!frames.length) {
-    els["frame-list"].innerHTML = `<div class="placeholder">No frame activity yet.</div>`;
+  const safeFrames = Array.isArray(frames) ? frames : [];
+  let selectedFrame = findSelectedUartFrame(safeFrames);
+
+  if (!safeFrames.length) {
+    els["uart-terminal"].innerHTML = `<div class="placeholder">No UART activity yet.</div>`;
+    state.uartNeedsFullRender = false;
+    state.uartRenderedFrameCount = 0;
+    state.uartRenderedFirstKey = null;
+    renderUartInspector(null);
     return;
   }
-  els["frame-list"].innerHTML = groupConsecutiveFrames(frames)
-    .slice()
-    .reverse()
-    .map((group) => createFrameGroupItem(group))
-    .join("");
+
+  if (!forceFull && canIncrementallyAppendUart(safeFrames)) {
+    appendUartRows(safeFrames.slice(state.uartRenderedFrameCount), safeFrames);
+    updateUartRenderTracking(safeFrames);
+  } else {
+    rebuildUartTerminal(safeFrames);
+  }
+
+  if (!selectedFrame && state.uartSelectedFrameKey) {
+    state.uartSelectedFrameKey = null;
+  }
+  selectedFrame = findSelectedUartFrame(safeFrames);
+  state.uartNeedsFullRender = false;
+  renderUartInspector(selectedFrame);
+  syncSelectedUartRow();
+  if (state.uartAutoScroll) {
+    scrollUartTerminalToBottom();
+  }
 }
 
 function renderEvents(events) {
@@ -753,8 +870,25 @@ function appendFrame(frame) {
     return;
   }
   const frames = Array.isArray(state.snapshot.recent_frames) ? state.snapshot.recent_frames : [];
-  state.snapshot.recent_frames = limitList([...frames, frame], 200);
-  queueFrameRender();
+  state.snapshot.recent_frames = limitList([...frames, frame], FRAME_SCROLLBACK_LIMIT);
+
+  const counters = { ...(state.snapshot.counters || {}) };
+  if (frame.direction === "tx") {
+    counters.tx_frames = (counters.tx_frames ?? 0) + 1;
+  } else {
+    counters.rx_frames = (counters.rx_frames ?? 0) + 1;
+  }
+  if (!frame.checksum_ok) {
+    counters.checksum_errors = (counters.checksum_errors ?? 0) + 1;
+  }
+  state.snapshot.counters = counters;
+  state.snapshot.health = {
+    ...(state.snapshot.health || {}),
+    last_frame_at: frame.timestamp,
+  };
+
+  renderSummary(state.snapshot);
+  queueFrameRender({ forceFull: !isDefaultUartView() });
 }
 
 function appendEvent(event) {
@@ -762,7 +896,7 @@ function appendEvent(event) {
     return;
   }
   const events = Array.isArray(state.snapshot.recent_events) ? state.snapshot.recent_events : [];
-  state.snapshot.recent_events = limitList([...events, event], 50);
+  state.snapshot.recent_events = limitList([...events, event], EVENT_SCROLLBACK_LIMIT);
   queueEventRender();
 }
 
@@ -795,9 +929,12 @@ function appendTelemetrySample(status) {
   renderCharts(state.snapshot.telemetry_samples);
 }
 
-function queueFrameRender() {
+function queueFrameRender({ forceFull = false } = {}) {
   state.frameListDirty = true;
-  if (state.framePaused || state.activeTab !== "frames") {
+  if (forceFull) {
+    state.uartNeedsFullRender = true;
+  }
+  if (state.framePaused || state.activeTab !== "uart") {
     return;
   }
   if (state.frameRenderTimer !== null) {
@@ -805,8 +942,8 @@ function queueFrameRender() {
   }
   state.frameRenderTimer = window.setTimeout(() => {
     state.frameRenderTimer = null;
-    if (!state.framePaused && state.activeTab === "frames") {
-      renderFrames(state.snapshot?.recent_frames || []);
+    if (!state.framePaused && state.activeTab === "uart") {
+      renderUartTerminal(state.snapshot?.recent_frames || [], { forceFull: state.uartNeedsFullRender });
     }
   }, LOG_RENDER_INTERVAL_MS);
 }
@@ -889,52 +1026,251 @@ function createLogItem({ title, timestamp, body, extra }) {
   `;
 }
 
-function createFrameGroupItem(group) {
-  const repetition = group.repeatCount > 1 ? `${group.repeatCount} consecutive frames` : "Single frame";
-  const checksumText = group.frame.checksum_ok ? "Checksum OK" : "Checksum mismatch";
-  const timeText = group.repeatCount > 1
-    ? `First ${formatTimestamp(group.firstTimestamp)} · Latest ${formatTimestamp(group.latestTimestamp)}`
-    : formatTimestamp(group.latestTimestamp);
+function rebuildUartTerminal(frames) {
+  const filteredFrames = getFilteredUartFrames(frames);
+  if (!filteredFrames.length) {
+    els["uart-terminal"].innerHTML = `<div class="placeholder">No UART frames match the current filters.</div>`;
+    updateUartRenderTracking(frames);
+    return;
+  }
+
+  els["uart-terminal"].innerHTML = filteredFrames
+    .map((item) => createUartLine(item.frame, item.previousFrame))
+    .join("");
+  updateUartRenderTracking(frames);
+}
+
+function appendUartRows(newFrames, allFrames) {
+  const fragment = newFrames
+    .map((frame, offset) => {
+      const absoluteIndex = state.uartRenderedFrameCount + offset;
+      const previousFrame = absoluteIndex > 0 ? allFrames[absoluteIndex - 1] : null;
+      return createUartLine(frame, previousFrame);
+    })
+    .join("");
+
+  if (els["uart-terminal"].querySelector(".placeholder")) {
+    els["uart-terminal"].innerHTML = "";
+  }
+  els["uart-terminal"].insertAdjacentHTML("beforeend", fragment);
+}
+
+function createUartLine(frame, previousFrame) {
+  const deltaMs = previousFrame ? Math.max(0, (Number(frame.timestamp || 0) - Number(previousFrame.timestamp || 0)) * 1000) : null;
+  const rawBytes = getRawBytes(frame.raw_hex);
+  const checksumLabel = frame.checksum_ok ? "Checksum OK" : "Checksum error";
+  const direction = String(frame.direction || "?").toLowerCase();
+  const frameKey = createFrameKey(frame);
+  const lineClasses = ["uart-line", direction];
+  if (!frame.checksum_ok || frame.decoded?.error) {
+    lineClasses.push("error");
+  }
 
   return `
-    <article class="log-item">
-      <div class="log-meta">
-        <span class="log-title">${escapeHtml(`${group.frame.direction?.toUpperCase() || "?"} · ${group.frame.frame_name || group.frame.frame_id}`)}</span>
-        <span>${escapeHtml(timeText)}</span>
+    <button type="button" class="${lineClasses.join(" ")}" data-frame-key="${escapeHtml(frameKey)}">
+      <div class="uart-line-meta">
+        <div class="uart-line-header">
+          <span class="uart-line-title">${escapeHtml(frame.frame_name || `frame_${frame.frame_id}`)}</span>
+          <span class="uart-line-badge ${direction}">${escapeHtml(direction.toUpperCase())}</span>
+          <span class="uart-line-badge ${frame.checksum_ok ? "ok" : "error"}">${escapeHtml(checksumLabel)}</span>
+          <span class="uart-line-badge">${escapeHtml(`0x${Number(frame.frame_id || 0).toString(16).padStart(2, "0")}`)}</span>
+          <span class="uart-line-badge">${escapeHtml(`${rawBytes.length} bytes`)}</span>
+        </div>
+        <div class="uart-line-time">${escapeHtml(`${formatTimestamp(frame.timestamp)}${deltaMs === null ? "" : ` · +${deltaMs.toFixed(1)} ms`}`)}</div>
       </div>
-      <div class="log-body">${escapeHtml(`${checksumText} · ${repetition}`)}</div>
-      <div class="log-code">${escapeHtml(`${JSON.stringify(group.frame.decoded)}\n${group.frame.raw_hex}`)}</div>
+      <div class="uart-line-preview raw">${escapeHtml(compactRawHex(frame.raw_hex))}</div>
+      <div class="uart-line-preview decoded">${escapeHtml(compactDecoded(frame.decoded))}</div>
+    </button>
+  `;
+}
+
+function getFilteredUartFrames(frames) {
+  return frames
+    .map((frame, index) => ({
+      frame,
+      previousFrame: index > 0 ? frames[index - 1] : null,
+    }))
+    .filter(({ frame }) => frameMatchesUartFilters(frame));
+}
+
+function frameMatchesUartFilters(frame) {
+  const filters = state.uartFilters;
+  const direction = String(frame.direction || "").toLowerCase();
+  if (direction === "tx" && !filters.tx) {
+    return false;
+  }
+  if (direction === "rx" && !filters.rx) {
+    return false;
+  }
+  if (filters.errorsOnly && frame.checksum_ok && !frame.decoded?.error) {
+    return false;
+  }
+  if (!filters.search) {
+    return true;
+  }
+  const haystack = JSON.stringify([
+    frame.frame_name || "",
+    frame.frame_id || "",
+    frame.raw_hex || "",
+    frame.decoded || {},
+  ]).toLowerCase();
+  return haystack.includes(filters.search);
+}
+
+function canIncrementallyAppendUart(frames) {
+  if (state.uartNeedsFullRender || !isDefaultUartView()) {
+    return false;
+  }
+  if (!state.uartRenderedFrameCount) {
+    return false;
+  }
+  if (frames.length <= state.uartRenderedFrameCount) {
+    return false;
+  }
+  return createFrameKey(frames[0]) === state.uartRenderedFirstKey;
+}
+
+function isDefaultUartView() {
+  const filters = state.uartFilters;
+  return filters.tx && filters.rx && !filters.errorsOnly && !filters.search;
+}
+
+function updateUartRenderTracking(frames) {
+  state.uartRenderedFrameCount = frames.length;
+  state.uartRenderedFirstKey = frames.length ? createFrameKey(frames[0]) : null;
+}
+
+function selectUartFrame(frameKey) {
+  state.uartSelectedFrameKey = frameKey || null;
+  renderUartInspector(findSelectedUartFrame(state.snapshot?.recent_frames || []));
+  syncSelectedUartRow();
+}
+
+function findSelectedUartFrame(frames) {
+  if (!state.uartSelectedFrameKey) {
+    return null;
+  }
+  return frames.find((frame) => createFrameKey(frame) === state.uartSelectedFrameKey) || null;
+}
+
+function syncSelectedUartRow() {
+  els["uart-terminal"].querySelectorAll("[data-frame-key]").forEach((node) => {
+    node.classList.toggle("selected", node.dataset.frameKey === state.uartSelectedFrameKey);
+  });
+}
+
+function renderUartInspector(frame) {
+  if (!frame) {
+    els["uart-inspector"].innerHTML = `<div class="placeholder">Select a UART frame to inspect its decoded fields and byte layout.</div>`;
+    return;
+  }
+
+  const rawBytes = getRawBytes(frame.raw_hex);
+  const ascii = rawBytes.map((byte) => (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : ".")).join("");
+  const payloadBytes = rawBytes.slice(2, -1);
+  const direction = String(frame.direction || "?").toUpperCase();
+
+  els["uart-inspector"].innerHTML = `
+    <div class="uart-inspector-meta">
+      <article class="uart-inspector-card">
+        <span>Direction</span>
+        <strong>${escapeHtml(direction)}</strong>
+      </article>
+      <article class="uart-inspector-card">
+        <span>Frame</span>
+        <strong>${escapeHtml(`${frame.frame_name || "frame"} (0x${Number(frame.frame_id || 0).toString(16).padStart(2, "0")})`)}</strong>
+      </article>
+      <article class="uart-inspector-card">
+        <span>Timestamp</span>
+        <strong>${escapeHtml(formatTimestamp(frame.timestamp))}</strong>
+      </article>
+      <article class="uart-inspector-card">
+        <span>Status</span>
+        <strong>${escapeHtml(frame.checksum_ok ? "Checksum OK" : "Checksum error")}</strong>
+      </article>
+    </div>
+
+    <article class="uart-inspector-block">
+      <h3>Byte Breakdown</h3>
+      <div class="byte-breakdown">
+        <div class="byte-breakdown-row">
+          <span>Sync</span>
+          <div class="byte-segment">${renderByteTokens(rawBytes.slice(0, 1), "sync")}</div>
+        </div>
+        <div class="byte-breakdown-row">
+          <span>Frame ID</span>
+          <div class="byte-segment">${renderByteTokens(rawBytes.slice(1, 2), "frame-id")}</div>
+        </div>
+        <div class="byte-breakdown-row">
+          <span>Payload</span>
+          <div class="byte-segment">${renderByteTokens(payloadBytes, "")}</div>
+        </div>
+        <div class="byte-breakdown-row">
+          <span>Checksum</span>
+          <div class="byte-segment">${renderByteTokens(rawBytes.slice(-1), "checksum")}</div>
+        </div>
+      </div>
+    </article>
+
+    <article class="uart-inspector-block">
+      <h3>Decoded JSON</h3>
+      <pre>${escapeHtml(JSON.stringify(frame.decoded || {}, null, 2))}</pre>
+    </article>
+
+    <article class="uart-inspector-block">
+      <h3>Raw Hex</h3>
+      <pre>${escapeHtml(frame.raw_hex || "")}</pre>
+    </article>
+
+    <article class="uart-inspector-block">
+      <h3>ASCII Preview</h3>
+      <pre>${escapeHtml(ascii || "(non-printable)")}</pre>
     </article>
   `;
 }
 
-function groupConsecutiveFrames(frames) {
-  const groups = [];
-  frames.forEach((frame) => {
-    const signature = JSON.stringify([
-      frame.direction,
-      frame.frame_id,
-      frame.frame_name,
-      frame.raw_hex,
-      frame.checksum_ok,
-      frame.decoded,
-    ]);
-    const previous = groups[groups.length - 1];
-    if (previous && previous.signature === signature) {
-      previous.repeatCount += 1;
-      previous.latestTimestamp = frame.timestamp;
-      previous.frame = frame;
-      return;
-    }
-    groups.push({
-      signature,
-      frame,
-      repeatCount: 1,
-      firstTimestamp: frame.timestamp,
-      latestTimestamp: frame.timestamp,
-    });
-  });
-  return groups;
+function renderByteTokens(bytes, tokenClass) {
+  if (!bytes.length) {
+    return `<span class="mono-muted">none</span>`;
+  }
+  return bytes
+    .map((byte) => `<span class="byte-token ${tokenClass}">${escapeHtml(byte.toString(16).padStart(2, "0"))}</span>`)
+    .join("");
+}
+
+function createFrameKey(frame) {
+  return [
+    Number(frame.timestamp || 0).toFixed(6),
+    frame.direction || "?",
+    frame.frame_id || 0,
+    frame.raw_hex || "",
+  ].join("|");
+}
+
+function compactRawHex(rawHex, limit = 56) {
+  const safe = String(rawHex || "").trim();
+  return safe.length > limit ? `${safe.slice(0, limit)}...` : safe;
+}
+
+function compactDecoded(decoded, limit = 120) {
+  const safe = JSON.stringify(decoded || {});
+  return safe.length > limit ? `${safe.slice(0, limit)}...` : safe;
+}
+
+function getRawBytes(rawHex) {
+  if (!rawHex) {
+    return [];
+  }
+  return String(rawHex)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => Number.parseInt(token, 16))
+    .filter((value) => Number.isFinite(value));
+}
+
+function scrollUartTerminalToBottom() {
+  els["uart-terminal"].scrollTop = els["uart-terminal"].scrollHeight;
 }
 
 function positionStick(node, vectorNode, x, y) {
