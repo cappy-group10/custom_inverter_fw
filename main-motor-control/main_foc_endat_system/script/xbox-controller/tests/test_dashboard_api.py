@@ -3,9 +3,9 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 import uvicorn
 
-import dashboard
-from dashboard import DashboardServer, create_app
-from runtime_models import ControllerLayoutDescriptor, SessionSnapshot, to_payload
+from xbox_controller import dashboard
+from xbox_controller.dashboard import DashboardServer, create_app
+from xbox_controller.runtime_models import ControllerLayoutDescriptor, SessionSnapshot, to_payload
 
 
 class StubRuntime:

@@ -67,11 +67,12 @@ On macOS LaunchXL/XDS110 setups, the higher-numbered `usbmodem` port is often th
 
 ## Architecture
 
-- `controller.py` — polls pygame, normalizes D-pad input, and stores a `ControllerState`.
-- `mapping.py` — converts controller state into drive or music commands.
-- `uart.py` — packs host commands into frames and parses MCU status/fault frames with thread-safe buffers.
-- `runtime.py` — shared drive-mode control loop used by both the CLI and the dashboard backend.
-- `dashboard.py` — FastAPI app with websocket streaming for the browser UI.
+- `xbox_controller/` — Python backend package for the CLI, runtime, UART transport, logging, and FastAPI dashboard server.
+- `xbox_controller/controller.py` — polls pygame, normalizes D-pad input, and stores a `ControllerState`.
+- `xbox_controller/mapping.py` — converts controller state into drive or music commands.
+- `xbox_controller/uart.py` — packs host commands into frames and parses MCU status/fault frames with thread-safe buffers.
+- `xbox_controller/runtime.py` — shared drive-mode control loop used by both the CLI and the dashboard backend.
+- `xbox_controller/dashboard.py` — FastAPI app with websocket streaming for the browser UI.
 - `src/` — React + TypeScript source for the multi-page operator frontend.
 - `dashboard_static/` — built Vite output served by FastAPI in production mode.
 

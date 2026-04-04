@@ -3,10 +3,11 @@
 
 import argparse
 import time
-from controller import XboxController, ButtonEdge
-from mapping import DriveMapping, MusicalMapping
-from runtime import DriveRuntime, POLL_RATE_HZ
-from uart import UARTLink
+
+from .controller import XboxController, ButtonEdge
+from .mapping import DriveMapping, MusicalMapping
+from .runtime import DriveRuntime, POLL_RATE_HZ
+from .uart import UARTLink
 
 
 def _parse_args():

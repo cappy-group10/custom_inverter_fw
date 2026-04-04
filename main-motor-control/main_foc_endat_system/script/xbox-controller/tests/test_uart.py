@@ -2,8 +2,8 @@ import struct
 
 import pytest
 
-from commands import CtrlState, MotorCommand
-from uart import FRAME_STATUS, RX_SYNC, TX_MOTOR_LEN, MCUStatus, UARTLink
+from xbox_controller.commands import CtrlState, MotorCommand
+from xbox_controller.uart import FRAME_STATUS, RX_SYNC, TX_MOTOR_LEN, MCUStatus, UARTLink
 
 
 def build_status_frame(link: UARTLink, status: MCUStatus) -> bytes:

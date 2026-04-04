@@ -15,15 +15,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from serial.tools import list_ports
 
-from app_logging import create_timestamped_loggers
-from commands import CtrlState
-from runtime import DriveRuntime
-from runtime_models import to_payload
+from .app_logging import create_timestamped_loggers
+from .commands import CtrlState
+from .runtime import DriveRuntime
+from .runtime_models import to_payload
 
 
-STATIC_DIR = Path(__file__).with_name("dashboard_static")
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = PROJECT_DIR / "dashboard_static"
 FRONTEND_ENTRY = STATIC_DIR / "index.html"
-LOG_DIR = Path(__file__).with_name("log")
+LOG_DIR = PROJECT_DIR / "log"
 UNKNOWN_PORT_TEXT = {"", "n/a", "none", "unknown"}
 PRIMARY_MCU_ID = "primary"
 

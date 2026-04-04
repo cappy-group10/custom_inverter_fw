@@ -10,9 +10,9 @@ from dataclasses import dataclass
 
 import serial
 
-from app_logging import NullStructuredLogger
-from commands import MotorCommand, MusicCommand, CtrlState
-from runtime_models import FrameRecord, to_payload
+from .app_logging import NullStructuredLogger
+from .commands import MotorCommand, MusicCommand, CtrlState
+from .runtime_models import FrameRecord, to_payload
 
 
 # ---------------------------------------------------------------------------

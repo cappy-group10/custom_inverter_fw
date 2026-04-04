@@ -1,13 +1,15 @@
 import time
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pygame
+import pytest
 
-from commands import CtrlState
-from controller import ButtonEdge, ButtonEvent, ControllerState, XboxController
-from runtime import DriveRuntime
-from runtime_models import FrameRecord, to_payload
-from uart import FRAME_FAULT, FRAME_STATUS, MCUFault, MCUStatus, UARTCounters, UARTHealth
+from xbox_controller.commands import CtrlState
+from xbox_controller.controller import ButtonEdge, ButtonEvent, ControllerState, XboxController
+from xbox_controller.runtime import DriveRuntime
+from xbox_controller.runtime_models import FrameRecord, to_payload
+from xbox_controller.uart import FRAME_FAULT, FRAME_STATUS, MCUFault, MCUStatus, UARTCounters, UARTHealth
 
 
 class FakeJoystick:
@@ -15,6 +17,8 @@ class FakeJoystick:
         self.hat = (0, 0)
         self.axes = []
         self.buttons = [False] * 15
+        self.instance_id = 77
+        self.initialized = True
 
     def get_numaxes(self):
         return len(self.axes)
@@ -33,6 +37,15 @@ class FakeJoystick:
 
     def get_hat(self, _index):
         return self.hat
+
+    def get_instance_id(self):
+        return self.instance_id
+
+    def get_init(self):
+        return self.initialized
+
+    def quit(self):
+        self.initialized = False
 
 
 class FakeController:
@@ -80,6 +93,11 @@ class FakeController:
 class BrokenController(FakeController):
     def poll(self):
         raise RuntimeError("controller poll failed")
+
+
+class DisconnectingController(FakeController):
+    def poll(self):
+        raise RuntimeError("Controller disconnected during runtime")
 
 
 class IdleController(FakeController):
@@ -243,6 +261,8 @@ def test_dpad_hat_generates_normalized_button_edges(monkeypatch):
         controller.state.buttons[name] = False
 
     monkeypatch.setattr(pygame.event, "pump", lambda: None)
+    monkeypatch.setattr(pygame.event, "get", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(pygame.joystick, "get_count", lambda: 1)
 
     joystick.hat = (0, 1)
     controller.poll()
@@ -255,6 +275,28 @@ def test_dpad_hat_generates_normalized_button_edges(monkeypatch):
     second_events = controller.drain_events()
     assert any(event.button == "dpad_up" and event.edge == ButtonEdge.RELEASED for event in second_events)
     assert controller.state.buttons["dpad_up"] is False
+
+
+def test_controller_poll_detects_disconnected_controller(monkeypatch):
+    joystick = FakeJoystick()
+    controller = XboxController()
+    controller.connected = True
+    controller._joystick = joystick
+    controller._instance_id = joystick.instance_id
+    controller.name = "Fake Pad"
+
+    monkeypatch.setattr(pygame.event, "pump", lambda: None)
+    monkeypatch.setattr(
+        pygame.event,
+        "get",
+        lambda *_args, **_kwargs: [SimpleNamespace(type=pygame.JOYDEVICEREMOVED, instance_id=joystick.instance_id)],
+    )
+
+    with pytest.raises(RuntimeError, match="Controller disconnected during runtime"):
+        controller.poll()
+
+    assert controller.connected is False
+    assert controller.name == ""
 
 
 def test_controller_trigger_rest_state_defaults_to_negative_one():
@@ -325,6 +367,18 @@ def test_drive_runtime_surfaces_background_errors():
 
     assert snapshot.session_state == "error"
     assert "controller poll failed" in snapshot.last_error
+
+
+def test_drive_runtime_marks_controller_disconnected_when_unplugged():
+    runtime = DriveRuntime(controller_factory=DisconnectingController, link_factory=FakeLink)
+    runtime.start(port="demo", baudrate=115200, joystick_index=0)
+
+    assert wait_for(lambda: runtime.get_snapshot().session_state == "error")
+    snapshot = runtime.stop()
+
+    assert snapshot.session_state == "error"
+    assert snapshot.controller_connected is False
+    assert "Controller disconnected during runtime" in snapshot.last_error
 
 
 def test_drive_runtime_does_not_keepalive_when_command_is_idle(monkeypatch):

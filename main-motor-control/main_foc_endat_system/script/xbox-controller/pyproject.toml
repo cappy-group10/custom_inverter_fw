@@ -22,8 +22,8 @@ dev = [
 ]
 
 [project.scripts]
-xbox-ctrl = "main:main"
-xbox-dashboard = "dashboard:main"
+xbox-ctrl = "xbox_controller.main:main"
+xbox-dashboard = "xbox_controller.dashboard:main"
 
 [tool.setuptools]
-py-modules = ["main", "controller", "commands", "mapping", "uart", "runtime", "runtime_models", "dashboard", "app_logging"]
+packages = ["xbox_controller"]

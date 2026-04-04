@@ -107,6 +107,7 @@ class XboxController:
         self._index = joystick_index
         self._deadzone = deadzone
         self._joystick: pygame.joystick.JoystickType | None = None
+        self._instance_id: int | None = None
         self.state = ControllerState()
         self.connected = False
         self.name = ""
@@ -130,6 +131,7 @@ class XboxController:
 
         self._joystick = pygame.joystick.Joystick(self._index)
         self._joystick.init()
+        self._instance_id = self._joystick.get_instance_id()
         self.connected = True
         self.name = self._joystick.get_name()
 
@@ -151,6 +153,7 @@ class XboxController:
         if self._joystick:
             self._joystick.quit()
             self._joystick = None
+        self._instance_id = None
         self.connected = False
         self.name = ""
         pygame.quit()
@@ -166,45 +169,60 @@ class XboxController:
             raise RuntimeError("Controller not connected. Call connect() first.")
 
         pygame.event.pump()
+        removed_events = pygame.event.get([pygame.JOYDEVICEREMOVED])
 
         js = self._joystick
+        if not js.get_init():
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime")
+        if any(getattr(event, "instance_id", None) == self._instance_id for event in removed_events):
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime")
+        if pygame.joystick.get_count() == 0:
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime")
+
         num_axes = js.get_numaxes()
         raw_dpad_buttons = {name: False for name in D_PAD_BUTTON_NAMES}
 
-        # Axes
-        if num_axes > AXIS_LEFT_X:
-            self.state.left_x = self._apply_deadzone(js.get_axis(AXIS_LEFT_X))
-        if num_axes > AXIS_LEFT_Y:
-            self.state.left_y = self._apply_deadzone(js.get_axis(AXIS_LEFT_Y))
-        if num_axes > AXIS_RIGHT_X:
-            self.state.right_x = self._apply_deadzone(js.get_axis(AXIS_RIGHT_X))
-        if num_axes > AXIS_RIGHT_Y:
-            self.state.right_y = self._apply_deadzone(js.get_axis(AXIS_RIGHT_Y))
-        if num_axes > AXIS_LEFT_TRIGGER:
-            self.state.left_trigger = js.get_axis(AXIS_LEFT_TRIGGER)
-        if num_axes > AXIS_RIGHT_TRIGGER:
-            self.state.right_trigger = js.get_axis(AXIS_RIGHT_TRIGGER)
+        try:
+            # Axes
+            if num_axes > AXIS_LEFT_X:
+                self.state.left_x = self._apply_deadzone(js.get_axis(AXIS_LEFT_X))
+            if num_axes > AXIS_LEFT_Y:
+                self.state.left_y = self._apply_deadzone(js.get_axis(AXIS_LEFT_Y))
+            if num_axes > AXIS_RIGHT_X:
+                self.state.right_x = self._apply_deadzone(js.get_axis(AXIS_RIGHT_X))
+            if num_axes > AXIS_RIGHT_Y:
+                self.state.right_y = self._apply_deadzone(js.get_axis(AXIS_RIGHT_Y))
+            if num_axes > AXIS_LEFT_TRIGGER:
+                self.state.left_trigger = js.get_axis(AXIS_LEFT_TRIGGER)
+            if num_axes > AXIS_RIGHT_TRIGGER:
+                self.state.right_trigger = js.get_axis(AXIS_RIGHT_TRIGGER)
 
-        # Buttons — detect edges and buffer events
-        for i in range(js.get_numbuttons()):
-            name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
-            now = bool(js.get_button(i))
-            if name in D_PAD_BUTTON_NAMES:
-                raw_dpad_buttons[name] = now
-                continue
-            prev = self._prev_buttons.get(name, False)
+            # Buttons — detect edges and buffer events
+            for i in range(js.get_numbuttons()):
+                name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
+                now = bool(js.get_button(i))
+                if name in D_PAD_BUTTON_NAMES:
+                    raw_dpad_buttons[name] = now
+                    continue
+                prev = self._prev_buttons.get(name, False)
 
-            if now and not prev:
-                self.events.append(ButtonEvent(name, ButtonEdge.PRESSED))
-            elif not now and prev:
-                self.events.append(ButtonEvent(name, ButtonEdge.RELEASED))
+                if now and not prev:
+                    self.events.append(ButtonEvent(name, ButtonEdge.PRESSED))
+                elif not now and prev:
+                    self.events.append(ButtonEvent(name, ButtonEdge.RELEASED))
 
-            self.state.buttons[name] = now
-            self._prev_buttons[name] = now
+                self.state.buttons[name] = now
+                self._prev_buttons[name] = now
 
-        # D-pad (hat)
-        if js.get_numhats() > 0:
-            self.state.dpad = js.get_hat(0)
+            # D-pad (hat)
+            if js.get_numhats() > 0:
+                self.state.dpad = js.get_hat(0)
+        except pygame.error as exc:
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime") from exc
 
         hat_x, hat_y = self.state.dpad
         normalized_dpad = {

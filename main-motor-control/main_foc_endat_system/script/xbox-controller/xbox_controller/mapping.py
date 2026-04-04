@@ -3,9 +3,9 @@
 
 from abc import ABC, abstractmethod
 
-from commands import MotorCommand, MusicCommand, CtrlState, CommandLimits
-from controller import ControllerState, ButtonEvent, ButtonEdge
-from runtime_models import ControllerLayoutDescriptor
+from .commands import MotorCommand, MusicCommand, CtrlState, CommandLimits
+from .controller import ControllerState, ButtonEvent, ButtonEdge
+from .runtime_models import ControllerLayoutDescriptor
 
 
 class InputMapping(ABC):
