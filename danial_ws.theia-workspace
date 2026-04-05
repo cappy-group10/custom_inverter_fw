@@ -8,6 +8,9 @@
     },
     {
       "path": "file:///Users/danialnoorizadeh/workspace_ccstheia/manual_test"
+    },
+    {
+      "path": "main-motor-control/main_foc_teknik"
     }
   ],
   "settings": {}
