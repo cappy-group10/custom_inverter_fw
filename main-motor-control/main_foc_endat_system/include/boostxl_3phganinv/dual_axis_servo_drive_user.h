@@ -177,9 +177,9 @@
 
 //
 // EnDat position-update definitions.
-// The dedicated EnDat producer runs independently at 4x the motor PWM rate.
+// The dedicated EnDat producer runs independently at 3x the motor PWM rate.
 //
-#define ENDAT_PRODUCER_RATE_RATIO       4U
+#define ENDAT_PRODUCER_RATE_RATIO       3U
 
 
 //
@@ -267,7 +267,7 @@
 #define M1_BASE_CURRENT     5.0  // Conservative positive current range limit (amp)
 #define M1_BASE_TORQUE      NULL  // Base torque (N.m)
 #define M1_BASE_FLUX        NULL  // Base flux linkage (volt.sec/rad)
-#define M1_BASE_FREQ        1000  // Base electrical frequency (Hz)
+#define M1_BASE_FREQ        250  // Base electrical frequency (Hz)
 #define M1_MAXIMUM_CURRENT  5.0   // Keep below the +5.56A ADC headroom
 
 #define M1_MAXIMUM_VOLTAGE  600.0   // DC bus maximum voltage (V)
