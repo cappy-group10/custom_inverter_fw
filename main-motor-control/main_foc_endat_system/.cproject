@@ -121,7 +121,7 @@
                         </toolChain>
                     </folderInfo>
                     <sourceEntries>
-                        <entry excluding="sources/endat/endat_commands_drivelib.c|sources/endat/endat_drivelib.c|include/sfra/lib|include/sfra/lib/sfra_f32_tmu_coff.lib|include/driverlib/ccs/Release|include/driverlib/ccs/Debug|src_device/F2837xD_Headers_nonBIOS_cpu1_eabi.cmd|src_driver/xbar.c|src_driver/sysctl.c|src_driver/sdfm.c|src_driver/spi.c|src_driver/sci.c|src_driver/memcfg.c|src_driver/interrupt.c|src_driver/gpio.c|src_driver/flash.c|src_driver/eqep.c|src_driver/cputimer.c|src_driver/cmpss.c|src_driver/cla.c|src_driver/adc.c|src_device/dual_axis_f2837x_flash_lnk_cpu1.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="include/sfra/lib|include/sfra/lib/sfra_f32_tmu_coff.lib|include/driverlib/ccs/Release|include/driverlib/ccs/Debug|src_device/F2837xD_Headers_nonBIOS_cpu1_eabi.cmd|src_driver/xbar.c|src_driver/sysctl.c|src_driver/sdfm.c|src_driver/spi.c|src_driver/sci.c|src_driver/memcfg.c|src_driver/interrupt.c|src_driver/gpio.c|src_driver/flash.c|src_driver/eqep.c|src_driver/cputimer.c|src_driver/cmpss.c|src_driver/cla.c|src_driver/adc.c|src_device/dual_axis_f2837x_flash_lnk_cpu1.cmd" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>
@@ -207,6 +207,8 @@
                                     <listOptionValue value="F2837x_DEVICE"/>
                                     <listOptionValue value="_LAUNCHXL_F28379D"/>
                                     <listOptionValue value="_BOOSTXL_3PHGANINV"/>
+                                    <listOptionValue value="DANIAL_BUILD_FIX"/>
+                                    <listOptionValue value="__TMS320C28XX__"/>
                                 </option>
                                 <option id="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DEBUGGING_MODEL.323825854" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DEBUGGING_MODEL" value="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DEBUGGING_MODEL.SYMDEBUG__DWARF" valueType="enumerated"/>
                                 <option id="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DIAG_SUPPRESS.815848313" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DIAG_SUPPRESS" valueType="stringList">

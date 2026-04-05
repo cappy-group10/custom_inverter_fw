@@ -104,7 +104,7 @@ static inline float32_t runSpeedFR(SPEED_MEAS_QEP * in)
 	in->OldElecTheta = in->ElecTheta;
 
 	// Change motor speed for pu to rpm value
-//	in->SpeedRpm = in->BaseRpm * in->Speed;
+	in->SpeedRpm = in->BaseRpm * in->Speed;
 
 	return(in->Speed);
 }

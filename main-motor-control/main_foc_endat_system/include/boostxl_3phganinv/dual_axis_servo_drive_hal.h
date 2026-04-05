@@ -91,30 +91,25 @@
 //
 // define EN_GATE and SPI_CS pin for DRV device for Motor 1
 //
+#define ENABLE_GATE        1           // Active low: 0, Active high: 1
+#define DISABLE_GATE       0
+
 #define M1_EN_GATE_GPIO         124         // NC: Set up based board
 #define M1_SPI_SCS_GPIO         61          // NC: Set up based board
 #define M1_nFAULT_GPIO          24          // NC: Set up based board
 #define M1_XBAR_INPUT_GPIO      24          // NC: Set up based board
 #define M1_XBAR_INPUT_NUM       XBAR_INPUT1
 #define M1_CLR_FAULT_GPIO       61
-//
-// define EN_GATE and SPI_CS pin for DRV device for Motor 2
-//
-#define M2_EN_GATE_GPIO         26          // NC: Set up based board
-#define M2_SPI_SCS_GPIO         66          // NC: Set up based board
-#define M2_nFAULT_GPIO          14          // NC: Set up based board
-#define M2_XBAR_INPUT_GPIO      14          // NC: Set up based board
-#define M2_XBAR_INPUT_NUM       XBAR_INPUT2
-#define M2_CLR_FAULT_GPIO       66
+
 //
 // define deadband delay cout for rising edge
 //
-#define EPWM_DB_DELAY_RISE  50      // 50*10ns=0.5us, EPWMCLK=100MHz
+#define EPWM_DB_DELAY_RISE  200      // 50*10ns=0.5us, EPWMCLK=100MHz
 
 //
 // define deadband delay cout for falling edge
 //
-#define EPWM_DB_DELAY_FALL  50      // 50*10ns=0.5us, EPWMCLK=100MHz
+#define EPWM_DB_DELAY_FALL  200      // 50*10ns=0.5us, EPWMCLK=100MHz
 
 //! \brief Enumeration for the Motor numbers
 //!
@@ -209,35 +204,12 @@ static inline void HAL_ackInt_M1(HAL_MTR_Handle handle)
     return;
 }
 
-//! \brief     Acknowledges an interrupt so that another INT can happen again.
-//! \param[in] handle     The hardware abstraction layer (HAL) handle
-static inline void HAL_ackInt_M2(HAL_MTR_Handle handle)
-{
-    HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
-
-    EPWM_clearEventTriggerInterruptFlag(obj->pwmHandle[0]);
-
-    //
-    // clear ADCINT1 INT and ack PIE INT
-    //
-    ADC_clearInterruptStatus(M2_IW_ADC_BASE, ADC_INT_NUMBER2);
-
-    //
-    // ACK PIE for CLA INT GROUP
-    // FCL is not clearing the ACK bit for CLA group
-    // because the example might have other CLA Tasks
-    // ACK the PWM, ADC and CLA interrupts
-    //
-    Interrupt_clearACKGroup( INTERRUPT_ACK_GROUP3  |
-                             INTERRUPT_ACK_GROUP11);
-    return;
-}
-
 //! \brief     Clear TZFLAG of EPWM modules.
 //! \param[in] handle     The hardware abstraction layer (HAL) handle
 static inline void HAL_clearTZFlag(HAL_MTR_Handle handle)
 {
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
+    uint16_t cnt;
 
     //
     // clear OST & DCAEVT1 flags
@@ -254,16 +226,18 @@ static inline void HAL_clearTZFlag(HAL_MTR_Handle handle)
     //
     // clear HLATCH - (not in TRIP gen path)
     //
-    CMPSS_clearFilterLatchHigh(obj->cmpssHandle[0]);
-    CMPSS_clearFilterLatchHigh(obj->cmpssHandle[1]);
-    CMPSS_clearFilterLatchHigh(obj->cmpssHandle[2]);
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
+    {
+        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cnt]);
+    }
 
     //
     // clear LLATCH - (not in TRIP gen path)
     //
-    CMPSS_clearFilterLatchLow(obj->cmpssHandle[0]);
-    CMPSS_clearFilterLatchLow(obj->cmpssHandle[1]);
-    CMPSS_clearFilterLatchLow(obj->cmpssHandle[2]);
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
+    {
+        CMPSS_clearFilterLatchLow(obj->cmpssHandle[cnt]);
+    }
 
     return;
 }
@@ -361,11 +335,6 @@ extern void HAL_setupDACs(HAL_Handle handle);
 //! \param[in] handle       The hardware abstraction layer (HAL) handle
 extern void HAL_setupGate(HAL_MTR_Handle handle,
                           const MOTOR_Num_e motorNum);
-
-//! \brief     Sets up the QEP peripheral
-//! \param[in] handle  The hardware abstraction layer (HAL) handle
-extern void HAL_setupQEP(HAL_MTR_Handle handle);
-
 
 //! \brief     Sets up the GPIO (General Purpose I/O) pins for test
 //! \param[in] handle  The hardware abstraction layer (HAL) handle

@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Xbox controller input handler using pygame."""
+
+import pygame
+from collections import deque
+from dataclasses import dataclass, field
+from enum import Enum, auto
+
+
+@dataclass
+class ControllerState:
+    """Snapshot of all controller inputs."""
+    # Axes as raw floats (-1.0 to 1.0)
+    left_x: float = 0.0
+    left_y: float = 0.0
+    right_x: float = 0.0
+    right_y: float = 0.0
+    left_trigger: float = -1.0
+    right_trigger: float = -1.0
+
+    # Button states (True = pressed)
+    buttons: dict[str, bool] = field(default_factory=dict)
+
+    # D-pad
+    dpad: tuple[int, int] = (0, 0)  # (x, y) each -1, 0, or 1
+
+    def left_x_u8(self) -> int:
+        """Left X axis scaled to 0-255."""
+        return int((self.left_x + 1.0) * 127.5)
+
+    def left_y_u8(self) -> int:
+        """Left Y axis scaled to 0-255."""
+        return int((self.left_y + 1.0) * 127.5)
+
+    def right_x_u8(self) -> int:
+        """Right X axis scaled to 0-255."""
+        return int((self.right_x + 1.0) * 127.5)
+
+    def right_y_u8(self) -> int:
+        """Right Y axis scaled to 0-255."""
+        return int((self.right_y + 1.0) * 127.5)
+
+    def buttons_mask(self) -> int:
+        """All buttons packed into a 16-bit bitmask."""
+        mask = 0
+        for i, pressed in enumerate(self.buttons.values()):
+            if pressed:
+                mask |= (1 << i)
+        return mask
+
+
+class ButtonEdge(Enum):
+    PRESSED = auto()
+    RELEASED = auto()
+
+
+@dataclass
+class ButtonEvent:
+    button: str
+    edge: ButtonEdge
+
+
+# Xbox controller button mapping (pygame index -> name)
+# Matches Xbox Wireless Controller on macOS via pygame
+XBOX_BUTTON_MAP = {
+    0: "a",
+    1: "b",
+    2: "x",
+    3: "y",
+    4: "lb",
+    5: "rb",
+    6: "back",
+    7: "start",
+    8: "guide",
+    9: "left_stick",
+    10: "right_stick",
+    11: "dpad_up",
+    12: "dpad_down",
+    13: "dpad_left",
+    14: "dpad_right",
+}
+
+D_PAD_BUTTON_NAMES = ("dpad_up", "dpad_down", "dpad_left", "dpad_right")
+
+# Axis mapping
+AXIS_LEFT_X = 0
+AXIS_LEFT_Y = 1
+AXIS_RIGHT_X = 2   # may be 3 on some systems
+AXIS_RIGHT_Y = 3   # may be 4 on some systems
+AXIS_LEFT_TRIGGER = 4   # may be 2 on some systems
+AXIS_RIGHT_TRIGGER = 5  # may be 5 on some systems
+
+
+class XboxController:
+    """Reads and stores Xbox controller input via pygame.
+
+    Usage:
+        ctrl = XboxController()
+        ctrl.connect()
+        while True:
+            ctrl.poll()
+            print(ctrl.state)
+    """
+
+    def __init__(self, joystick_index: int = 0, deadzone: float = 0.05,
+                 event_buffer_size: int = 64):
+        self._index = joystick_index
+        self._deadzone = deadzone
+        self._joystick: pygame.joystick.JoystickType | None = None
+        self._instance_id: int | None = None
+        self.state = ControllerState()
+        self.connected = False
+        self.name = ""
+        self._prev_buttons: dict[str, bool] = {}
+        self._prev_dpad: tuple[int, int] = (0, 0)
+        self.events: deque[ButtonEvent] = deque(maxlen=event_buffer_size)
+
+    def connect(self):
+        """Initialize pygame and connect to the controller."""
+        pygame.init()
+        pygame.joystick.init()
+
+        count = pygame.joystick.get_count()
+        if count == 0:
+            raise RuntimeError("No joystick detected. Is the Xbox controller connected?")
+
+        if self._index >= count:
+            raise RuntimeError(
+                f"Joystick index {self._index} out of range (found {count} controller(s))"
+            )
+
+        self._joystick = pygame.joystick.Joystick(self._index)
+        self._joystick.init()
+        self._instance_id = self._joystick.get_instance_id()
+        self.connected = True
+        self.name = self._joystick.get_name()
+
+        # Pre-populate button dict with names
+        for i in range(self._joystick.get_numbuttons()):
+            name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
+            self.state.buttons[name] = False
+        if self._joystick.get_numhats() > 0:
+            for name in D_PAD_BUTTON_NAMES:
+                self.state.buttons.setdefault(name, False)
+
+        print(f"Connected: {self.name}")
+        print(f"  Axes: {self._joystick.get_numaxes()}, "
+              f"Buttons: {self._joystick.get_numbuttons()}, "
+              f"Hats: {self._joystick.get_numhats()}")
+
+    def disconnect(self):
+        """Clean up pygame resources."""
+        if self._joystick:
+            self._joystick.quit()
+            self._joystick = None
+        self._instance_id = None
+        self.connected = False
+        self.name = ""
+        pygame.quit()
+
+    def _apply_deadzone(self, value: float) -> float:
+        if abs(value) < self._deadzone:
+            return 0.0
+        return value
+
+    def poll(self):
+        """Read the latest input from the controller and update self.state."""
+        if not self.connected or not self._joystick:
+            raise RuntimeError("Controller not connected. Call connect() first.")
+
+        pygame.event.pump()
+        removed_events = pygame.event.get([pygame.JOYDEVICEREMOVED])
+
+        js = self._joystick
+        if not js.get_init():
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime")
+        if any(getattr(event, "instance_id", None) == self._instance_id for event in removed_events):
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime")
+        if pygame.joystick.get_count() == 0:
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime")
+
+        num_axes = js.get_numaxes()
+        raw_dpad_buttons = {name: False for name in D_PAD_BUTTON_NAMES}
+
+        try:
+            # Axes
+            if num_axes > AXIS_LEFT_X:
+                self.state.left_x = self._apply_deadzone(js.get_axis(AXIS_LEFT_X))
+            if num_axes > AXIS_LEFT_Y:
+                self.state.left_y = self._apply_deadzone(js.get_axis(AXIS_LEFT_Y))
+            if num_axes > AXIS_RIGHT_X:
+                self.state.right_x = self._apply_deadzone(js.get_axis(AXIS_RIGHT_X))
+            if num_axes > AXIS_RIGHT_Y:
+                self.state.right_y = self._apply_deadzone(js.get_axis(AXIS_RIGHT_Y))
+            if num_axes > AXIS_LEFT_TRIGGER:
+                self.state.left_trigger = js.get_axis(AXIS_LEFT_TRIGGER)
+            if num_axes > AXIS_RIGHT_TRIGGER:
+                self.state.right_trigger = js.get_axis(AXIS_RIGHT_TRIGGER)
+
+            # Buttons — detect edges and buffer events
+            for i in range(js.get_numbuttons()):
+                name = XBOX_BUTTON_MAP.get(i, f"btn_{i}")
+                now = bool(js.get_button(i))
+                if name in D_PAD_BUTTON_NAMES:
+                    raw_dpad_buttons[name] = now
+                    continue
+                prev = self._prev_buttons.get(name, False)
+
+                if now and not prev:
+                    self.events.append(ButtonEvent(name, ButtonEdge.PRESSED))
+                elif not now and prev:
+                    self.events.append(ButtonEvent(name, ButtonEdge.RELEASED))
+
+                self.state.buttons[name] = now
+                self._prev_buttons[name] = now
+
+            # D-pad (hat)
+            if js.get_numhats() > 0:
+                self.state.dpad = js.get_hat(0)
+        except pygame.error as exc:
+            self.disconnect()
+            raise RuntimeError("Controller disconnected during runtime") from exc
+
+        hat_x, hat_y = self.state.dpad
+        normalized_dpad = {
+            "dpad_up": hat_y > 0 or raw_dpad_buttons["dpad_up"],
+            "dpad_down": hat_y < 0 or raw_dpad_buttons["dpad_down"],
+            "dpad_left": hat_x < 0 or raw_dpad_buttons["dpad_left"],
+            "dpad_right": hat_x > 0 or raw_dpad_buttons["dpad_right"],
+        }
+
+        for name, now in normalized_dpad.items():
+            prev = self._prev_buttons.get(name, False)
+            if now and not prev:
+                self.events.append(ButtonEvent(name, ButtonEdge.PRESSED))
+            elif not now and prev:
+                self.events.append(ButtonEvent(name, ButtonEdge.RELEASED))
+            self.state.buttons[name] = now
+            self._prev_buttons[name] = now
+
+        self._prev_dpad = self.state.dpad
+
+    def drain_events(self) -> list[ButtonEvent]:
+        """Return all buffered button events and clear the buffer."""
+        events = list(self.events)
+        self.events.clear()
+        return events

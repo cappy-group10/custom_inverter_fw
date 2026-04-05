@@ -150,8 +150,8 @@ SECTIONS
    .const           : > FLASHG, ALIGN(8)
 #else
    .pinit           : > FLASHG, ALIGN(8)
-   .ebss            : > RAMLS0 | RAMLS1
-   .esysmem         : > RAMLS0 | RAMLS1
+   .ebss            : >> RAMLS0 | RAMLS1 | RAMD0 | RAMD1, ALIGN(4)
+   .esysmem         : >> RAMLS0 | RAMLS1 | RAMD0 | RAMD1
    .cio             : > RAMLS0 | RAMLS1
    /* Initalized sections go in Flash */
    .econst          : > FLASHG, ALIGN(8)
@@ -219,7 +219,7 @@ SECTIONS
 #endif //CLA_C
 
 #if defined(__TI_EABI__)
-   .TI.ramfunc : {} LOAD = FLASHE,
+   .TI.ramfunc : { *(.TI.ramfunc) *(ramfuncs) } LOAD = FLASHE,
                     RUN = RAMGS0 | RAMGS1 | RAMGS2 | RAMGS3,
                     LOAD_START(RamfuncsLoadStart),
                     LOAD_SIZE(RamfuncsLoadSize),
@@ -229,7 +229,7 @@ SECTIONS
                     RUN_END(RamfuncsRunEnd),
                     ALIGN(4)
 #else
-   .TI.ramfunc : {} LOAD = FLASHE,
+   .TI.ramfunc : { *(.TI.ramfunc) *(ramfuncs) } LOAD = FLASHE,
                     RUN = RAMGS0 | RAMGS1 | RAMGS2 | RAMGS3,
                     LOAD_START(_RamfuncsLoadStart),
                     LOAD_SIZE(_RamfuncsLoadSize),

@@ -7,10 +7,7 @@
       "path": "main-motor-control/main_foc_endat_system"
     },
     {
-      "path": "main-motor-control/example_PM_endat22_init_drivelib"
-    },
-    {
-      "path": "endat"
+      "path": "file:///Users/danialnoorizadeh/workspace_ccstheia/manual_test"
     }
   ],
   "settings": {}

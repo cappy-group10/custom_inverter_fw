@@ -72,7 +72,7 @@ extern void configureSFRA(uint16_t plotOption, float32_t sfraISRFreq);
 //
 #define C28x_CORE  1
 #define CLA_CORE   2
-#define CONTROL_RUNNING_ON 1
+#define CONTROL_RUNNING_ON C28x_CORE
 
 //
 //SFRA Options

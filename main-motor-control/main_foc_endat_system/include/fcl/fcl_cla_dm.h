@@ -56,7 +56,7 @@ extern uint32_t FCL_getSwVersion(void);
 
 //
 // Function to be called by the user application after the completion of
-// Fast current Loop to wrap the QEP feedback completion.
+// Fast current Loop to wrap the position-feedback completion.
 // This is used only in FCL_LEVE2
 //
 static inline void FCL_runQEPWrap_M1(void)

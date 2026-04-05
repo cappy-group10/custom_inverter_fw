@@ -70,11 +70,13 @@ extern uint32_t Cla1ConstRunStart;
 extern uint32_t Cla1ConstLoadStart;
 extern uint32_t Cla1ConstLoadSize;
 
+static void HAL_setupEndatProducerPWM(void);
+
 //
 // interrupt routines for CPU
 //
 extern __interrupt void motor1ControlISR(void);
-extern __interrupt void motor2ControlISR(void);
+extern __interrupt void endatProducerISR(void);
 
 //
 // tasks 1-4 are owned by the FCL for motor 1
@@ -110,13 +112,12 @@ void HAL_enableInterrupts(HAL_MTR_Handle handle)
         // Enable PWM1INT in PIE group 3
         //
         Interrupt_enable(M1_INT_PWM);
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
+
         //
-        // Enable PWM4INT in PIE group 3
+        // Enable the independent EnDat producer interrupt in PIE group 3.
         //
-        Interrupt_enable(M2_INT_PWM);        // Enable PWM1INT in PIE group 3
+        EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
+        Interrupt_enable(ENDAT_PRODUCER_INT);
     }
 
     //
@@ -237,42 +238,22 @@ HAL_MTR_Handle HAL_MTR_init(void *pMemory, const size_t numBytes)
         obj->pwmHandle[2] = M1_W_PWM_BASE;
 
         //
-        // initialize CMPSS handle
+        // initialize CMPSS handles
         //
+#ifdef IS_TWO_SHUNT_DRIVE
+        obj->cmpssHandle[0] = M1_IV_CMPSS_BASE;   // Phase V: CMPSS6 (ADCINC3/CMPIN6N)
+        obj->cmpssHandle[1] = M1_IW_CMPSS_BASE;   // Phase W: CMPSS3 (ADCINB3/CMPIN3N)
+        obj->cmpssHandle[2] = 0U;                  // unused in 2-shunt
+#else
         obj->cmpssHandle[0] = M1_U_CMPSS_BASE;
         obj->cmpssHandle[1] = M1_V_CMPSS_BASE;
         obj->cmpssHandle[2] = M1_W_CMPSS_BASE;
+#endif
 
         //
-        // initialize QEP driver
-        //
-        obj->qepHandle = M1_QEP_BASE;
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
-        //
-        // initialize SPI handle
-        //
-        obj->spiHandle = M2_SPI_BASE;
-
-        //
-        // initialize PWM handles for motor_2
-        //
-        obj->pwmHandle[0] = M2_U_PWM_BASE;
-        obj->pwmHandle[1] = M2_V_PWM_BASE;
-        obj->pwmHandle[2] = M2_W_PWM_BASE;
-
-        //
-        // initialize CMPSS handle for motor_2
-        //
-        obj->cmpssHandle[0] = M2_U_CMPSS_BASE;
-        obj->cmpssHandle[1] = M2_V_CMPSS_BASE;
-        obj->cmpssHandle[2] = M2_W_CMPSS_BASE;
-
-        //
-        // initialize QEP driver
-        //
-        obj->qepHandle = M2_QEP_BASE;
+        // No eQEP peripheral is used in the EnDat build; the FCL consumes
+        // EnDat-published angles through compatibility fields instead.
+        obj->qepHandle = 0U;
     }
 
      return(handle);
@@ -294,10 +275,6 @@ void HAL_setMotorParams(HAL_MTR_Handle handle)
     HAL_setupCMPSS(handle);
 
     //
-    // setup the eqep
-    //
-    HAL_setupQEP(handle);
-
     return;
 }
 
@@ -410,6 +387,8 @@ void HAL_setupADCs(HAL_Handle handle)
     //-------------------------------------------------------------------------
     // For motor 1
     //-------------------------------------------------------------------------
+
+    #ifndef IS_TWO_SHUNT_DRIVE
     // Shunt Motor Currents (M1-Iu) @ C2
     // SOC0 will convert pin C2, sample window in SYSCLK cycles
     // trigger on ePWM1 SOCA/C
@@ -422,6 +401,8 @@ void HAL_setupADCs(HAL_Handle handle)
 
     // Write zero to this for now till offset ISR is run
     ADC_setPPBCalibrationOffset(M1_IU_ADC_BASE, M1_IU_ADC_PPB_NUM, 0);
+
+    #endif // IS_TWO_SHUNT_DRIVE
 
     // Shunt Motor Currents (M1-Iv) @ B2
     // SOC0 will convert pin B2, sample window in SYSCLK cycles
@@ -462,61 +443,6 @@ void HAL_setupADCs(HAL_Handle handle)
     // Write zero to this for now till offset ISR is run
     ADC_setPPBCalibrationOffset(M1_VDC_ADC_BASE, M1_VDC_ADC_PPB_NUM, 0);
 
-    //-------------------------------------------------------------------------
-    // For motor 2
-    //-------------------------------------------------------------------------
-    // Shunt Motor Currents (M2-Iu) @ C4
-    // SOC2 will convert pin C2, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_IU_ADC_BASE, M2_IU_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_IU_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC2
-    ADC_setupPPB(M2_IU_ADC_BASE, M2_IU_ADC_PPB_NUM, M2_IU_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_IU_ADC_BASE, M2_IU_ADC_PPB_NUM, 0);
-
-    // Shunt Motor Currents (M2-Iv) @ B4
-    // SOC2 will convert pin B2, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_IV_ADC_BASE, M2_IV_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_IV_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC2
-    ADC_setupPPB(M2_IV_ADC_BASE, M2_IV_ADC_PPB_NUM, M2_IV_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_IV_ADC_BASE, M2_IV_ADC_PPB_NUM, 0);
-
-    // Shunt Motor Currents (M2-Iw) @ A4
-    // SOC2 will convert pin A2, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_IW_ADC_BASE, M2_IW_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_IW_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC2
-    ADC_setupPPB(M2_IW_ADC_BASE, M2_IW_ADC_PPB_NUM, M2_IW_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_IW_ADC_BASE, M2_IW_ADC_PPB_NUM, 0);
-
-    // Phase Voltage (M2-Vfb-dc) @ D15
-    // SOC3 will convert pin D15, sample window in SYSCLK cycles
-    // trigger on ePWM4 SOCA/C
-    ADC_setupSOC(M2_VDC_ADC_BASE, M2_VDC_ADC_SOC_NUM,
-                 M2_ADC_TRIGGER_SOC, M2_VDC_ADC_CH_NUM, 14);
-
-    // Configure PPB to eliminate subtraction related calculation
-    // PPB is associated with SOC3
-    ADC_setupPPB(M2_VDC_ADC_BASE, M2_VDC_ADC_PPB_NUM, M2_VDC_ADC_SOC_NUM);
-
-    // Write zero to this for now till offset ISR is run
-    ADC_setPPBCalibrationOffset(M2_VDC_ADC_BASE, M2_VDC_ADC_PPB_NUM, 0);
-
     return;
 }
 
@@ -544,8 +470,12 @@ void HAL_setupCLA(HAL_Handle handle)
     memcpy((uint32_t *)&Cla1funcsRunStart, (uint32_t *)&Cla1funcsLoadStart,
             (uint32_t)&Cla1funcsLoadSize);
 
+    // This project does not currently emit a .const_cla payload, so only
+    // copy CLA constants when that section is intentionally enabled.
+#ifdef CLA_COPY_CONST_SECTION
     memcpy((uint32_t *)&Cla1ConstRunStart, (uint32_t *)&Cla1ConstLoadStart,
             (uint32_t)&Cla1ConstLoadSize);
+#endif
 #endif //_FLASH
 
     // make sure QEP access is given to CLA as Secondary master
@@ -603,9 +533,6 @@ void HAL_setupCLA(HAL_Handle handle)
     // Enable EPWM1 INT trigger for CLA TASK1
     CLA_setTriggerSource(CLA_TASK_1, CLA_TRIGGER_EPWM1INT);
 
-    // Enable EPWM4 INT trigger for CLA TASK5
-    CLA_setTriggerSource(CLA_TASK_5, CLA_TRIGGER_EPWM4INT);
-
     return;
 }
 
@@ -618,7 +545,7 @@ void HAL_setupCMPSS(HAL_MTR_Handle handle)
 
     uint16_t cnt;
 
-    for(cnt = 0; cnt < 3; cnt++)
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
     {
         // Set up COMPCTL register
         // NEG signal from DAC for COMP-H
@@ -689,7 +616,7 @@ void HAL_setupCMPSS_DACValue(HAL_MTR_Handle handle,
 
     uint16_t cnt;
 
-    for(cnt = 0; cnt < 3; cnt++)
+    for(cnt = 0; cnt < COUNT_CURRENT_PROTECTION_CMPSS; cnt++)
     {
         // comparator references
         // Set DAC-H to allowed MAX +ve current
@@ -733,6 +660,12 @@ void HAL_setupInterrupts(HAL_MTR_Handle handle)
     if(handle == &halMtr[MTR_1])
     {
         Interrupt_register(M1_INT_PWM, &motor1ControlISR);
+        Interrupt_register(ENDAT_PRODUCER_INT, &endatProducerISR);
+
+        EPWM_setInterruptSource(ENDAT_PRODUCER_PWM_BASE, EPWM_INT_TBCTR_ZERO);
+        EPWM_enableInterrupt(ENDAT_PRODUCER_PWM_BASE);
+        EPWM_setInterruptEventCount(ENDAT_PRODUCER_PWM_BASE, 1);
+        EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
 
         // Enable AdcA-ADCINT1- to help verify EoC before result data read
         ADC_setInterruptSource(M1_IW_ADC_BASE,
@@ -740,18 +673,36 @@ void HAL_setupInterrupts(HAL_MTR_Handle handle)
         ADC_enableContinuousMode(M1_IW_ADC_BASE, ADC_INT_NUMBER1);
         ADC_enableInterrupt(M1_IW_ADC_BASE, ADC_INT_NUMBER1);
     }
-    else if(handle == &halMtr[MTR_2])
-    {
-        Interrupt_register(M2_INT_PWM, &motor2ControlISR);
-
-        // Enable AdcA-ADCINT1- to help verify EoC before result data read
-        ADC_setInterruptSource(M2_IW_ADC_BASE,
-                               ADC_INT_NUMBER2, M2_IW_ADC_SOC_NUM);
-        ADC_enableContinuousMode(M2_IW_ADC_BASE, ADC_INT_NUMBER2);
-        ADC_enableInterrupt(M2_IW_ADC_BASE, ADC_INT_NUMBER2);
-    }
 
     return;
+}
+
+//
+// Configure the independent ePWM-based EnDat producer scheduler.
+// This PWM is used only as an internal time base and is intentionally not
+// pinned out on GPIO when DAC debug outputs are disabled.
+//
+static void HAL_setupEndatProducerPWM(void)
+{
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_EPWM9);
+
+    EPWM_disableInterrupt(ENDAT_PRODUCER_PWM_BASE);
+    EPWM_disableADCTrigger(ENDAT_PRODUCER_PWM_BASE, EPWM_SOC_A);
+    EPWM_disableADCTrigger(ENDAT_PRODUCER_PWM_BASE, EPWM_SOC_B);
+    EPWM_setEmulationMode(ENDAT_PRODUCER_PWM_BASE, EPWM_EMULATION_FREE_RUN);
+    EPWM_setPeriodLoadMode(ENDAT_PRODUCER_PWM_BASE, EPWM_PERIOD_DIRECT_LOAD);
+    EPWM_setClockPrescaler(ENDAT_PRODUCER_PWM_BASE, EPWM_CLOCK_DIVIDER_1,
+                           EPWM_HSCLOCK_DIVIDER_1);
+    EPWM_setPhaseShift(ENDAT_PRODUCER_PWM_BASE, 0U);
+    EPWM_disablePhaseShiftLoad(ENDAT_PRODUCER_PWM_BASE);
+    EPWM_setTimeBasePeriod(ENDAT_PRODUCER_PWM_BASE, ENDAT_PRODUCER_PWM_TICKS);
+    EPWM_setTimeBaseCounter(ENDAT_PRODUCER_PWM_BASE, ENDAT_PRODUCER_PHASE_TICKS);
+    EPWM_setTimeBaseCounterMode(ENDAT_PRODUCER_PWM_BASE, EPWM_COUNTER_MODE_UP);
+    EPWM_setCountModeAfterSync(ENDAT_PRODUCER_PWM_BASE,
+                               EPWM_COUNT_MODE_UP_AFTER_SYNC);
+    EPWM_setSyncOutPulseMode(ENDAT_PRODUCER_PWM_BASE,
+                             EPWM_SYNC_OUT_PULSE_DISABLED);
+    EPWM_clearEventTriggerInterruptFlag(ENDAT_PRODUCER_PWM_BASE);
 }
 
 //
@@ -809,8 +760,8 @@ void HAL_setupDACs(HAL_Handle handle)
     // enable value change only on sync signal
     DAC_setLoadMode(obj->dacHandle[0], DAC_LOAD_PWMSYNC);
 
-    // sync sel 5 means sync from pwm 6
-    DAC_setPWMSyncSignal(obj->dacHandle[0], 5);
+    // sync to EPWM1 (Motor 1 phase U) for debug DAC output
+    DAC_setPWMSyncSignal(obj->dacHandle[0], 1);
 
     return;
 }
@@ -923,21 +874,28 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(19, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(19, GPIO_PIN_TYPE_STD);
 
-    // Setup GPIO for QEP operation
-    // GPIO20->QEP1A_M1
+    // GPIO20/21 are unused by the EnDat build; keep them as plain inputs.
     GPIO_setMasterCore(20, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_20_EQEP1A);
+    GPIO_setPinConfig(GPIO_20_GPIO20);
     GPIO_setDirectionMode(20, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(20, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(20, GPIO_QUAL_3SAMPLE);
 
-    // GPIO21->QEP1B_M1
     GPIO_setMasterCore(21, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_21_EQEP1B);
+    GPIO_setPinConfig(GPIO_21_GPIO21);
     GPIO_setDirectionMode(21, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(21, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(21, GPIO_QUAL_3SAMPLE);
 
+#ifdef IS_TWO_SHUNT_DRIVE
+    // In the 2-shunt build, GPIO24/GPIO25 are reused as analog current-sense
+    // inputs:
+    //   GPIO24 -> ADCINC3 / CMPIN6N (phase V)
+    //   GPIO25 -> ADCINB3 / CMPIN3N (phase W)
+    // Keep both pins in analog mode so ADC/CMPSS can see the external signal.
+    GPIO_setAnalogMode(24, GPIO_ANALOG_ENABLED);
+    GPIO_setAnalogMode(25, GPIO_ANALOG_ENABLED);
+#else
     // GPIO24 - OT_M1
     GPIO_setMasterCore(24, GPIO_CORE_CPU1);
     GPIO_setPinConfig(GPIO_24_GPIO24);
@@ -949,6 +907,7 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setPinConfig(GPIO_25_GPIO25);
     GPIO_setDirectionMode(25, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(25, GPIO_PIN_TYPE_STD);
+#endif
 
     // GPIO26 - EN_GATE_M2
     GPIO_setMasterCore(26, GPIO_CORE_CPU1);
@@ -1001,16 +960,15 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(43, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(43, GPIO_PIN_TYPE_STD);
 
-    // GPIO54->EQEP2A_M2
+    // GPIO54/55/57 are unused by the EnDat build; keep them as plain inputs.
     GPIO_setMasterCore(54, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_54_EQEP2A);
+    GPIO_setPinConfig(GPIO_54_GPIO54);
     GPIO_setDirectionMode(54, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(54, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(54, GPIO_QUAL_3SAMPLE);
 
-    // GPIO55->EQEP2B_M2
     GPIO_setMasterCore(55, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_55_EQEP2B);
+    GPIO_setPinConfig(GPIO_55_GPIO55);
     GPIO_setDirectionMode(55, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(55, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(55, GPIO_QUAL_3SAMPLE);
@@ -1021,9 +979,8 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(56, GPIO_DIR_MODE_OUT);
     GPIO_setPadConfig(56, GPIO_PIN_TYPE_STD);
 
-    // GPIO57->EQEP2I_M2
     GPIO_setMasterCore(57, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_57_EQEP2I);
+    GPIO_setPinConfig(GPIO_57_GPIO57);
     GPIO_setDirectionMode(57, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(57, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(57, GPIO_QUAL_3SAMPLE);
@@ -1082,9 +1039,9 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(94, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(94, GPIO_PIN_TYPE_STD);
 
-    // GPIO99->QEP1I
+    // GPIO99 is unused by the EnDat build; keep it as a plain input.
     GPIO_setMasterCore(99, GPIO_CORE_CPU1);
-    GPIO_setPinConfig(GPIO_99_EQEP1I);
+    GPIO_setPinConfig(GPIO_99_GPIO99);
     GPIO_setDirectionMode(99, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(99, GPIO_PIN_TYPE_STD);
     GPIO_setQualificationMode(99, GPIO_QUAL_3SAMPLE);
@@ -1138,6 +1095,7 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setDirectionMode(139, GPIO_DIR_MODE_IN);
     GPIO_setPadConfig(139, GPIO_PIN_TYPE_STD);
 
+#ifdef DACOUT_EN
     // GPIO157->EPWM7A-DAC1
     GPIO_setMasterCore(157, GPIO_CORE_CPU1);
     GPIO_setPinConfig(GPIO_157_EPWM7A);
@@ -1161,6 +1119,7 @@ void HAL_setupGPIOs(HAL_Handle handle)
     GPIO_setPinConfig(GPIO_160_EPWM8B);
     GPIO_setDirectionMode(160, GPIO_DIR_MODE_OUT);
     GPIO_setPadConfig(160, GPIO_PIN_TYPE_STD);
+#endif
 
     return;
 }
@@ -1254,19 +1213,10 @@ void HAL_setupMotorPWMs(HAL_MTR_Handle handle)
         EPWM_setTimeBasePeriod(obj->pwmHandle[0], halfPeriod);
         EPWM_setTimeBasePeriod(obj->pwmHandle[1], halfPeriod);
         EPWM_setTimeBasePeriod(obj->pwmHandle[2], halfPeriod);
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
-        halfPeriod = M2_INV_PWM_TICKS/2;     // 100MHz EPWMCLK
 
-        EPWM_setPhaseShift(obj->pwmHandle[0], ((halfPeriod>>1) + 0));
-        EPWM_setPhaseShift(obj->pwmHandle[1], ((halfPeriod>>1) + 2));
-        EPWM_setPhaseShift(obj->pwmHandle[2], ((halfPeriod>>1) + 4));
-
-        EPWM_setTimeBasePeriod(obj->pwmHandle[0], halfPeriod);
-        EPWM_setTimeBasePeriod(obj->pwmHandle[1], halfPeriod);
-        EPWM_setTimeBasePeriod(obj->pwmHandle[2], halfPeriod);
+        HAL_setupEndatProducerPWM();
     }
+    
 
     // Setting up link from EPWM to ADC
     // EPWM1/EPWM4 - Inverter currents at sampling frequency
@@ -1299,6 +1249,7 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
 
     uint16_t  cnt;
+    float32_t currentLimitClamped = currentLimit;
 
     EPWM_DigitalCompareTripInput tripInSet = EPWM_DC_TRIP_TRIPIN4;
 
@@ -1310,78 +1261,41 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     {
         tripInSet = EPWM_DC_TRIP_TRIPIN4;
 
-        curHi = 2048 + M1_CURRENT_SCALE(currentLimit);
-        curLo = 2048 - M1_CURRENT_SCALE(currentLimit);
+        if(currentLimitClamped < 0.0f)
+        {
+            currentLimitClamped = 0.0f;
+        }
+        else if(currentLimitClamped > M1_CURRENT_SENSE_MAX_POS_CURRENT)
+        {
+            currentLimitClamped = M1_CURRENT_SENSE_MAX_POS_CURRENT;
+        }
+
+        curHi = M1_CMPSS_ZERO_COUNT + M1_CURRENT_SCALE(currentLimitClamped);
+        curLo = M1_CMPSS_ZERO_COUNT - M1_CURRENT_SCALE(currentLimitClamped);
 
         //Select GPIO24 as INPUTXBAR1
         XBAR_setInputPin(M1_XBAR_INPUT_NUM, M1_XBAR_INPUT_GPIO);
 
-        // Configure TRIP 4 to OR the High and Low trips from both
-        // comparator 1 & 3, clear everything first
+        // Rebuild TRIP4 from scratch, clear everything first.
         EALLOW;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX0TO15CFG) = 0;
         HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP4MUX16TO31CFG) = 0;
         EDIS;
 
-        // Enable Muxes for ored input of CMPSS1H and 1L, mux for Mux0x
-        //cmpss1 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX00_CMPSS1_CTRIPH_OR_L);
-
-        //cmpss3 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
-
-        //cmpss6 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
-
-        //inputxbar2 trip
+        // MUX01: gate-driver fault signal via INPUTXBAR1 (GPIO24)
         XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX01_INPUTXBAR1);
 
-        // Disable all the muxes first
+        // MUX04: CMPSS3 (Phase W, ADCINB3/CMPIN3N) filtered CTRIPH-OR-L
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX04_CMPSS3_CTRIPH_OR_L);
+
+        // MUX10: CMPSS6 (Phase V, ADCINC3/CMPIN6N) filtered CTRIPH-OR-L
+        XBAR_setEPWMMuxConfig(XBAR_TRIP4, XBAR_EPWM_MUX10_CMPSS6_CTRIPH_OR_L);
+
+        // Disable all muxes first, then enable the three TRIP4 sources
         XBAR_disableEPWMMux(XBAR_TRIP4, 0xFFFF);
-
-        // Enable Mux 0  OR Mux 4 to generate TRIP4
-        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX00 | XBAR_MUX04 | XBAR_MUX10 |
-                                       XBAR_MUX01);
+        XBAR_enableEPWMMux(XBAR_TRIP4, XBAR_MUX01 | XBAR_MUX04 | XBAR_MUX10);
     }
-    else if(handle == &halMtr[MTR_2])
-    {
-        curHi = 2048 + M2_CURRENT_SCALE(currentLimit);
-        curLo = 2048 - M2_CURRENT_SCALE(currentLimit);
-
-        tripInSet = EPWM_DC_TRIP_TRIPIN5;
-
-        //Select GPIO14 as INPUTXBAR3
-        XBAR_setInputPin(M2_XBAR_INPUT_NUM, M2_XBAR_INPUT_GPIO);
-
-        // Configure TRIP 5 to OR the High and Low trips from both
-        // comparator 5, 5, and 2, clear everything first
-        EALLOW;
-        HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP5MUX0TO15CFG) = 0;
-        HWREG(XBAR_EPWM_CFG_REG_BASE + XBAR_O_TRIP5MUX16TO31CFG) = 0;
-        EDIS;
-
-        // Enable Muxes for ored input of CMPSS1H and 1L, mux for Mux0x
-        //cmpss5 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX08_CMPSS5_CTRIPH_OR_L);
-
-        //cmpss5 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX08_CMPSS5_CTRIPH_OR_L);
-
-        //cmpss2 - tripH or tripL
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX02_CMPSS2_CTRIPH_OR_L);
-
-        //inputxbar2 trip
-        XBAR_setEPWMMuxConfig(XBAR_TRIP5, XBAR_EPWM_MUX03_INPUTXBAR2);
-
-        // Disable all the muxes first
-        XBAR_disableEPWMMux(XBAR_TRIP5, 0xFFFF);
-
-        // Enable Mux 0  OR Mux 4 to generate TRIP5
-        XBAR_enableEPWMMux(XBAR_TRIP5, XBAR_MUX08 | XBAR_MUX08 | XBAR_MUX02 |
-                                       XBAR_MUX03);
-    }
-
-
+    
     //
     // Configure TRIP for motor inverter phases
     //
@@ -1389,10 +1303,13 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
     {
         // comparator references
         // Set DAC-H to allowed MAX +ve current
-        CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], curHi);
+        if(cnt < COUNT_CURRENT_PROTECTION_CMPSS)
+        {
+            CMPSS_setDACValueHigh(obj->cmpssHandle[cnt], curHi);
 
-        // Set DAC-L to allowed MAX -ve current
-        CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curLo);
+            // Set DAC-L to allowed MAX -ve current
+            CMPSS_setDACValueLow(obj->cmpssHandle[cnt], curLo);
+        }
 
         //Trip 4 is the input to the DCAHCOMPSEL
         EPWM_selectDigitalCompareTripInput(obj->pwmHandle[cnt],
@@ -1442,71 +1359,15 @@ void HAL_setupMotorFaultProtection(HAL_MTR_Handle handle,
                                                      EPWM_TZ_FLAG_DCAEVT1 |
                                                      EPWM_TZ_FLAG_CBC ));
 
-        // clear any spurious  HLATCH - (not in TRIP gen path)
-        CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cnt]);
-
-        // clear any spurious  LLATCH - (not in TRIP gen path)
-        CMPSS_clearFilterLatchLow(obj->cmpssHandle[cnt]);
+        if(cnt < COUNT_CURRENT_PROTECTION_CMPSS)
+        {
+            // clear any spurious HLATCH/LLATCH (not in TRIP gen path)
+            CMPSS_clearFilterLatchHigh(obj->cmpssHandle[cnt]);
+            CMPSS_clearFilterLatchLow(obj->cmpssHandle[cnt]);
+        }
     }
 
     DEVICE_DELAY_US(1L);
-
-    return;
-}
-
-void HAL_setupQEP(HAL_MTR_Handle handle)
-{
-    HAL_MTR_Obj *obj = (HAL_MTR_Obj *)handle;
-
-    // Configure the decoder for quadrature count mode, counting both
-    // rising and falling edges (that is, 2x resolution)
-    EQEP_setDecoderConfig(obj->qepHandle, (EQEP_CONFIG_2X_RESOLUTION |
-                                           EQEP_CONFIG_QUADRATURE |
-                                           EQEP_CONFIG_NO_SWAP) );
-
-    EQEP_setEmulationMode(obj->qepHandle, EQEP_EMULATIONMODE_RUNFREE);
-
-    // Configure the position counter to be latched on a unit time out
-    // and latch on rising edge of index pulse
-    EQEP_setLatchMode(obj->qepHandle, (EQEP_LATCH_RISING_INDEX |
-                                       EQEP_LATCH_UNIT_TIME_OUT) );
-
-    // Configure the position counter to reset on a maximum position
-    if(handle == &halMtr[MTR_1])
-    {
-        EQEP_setPositionCounterConfig(obj->qepHandle,
-                                      EQEP_POSITION_RESET_MAX_POS,
-                                      ((4 * M1_ENCODER_LINES) - 1) );
-
-        // Enable the unit timer, setting the frequency to 10KHz
-        EQEP_enableUnitTimer(obj->qepHandle, M1_QEP_UNIT_TIMER_TICKS - 1);
-    }
-    else if(handle == &halMtr[MTR_2])
-    {
-        EQEP_setPositionCounterConfig(obj->qepHandle,
-                                      EQEP_POSITION_RESET_MAX_POS,
-                                      ((4 * M2_ENCODER_LINES) - 1) );
-
-        // Enable the unit timer, setting the frequency to 10KHz
-        EQEP_enableUnitTimer(obj->qepHandle, M2_QEP_UNIT_TIMER_TICKS - 1);
-    }
-
-    // Disables the eQEP module position-compare unit
-    EQEP_disableCompare(obj->qepHandle);
-
-    // Configure and enable the edge-capture unit. The capture clock divider is
-    // SYSCLKOUT/128. The unit-position event divider is QCLK/32.
-    EQEP_setCaptureConfig(obj->qepHandle, EQEP_CAPTURE_CLK_DIV_128,
-                                          EQEP_UNIT_POS_EVNT_DIV_32);
-
-    // Enable QEP edge-capture unit
-    EQEP_enableCapture(obj->qepHandle);
-
-    // Enable UTO on QEP
-    EQEP_enableInterrupt(obj->qepHandle, EQEP_INT_UNIT_TIME_OUT);
-
-    // Enable the eQEP module
-    EQEP_enableModule(obj->qepHandle);
 
     return;
 }

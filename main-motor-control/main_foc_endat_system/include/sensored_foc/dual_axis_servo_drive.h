@@ -173,6 +173,11 @@ static inline uint16_t scaleVoltageValue(float32_t voltage, float32_t voltageSF)
     return((uint16_t)(voltage * voltageSF));
 }
 
+// ****************************************************************************
+// Position Reading Functions - EnDat
+// ****************************************************************************
+static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum);
+
 
 // ****************************************************************************
 // Get FCL timing details - time stamp taken in library after PWM update

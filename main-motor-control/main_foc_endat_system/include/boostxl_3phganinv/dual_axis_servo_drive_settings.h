@@ -130,13 +130,38 @@ typedef float _iq;
 // User can select choices from available control configurations
 //
 #define  CGND                COLD
-#define  BUILDLEVEL          FCL_LEVEL1
+#define  BUILDLEVEL          FCL_LEVEL3
 #define  SAMPLING_METHOD     SINGLE_SAMPLING   // DOUBLE_SAMPLING   // SINGLE_SAMPLING
-#define  FCL_CNTLR           PI_CNTLR          // CMPLX_CNTLR       //
+#define  FCL_CNTLR           CMPLX_CNTLR          // CMPLX_CNTLR       // PI_CNTLR
 #define  CURRENT_SENSE       LEM_CURRENT_SENSE
-#define  POSITION_ENCODER    QEP_POS_ENCODER
+#define  POSITION_ENCODER    ENDAT_POS_ENCODER
 
 #define  SFRA_MOTOR          MOTOR_1
+
+#define POSITION_ENCODER_IS_QEP      (POSITION_ENCODER == QEP_POS_ENCODER)
+#define POSITION_ENCODER_IS_ENDAT    (POSITION_ENCODER == ENDAT_POS_ENCODER)
+#define POSITION_ENCODER_NEEDS_INDEX (POSITION_ENCODER_IS_QEP)
+#define POSITION_ENCODER_NEEDS_ALIGNMENT (POSITION_ENCODER_IS_QEP)
+
+
+// Uncomment to disable all fault protection for bench EnDat testing (NO INVERTER)
+#define ENDAT_HACK
+
+#define DISABLE_MOTOR_FAULTS
+// #define DISABLE_BUS_VOLTAGE_CHECK
+// #define DISABLE_OVERCURRENT_CHECK
+
+
+
+// #define DISABLE_ENDAT   // Re-enabled for position feedback
+// Saved EnDat position offset (per-unit).
+// Set to a previously calibrated value to skip runtime calibration.
+// Comment out or set to 0.0 to require a fresh calibration each boot.
+#define ENDAT_POSITION_OFFSET_PU   0.174197152F
+#define ENDAT_APPLY_DEFAULT_OFFSET
+
+#define DACOUT_EN
+
 
 //
 // Generate error if
@@ -145,8 +170,8 @@ typedef float _iq;
 #error  Critical: Only LEM_CURRENT_SENSE is supported in this example
 #endif
 
-#if(POSITION_ENCODER != QEP_POS_ENCODER)
-#error  Critical: Only QEP_POS_ENCODER is supported in this example
+#if(POSITION_ENCODER != ENDAT_POS_ENCODER)
+#error  Critical: This configuration supports only ENDAT_POS_ENCODER
 #endif
 
 #ifndef BUILDLEVEL
@@ -159,4 +184,3 @@ typedef float _iq;
 
 
 #endif  // end of DUAL_AXIS_SERVO_DRIVE_SETTINGS_H definition
-

@@ -88,7 +88,7 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->FCL_params.carrierMid = M1_INV_PWM_HALF_TBPRD * 0x10000L;
         #endif
 
-        pMotor->FCL_params.adcScale = -M1_ADC_PU_PPB_SCALE_FACTOR;
+        pMotor->FCL_params.adcScale = -M1_FCL_ADC_SCALE;
 
         pMotor->FCL_params.cmidsqrt3 =
                 pMotor->FCL_params.carrierMid * sqrtf(3.0);
@@ -104,21 +104,22 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->FCL_params.wccD  = M1_CUR_LOOP_BANDWIDTH;
         pMotor->FCL_params.wccQ  = M1_CUR_LOOP_BANDWIDTH;
 
-        // set the number of slots in the encoder
-        pMotor->ptrFCL->qep.LineEncoder = M1_ENCODER_LINES;
-        pMotor->ptrFCL->qep.MechScaler = 0.25 / pMotor->ptrFCL->qep.LineEncoder;
-
-        // set the number of pole pairs of the motor
+        // Keep the FCL's legacy QEP-shaped container populated with only the
+        // fields still needed by the EnDat-based control path.
         pMotor->ptrFCL->qep.PolePairs = M1_POLES / 2;
         pMotor->ptrFCL->qep.CalibratedAngle = 0;
+        pMotor->ptrFCL->qep.LineEncoder = 0U;
+        pMotor->ptrFCL->qep.MechScaler = 0.0F;
+        pMotor->ptrFCL->ptrQEP = 0;
 
-        // Initialize the Speed module for speed calculation from QEP/RESOLVER
+        // Initialize the electrical-angle differentiator used by the speed estimator.
         pMotor->speed.K1 = 1 / (M1_BASE_FREQ * pMotor->Ts);
 
         // Low-pass cut-off frequency
         pMotor->speed.K2 = 1 / (1 + (2 * PI * pMotor->Ts * 5));
         pMotor->speed.K3 = 1 - pMotor->speed.K2;
         pMotor->speed.BaseRpm = 120 * (M1_BASE_FREQ / M1_POLES);
+        pMotor->speedDirection = (pMotor->speedDirection < 0) ? -1 : 1;
 
         // set up current and voltage scaling coefficient
         pMotor->currentScale = M1_CURRENT_SF;
@@ -135,10 +136,10 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         pMotor->drvFaultTripGPIO = M1_nFAULT_GPIO;
         pMotor->drvClearFaultGPIO = M1_CLR_FAULT_GPIO;
 
-        pMotor->currentThreshHi = 2048 +
+        pMotor->currentThreshHi = M1_CMPSS_ZERO_COUNT +
                        scaleCurrentValue(M1_MAXIMUM_CURRENT, M1_CURRENT_INV_SF);
 
-        pMotor->currentThreshLo = 2048 -
+        pMotor->currentThreshLo = M1_CMPSS_ZERO_COUNT -
                        scaleCurrentValue(M1_MAXIMUM_CURRENT, M1_CURRENT_INV_SF);
 
         //
@@ -151,107 +152,21 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
         // passed corresponds to the ADC base used to sample phase W on the
         // HW board
         //
+        #ifdef IS_TWO_SHUNT_DRIVE
+        FCL_initADC_2I(pMotor, M1_IW_ADC_BASE,
+                       M1_IV_ADCRESULT_BASE, M1_IV_ADC_PPB_NUM,
+                       M1_IW_ADCRESULT_BASE, M1_IW_ADC_PPB_NUM);
+        #else
         FCL_initADC_3I(pMotor, M1_IW_ADC_BASE,
                        M1_IV_ADCRESULT_BASE, M1_IV_ADC_PPB_NUM,
                        M1_IW_ADCRESULT_BASE, M1_IW_ADC_PPB_NUM,
                        M1_IU_ADCRESULT_BASE, M1_IU_ADC_PPB_NUM);
+        #endif
 
         pMotor->volDC_PPBRESULT = M1_VDC_ADCRESULT_BASE +
                 ADC_PPBxRESULT_OFFSET_BASE + M1_VDC_ADC_PPB_NUM * 2;
 
     }
-    else if(pMotor == &motorVars[1])
-    {
-        pMotor->ptrFCL = &fclVars[1];
-
-        pMotor->Ts = 0.001 / M2_ISR_FREQUENCY;
-
-        pMotor->voltageLimit = (float32_t)(M2_MAXIMUM_VOLTAGE);             // V
-        pMotor->currentLimit = (float32_t)(M2_MAXIMUM_CURRENT);             // A
-
-        #if(SAMPLING_METHOD == SINGLE_SAMPLING)
-        pMotor->maxModIndex = (M2_TPWM_CARRIER -
-                (2 * M2_FCL_COMPUTATION_TIME)) / M2_TPWM_CARRIER;
-        pMotor->FCL_params.carrierMid = pMotor->maxModIndex *
-                M2_INV_PWM_HALF_TBPRD * 0x10000L;
-        #elif(SAMPLING_METHOD == DOUBLE_SAMPLING)
-        pMotor->maxModIndex = (M2_TPWM_CARRIER -
-                (4 * M2_FCL_COMPUTATION_TIME)) / M2_TPWM_CARRIER;
-        pMotor->FCL_params.carrierMid = M2_INV_PWM_HALF_TBPRD * 0x10000L;
-        #endif
-
-        pMotor->FCL_params.adcScale = -M2_ADC_PU_PPB_SCALE_FACTOR;
-
-        pMotor->FCL_params.cmidsqrt3 =
-                pMotor->FCL_params.carrierMid * sqrtf(3.0);
-
-        pMotor->FCL_params.tSamp = (1.0F / M2_SAMPLING_FREQ);
-        pMotor->FCL_params.Rd    = M2_RS;
-        pMotor->FCL_params.Rq    = M2_RS;
-        pMotor->FCL_params.Ld    = M2_LD;
-        pMotor->FCL_params.Lq    = M2_LQ;
-        pMotor->FCL_params.BemfK = M2_KB;
-        pMotor->FCL_params.Ibase = M2_BASE_CURRENT;
-        pMotor->FCL_params.Wbase = 2.0 * PI * M2_BASE_FREQ;
-        pMotor->FCL_params.wccD  = M2_CUR_LOOP_BANDWIDTH;
-        pMotor->FCL_params.wccQ  = M2_CUR_LOOP_BANDWIDTH;
-
-        // set the number of slots in the encoder
-        pMotor->ptrFCL->qep.LineEncoder = M2_ENCODER_LINES;
-        pMotor->ptrFCL->qep.MechScaler = 0.25 / pMotor->ptrFCL->qep.LineEncoder;
-
-        // set the number of pole pairs of the motor
-        pMotor->ptrFCL->qep.PolePairs = M2_POLES / 2;
-        pMotor->ptrFCL->qep.CalibratedAngle = 0;
-
-        // Initialize the Speed module for speed calculation from QEP/RESOLVER
-        pMotor->speed.K1 = 1 / (M2_BASE_FREQ * pMotor->Ts);
-
-        // Low-pass cut-off frequency
-        pMotor->speed.K2 = 1 / (1 + (2 * PI * pMotor->Ts * 5));
-        pMotor->speed.K3 = 1 - pMotor->speed.K2;
-        pMotor->speed.BaseRpm = 120 * (M2_BASE_FREQ / M2_POLES);
-
-        // set up current and voltage scaling coefficient
-        pMotor->currentScale = M2_CURRENT_SF;
-        pMotor->voltageScale = M2_VOLTAGE_SF;
-        pMotor->adcScale = M2_ADC_PU_SCALE_FACTOR;
-        pMotor->currentInvSF = M2_CURRENT_INV_SF;
-        pMotor->voltageInvSF = M2_VOLTAGE_INV_SF;
-
-        pMotor->Vdcbus = M2_VDCBUS_MIN;
-        pMotor->VdcbusMax = M2_VDCBUS_MAX;
-        pMotor->VdcbusMin = M2_VDCBUS_MIN;
-
-        pMotor->drvEnableGateGPIO = M2_EN_GATE_GPIO;
-        pMotor->drvFaultTripGPIO = M2_nFAULT_GPIO;
-        pMotor->drvClearFaultGPIO = M2_CLR_FAULT_GPIO;
-
-        pMotor->currentThreshHi = 2048 +
-                       scaleCurrentValue(M2_MAXIMUM_CURRENT, M2_CURRENT_INV_SF);
-
-        pMotor->currentThreshLo = 2048 -
-                       scaleCurrentValue(M2_MAXIMUM_CURRENT, M2_CURRENT_INV_SF);
-
-        //
-        // Initialize FCL library
-        //
-
-        //
-        // This function initializes the ADC PPB result bases, as well as the
-        // ADC module used to sample phase W. Ensure that the final argument
-        // passed corresponds to the ADC base used to sample phase W on the
-        // HW board
-        //
-        FCL_initADC_3I(pMotor, M2_IW_ADC_BASE,
-                       M2_IV_ADCRESULT_BASE, M2_IV_ADC_PPB_NUM,
-                       M2_IW_ADCRESULT_BASE, M2_IW_ADC_PPB_NUM,
-                       M2_IU_ADCRESULT_BASE, M2_IU_ADC_PPB_NUM );
-
-        pMotor->volDC_PPBRESULT = M2_VDC_ADCRESULT_BASE +
-                ADC_PPBxRESULT_OFFSET_BASE + M2_VDC_ADC_PPB_NUM *2;
-    }
-
     //
     // ensure that the correct PWM base addresses are being passed to the
     // FCL library here. pwmHandle[0:2] should represent inverter phases
@@ -259,9 +174,6 @@ void initMotorParameters(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     //
     FCL_initPWM(pMotor,
                 obj->pwmHandle[0], obj->pwmHandle[1], obj->pwmHandle[2]);
-
-    // ensure the correct QEP base is being passed
-    FCL_initQEP(pMotor, obj->qepHandle);
 
     pMotor->ptrFCL->taskCount[0] = 0;
     pMotor->ptrFCL->taskCount[1] = 0;
@@ -279,6 +191,7 @@ void initControlVars(MOTOR_Vars_t *pMotor)
 
     // Maximum delay rate of ramp control
     pMotor->rc.RampDelayMax = 10;
+    pMotor->rc.RampStepSize = 0.00005f;  // ~3x faster than default
 
     //
     // PI Controllers Configuration
@@ -388,7 +301,7 @@ void resetControlVars(MOTOR_Vars_t *pMotor)
 void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
 {
     // Feedbacks OFFSET Calibration
-    pMotor->offset_currentAs = 0;
+    pMotor->offset_currentAs = 0; // Only used in 3-shunt configuration, remains 0 in 2-shunt configuration
     pMotor->offset_currentBs = 0;
     pMotor->offset_currentCs = 0;
 
@@ -403,12 +316,13 @@ void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
             if(offsetCalCounter > 1000)
             {
                 // Offsets in phase current sensing
+                #ifndef IS_TWO_SHUNT_DRIVE
                 pMotor->offset_currentAs  = (K1 * pMotor->offset_currentAs) +
                         (K2 * (M1_IFB_U) * pMotor->adcScale);
+                #endif
 
                 pMotor->offset_currentBs  = (K1 * pMotor->offset_currentBs) +
                         (K2 * (M1_IFB_V) * pMotor->adcScale);
-
                 pMotor->offset_currentCs  = (K1 * pMotor->offset_currentCs) +
                         (K2 * (M1_IFB_W) * pMotor->adcScale);
             }
@@ -423,9 +337,12 @@ void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
         // Init OFFSET regs with identified values
         //
 
+        #ifndef IS_TWO_SHUNT_DRIVE
         // setting Iu offset
         ADC_setPPBReferenceOffset(M1_IU_ADC_BASE, M1_IU_ADC_PPB_NUM,
                                  (uint16_t)(pMotor->offset_currentAs * 4096.0));
+        #endif
+
         // setting Iv offset
         ADC_setPPBReferenceOffset(M1_IV_ADC_BASE, M1_IV_ADC_PPB_NUM,
                                  (uint16_t)(pMotor->offset_currentBs * 4096.0));
@@ -437,52 +354,7 @@ void runOffsetsCalculation(MOTOR_Vars_t *pMotor)
         // setting Vdc offset
         ADC_setPPBReferenceOffset(M1_VDC_ADC_BASE, M1_VDC_ADC_PPB_NUM, 0);
     }
-    else if(pMotor == &motorVars[1])
-    {
-        for(offsetCalCounter = 0; offsetCalCounter < 20000; offsetCalCounter++)
-        {
-            EPWM_clearEventTriggerInterruptFlag(halMtr[1].pwmHandle[0]);
-
-            while(EPWM_getEventTriggerInterruptStatus(halMtr[1].pwmHandle[0]) == false);
-
-            if(offsetCalCounter > 1000)
-            {
-                // Offsets in phase current sensing
-                pMotor->offset_currentAs  = (K1 * pMotor->offset_currentAs) +
-                        (K2 * (M2_IFB_U) * pMotor->adcScale);
-
-                pMotor->offset_currentBs  = (K1 * pMotor->offset_currentBs) +
-                        (K2 * (M2_IFB_V) * pMotor->adcScale);
-
-                pMotor->offset_currentCs  = (K1 * pMotor->offset_currentCs) +
-                        (K2 * (M2_IFB_W) * pMotor->adcScale);
-            }
-        }
-
-        //
-        // Read and update DC BUS voltage for FCL to use
-        //
-        pMotor->FCL_params.Vdcbus = getVdc(pMotor);
-
-        //
-        // Init OFFSET regs with identified values
-        //
-
-        // setting Iu offset
-        ADC_setPPBReferenceOffset(M2_IU_ADC_BASE, M2_IU_ADC_PPB_NUM,
-                                 (uint16_t)(pMotor->offset_currentAs * 4096.0));
-        // setting Iv offset
-        ADC_setPPBReferenceOffset(M2_IV_ADC_BASE, M2_IV_ADC_PPB_NUM,
-                                 (uint16_t)(pMotor->offset_currentBs * 4096.0));
-
-        // setting Iw offset
-        ADC_setPPBReferenceOffset(M2_IW_ADC_BASE, M2_IW_ADC_PPB_NUM,
-                                 (uint16_t)(pMotor->offset_currentCs * 4096.0));
-
-        // setting Vdc offset
-        ADC_setPPBReferenceOffset(M2_VDC_ADC_BASE, M2_VDC_ADC_PPB_NUM, 0);
-    }
-
+    
     pMotor->offsetDoneFlag = 1;
 
     return;
