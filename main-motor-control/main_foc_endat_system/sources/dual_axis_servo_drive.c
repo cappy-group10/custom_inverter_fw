@@ -439,6 +439,11 @@ void main(void)
     endat21_initProducer(motorVars[0].ptrFCL->qep.PolePairs);
     endat21_setPositionDirection(motorVars[0].speedDirection);
     endat21_readPosition();       // publish one valid sample before the control ISR starts
+
+#ifdef ENDAT_APPLY_DEFAULT_OFFSET
+    endat21_setPositionOffset(ENDAT_POSITION_OFFSET_PU);
+#endif
+
     endatInitDone = 1;
     endat21_startProducer();
 #endif
