@@ -20,7 +20,7 @@ MACRO_PATTERN = re.compile(
 
 DEFAULT_MACROS = {
     "M1_BASE_CURRENT": 5.0,
-    "M1_BASE_FREQ": 1000.0,
+    "M1_BASE_FREQ": 250.0,
     "M1_POLES": 10.0,
     "M1_VDCBUS_MIN": 24.0,
     "M1_VDCBUS_MAX": 600.0,

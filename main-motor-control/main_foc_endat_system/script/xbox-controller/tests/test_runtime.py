@@ -7,6 +7,7 @@ import pytest
 
 from xbox_controller.commands import CtrlState
 from xbox_controller.controller import ButtonEdge, ButtonEvent, ControllerState, XboxController
+from xbox_controller.motor_config import load_motor_config
 from xbox_controller.runtime import DriveRuntime
 from xbox_controller.runtime_models import FrameRecord, to_payload
 from xbox_controller.uart import FRAME_FAULT, FRAME_STATUS, MCUFault, MCUStatus, UARTCounters, UARTHealth
@@ -603,7 +604,7 @@ def test_drive_runtime_emits_coalesced_ui_tick(monkeypatch):
     payload = ui_ticks[0]["payload"]
 
     assert payload["controller_state"]["buttons"]["dpad_up"] is True
-    assert payload["motor_config"]["base_speed_rpm"] > 0
+    assert payload["motor_config"]["base_speed_rpm"] == load_motor_config().base_speed_rpm
     assert payload["last_host_command"]["ctrl_state"] == CtrlState.RUN.name
     assert payload["latest_mcu_status"]["ctrl_state"] == CtrlState.RUN.name
     assert payload["latest_mcu_status"]["speed_fbk"] == pytest.approx(payload["latest_mcu_status"]["speed_ref"] - 0.02)

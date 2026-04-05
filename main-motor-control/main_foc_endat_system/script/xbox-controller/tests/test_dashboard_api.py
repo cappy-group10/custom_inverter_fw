@@ -5,6 +5,7 @@ import uvicorn
 
 from xbox_controller import dashboard
 from xbox_controller.dashboard import DashboardServer, create_app
+from xbox_controller.motor_config import load_motor_config
 from xbox_controller.runtime_models import ControllerLayoutDescriptor, SessionSnapshot, to_payload
 
 
@@ -159,7 +160,9 @@ def test_dashboard_server_signal_requests_runtime_shutdown():
 
 
 def test_dashboard_serves_react_routes_and_mcu_endpoints():
+    motor_config = load_motor_config()
     runtime = StubRuntime()
+    runtime.snapshot.motor_config = motor_config
     runtime.snapshot.session_state = "running"
     runtime.snapshot.started_at = 100.0
     runtime.snapshot.port = "/dev/cu.usbmodem123401"
@@ -187,7 +190,7 @@ def test_dashboard_serves_react_routes_and_mcu_endpoints():
 
         detail = client.get("/api/mcus/primary")
         assert detail.status_code == 200
-        assert detail.json()["motor_config"]["base_speed_rpm"] >= 0
+        assert detail.json()["motor_config"]["base_speed_rpm"] == motor_config.base_speed_rpm
         assert detail.json()["telemetry"]["temp_motor_winding_c"] is None
         assert detail.json()["telemetry"]["temp_mcu_c"] is None
         assert detail.json()["telemetry"]["temp_igbts_c"] is None

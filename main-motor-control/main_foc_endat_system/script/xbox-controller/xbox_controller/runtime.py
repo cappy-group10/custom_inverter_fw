@@ -14,7 +14,7 @@ from .app_logging import NullStructuredLogger
 from .commands import CtrlState, MotorCommand
 from .controller import ButtonEdge, XboxController
 from .mapping import DriveMapping
-from .motor_config import DEFAULT_MOTOR_CONFIG
+from .motor_config import load_motor_config
 from .runtime_models import EventRecord, SessionSnapshot, TelemetrySample, to_payload
 from .uart import FRAME_FAULT, FRAME_STATUS, MCUFault, MCUStatus, UARTLink
 
@@ -75,7 +75,7 @@ class DriveRuntime:
         self._controller_connected = False
         self._controller_state = None
         self._controller_layout = []
-        self._motor_config = deepcopy(DEFAULT_MOTOR_CONFIG)
+        self._motor_config = load_motor_config()
         self._last_host_command = MotorCommand()
         self._latest_mcu_status: MCUStatus | None = None
         self._active_override: str | None = None
@@ -230,6 +230,7 @@ class DriveRuntime:
     def get_snapshot(self) -> SessionSnapshot:
         """Return a deep-copied snapshot for API consumers."""
         with self._lock:
+            self._refresh_motor_config_locked()
             return SessionSnapshot(
                 session_state=self._session_state,
                 port=self._port,
@@ -581,6 +582,7 @@ class DriveRuntime:
 
     def _reset_runtime_state(self):
         with self._lock:
+            self._refresh_motor_config_locked()
             self._frame_history.clear()
             self._fault_history.clear()
             self._event_history.clear()
@@ -704,6 +706,7 @@ class DriveRuntime:
         self._pending_events.clear()
 
     def _build_ui_tick_payload_locked(self) -> dict[str, Any]:
+        self._refresh_motor_config_locked()
         return {
             "controller_state": deepcopy(self._controller_state),
             "motor_config": deepcopy(self._motor_config),
@@ -715,6 +718,9 @@ class DriveRuntime:
             "new_faults": deepcopy(self._pending_faults),
             "new_events": deepcopy(self._pending_events),
         }
+
+    def _refresh_motor_config_locked(self):
+        self._motor_config = load_motor_config()
 
     def _emit_snapshot(self, reset_ui_tick_window: bool = False):
         snapshot_payload = to_payload(self.get_snapshot())

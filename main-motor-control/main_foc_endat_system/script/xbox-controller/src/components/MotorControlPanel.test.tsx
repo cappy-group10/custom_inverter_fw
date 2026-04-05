@@ -38,7 +38,7 @@ describe("MotorControlPanel", () => {
       active_override: "BRAKE",
       port: "/dev/cu.usbmodem123401",
       motor_config: {
-        base_speed_rpm: 12000,
+        base_speed_rpm: 3000,
         base_current_a: 5,
         vdcbus_min_v: 24,
         vdcbus_max_v: 600,
@@ -107,8 +107,8 @@ describe("MotorControlPanel", () => {
 
     expect(screen.getByTestId("compact-speed-band")).toBeInTheDocument();
     expect(screen.queryByTestId("speedometer")).not.toBeInTheDocument();
-    expect(screen.getAllByText("600 RPM").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("480 RPM").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("150 RPM").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("120 RPM").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /unlatch brake \(send stop\)/i })).toBeInTheDocument();
     expect(screen.getByText("Out of range")).toBeInTheDocument();
     expect(screen.getAllByText("Pending source")).toHaveLength(3);
