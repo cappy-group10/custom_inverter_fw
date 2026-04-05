@@ -42,6 +42,10 @@ extern void     endat21_readPosition(void);
 extern void     endat21_runCommandSet(void);
 extern void     endat21_initProducer(uint16_t polePairs);
 extern void     endat21_setPositionDirection(int16_t positionDirection);
+extern void     endat21_setPositionOffset(float32_t rawOffsetPu);
+extern void     endat21_clearPositionOffset(void);
+extern void     endat21_getPositionOffset(float32_t *rawOffsetPu,
+                                          uint16_t *valid);
 extern void     endat21_startProducer(void);
 extern void     endat21_runProducerTick(void);
 extern void     endat21_schedulePositionRead(void);

@@ -101,6 +101,8 @@ extern void UART_Link_sendStatus(MOTOR_Vars_t *pMotor);
 //! idRef iqRef checksum). When a valid frame arrives, the global
 //! variables speedRef, IdRef, IqRef, and ctrlState in
 //! dual_axis_servo_drive.c are updated.
+//! ctrlState may include the one-shot CTRL_CALIBRATE command in addition
+//! to the standard STOP/RUN/BRAKE/RESET/FAULT values.
 //!
 //! runSyncControl() then mirrors those globals into motorVars[0] on the
 //! next pass. Note that the current implementation applies ctrlState in

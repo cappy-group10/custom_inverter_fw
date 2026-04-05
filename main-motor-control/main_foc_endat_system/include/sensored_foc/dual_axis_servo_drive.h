@@ -178,12 +178,6 @@ static inline uint16_t scaleVoltageValue(float32_t voltage, float32_t voltageSF)
 // ****************************************************************************
 static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum);
 
-static inline ENC_Status_e getPostAlignmentEncoderState(void)
-{
-    // The active build uses an absolute EnDat encoder, so there is no
-    // incremental-index search state after startup.
-    return ENC_CALIBRATION_DONE;
-}
 
 // ****************************************************************************
 // Get FCL timing details - time stamp taken in library after PWM update

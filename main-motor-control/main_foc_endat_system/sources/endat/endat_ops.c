@@ -54,19 +54,42 @@ static inline int16_t endatNormalizeDirectionSign(int16_t directionSign)
 }
 
 //
+// endatWrapThetaPu - Wraps a normalized angle into the [0.0, 1.0) range.
+//
+static inline float32_t endatWrapThetaPu(float32_t thetaPu)
+{
+    thetaPu = thetaPu - floorf(thetaPu);
+
+    if(thetaPu < 0.0F)
+    {
+        thetaPu += 1.0F;
+    }
+
+    return thetaPu;
+}
+
+//
 // endatInvertThetaPu - Mirrors a normalized angle around zero while staying in
 // the [0.0, 1.0) range expected by the motor-control consumers.
 //
 static inline float32_t endatInvertThetaPu(float32_t thetaPu)
 {
-    thetaPu = 1.0F - thetaPu;
+    return endatWrapThetaPu(1.0F - thetaPu);
+}
 
-    if(thetaPu >= 1.0F)
+//
+// endatApplyRawOffsetPu - Applies the configured raw mechanical offset before
+// direction handling so reversing the position sign does not invalidate the
+// calibration.
+//
+static inline float32_t endatApplyRawOffsetPu(float32_t rawMechThetaPu)
+{
+    if(gEndatRuntimeState.offsetValid != 0U)
     {
-        thetaPu -= 1.0F;
+        rawMechThetaPu -= gEndatRuntimeState.rawPositionOffsetPu;
     }
 
-    return thetaPu;
+    return endatWrapThetaPu(rawMechThetaPu);
 }
 
 //
@@ -160,6 +183,10 @@ static inline void endatResetProducerState(void)
     gEndatRuntimeState.crcFailCount = 0U;
     gEndatRuntimeState.timeoutCount = 0U;
     gEndatRuntimeState.positionDirection = 1;
+    gEndatRuntimeState.positionClocks = 0U;
+    gEndatRuntimeState.rawPositionScalePu = 0.0F;
+    gEndatRuntimeState.rawPositionOffsetPu = 0.0F;
+    gEndatRuntimeState.offsetValid = 0U;
     gEndatRuntimeState.reserved = 0U;
     endat22Data.dataReady = 0U;
 }
@@ -171,7 +198,8 @@ static inline void endatResetProducerState(void)
 static inline bool endatDecodePositionSample(EndatPositionSample *sample)
 {
     uint32_t rawPosition;
-    float32_t maxCount;
+    float32_t rawPositionScalePu;
+    float32_t rawMechThetaPu;
 
     if(!endatValidatePositionCrc())
     {
@@ -186,11 +214,16 @@ static inline bool endatDecodePositionSample(EndatPositionSample *sample)
     }
 
     rawPosition = endatGetPositionRaw();
-    maxCount = (endat22Data.position_clocks >= 32U) ?
-            4294967296.0F : (float32_t)(1UL << endat22Data.position_clocks);
+    rawPositionScalePu = (endat22Data.position_clocks >= 32U) ?
+            (1.0F / 4294967296.0F) :
+            (1.0F / (float32_t)(1UL << endat22Data.position_clocks));
+    rawMechThetaPu = (float32_t)rawPosition * rawPositionScalePu;
+
+    gEndatRuntimeState.positionClocks = endat22Data.position_clocks;
+    gEndatRuntimeState.rawPositionScalePu = rawPositionScalePu;
 
     sample->rawPosition = rawPosition;
-    sample->mechThetaPu = (float32_t)rawPosition / maxCount;
+    sample->mechThetaPu = endatApplyRawOffsetPu(rawMechThetaPu);
 
     if(gEndatRuntimeState.positionDirection < 0)
     {
@@ -442,6 +475,31 @@ void endat21_initProducer(uint16_t polePairs)
 
     endatClearPublishedPosition();
     endatResetProducerState();
+}
+
+void endat21_setPositionOffset(float32_t rawOffsetPu)
+{
+    gEndatRuntimeState.rawPositionOffsetPu = endatWrapThetaPu(rawOffsetPu);
+    gEndatRuntimeState.offsetValid = 1U;
+}
+
+void endat21_clearPositionOffset(void)
+{
+    gEndatRuntimeState.rawPositionOffsetPu = 0.0F;
+    gEndatRuntimeState.offsetValid = 0U;
+}
+
+void endat21_getPositionOffset(float32_t *rawOffsetPu, uint16_t *valid)
+{
+    if(rawOffsetPu != (float32_t *)0)
+    {
+        *rawOffsetPu = gEndatRuntimeState.rawPositionOffsetPu;
+    }
+
+    if(valid != (uint16_t *)0)
+    {
+        *valid = gEndatRuntimeState.offsetValid;
+    }
 }
 
 void endat21_setPositionDirection(int16_t positionDirection)

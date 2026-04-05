@@ -101,7 +101,8 @@ typedef enum
     CTRL_RUN   = 1,
     CTRL_BRAKE = 2,
     CTRL_RESET = 3,
-    CTRL_FAULT = 4
+    CTRL_FAULT = 4,
+    CTRL_CALIBRATE = 5
 } CtrlState_e;
 
 //

@@ -67,6 +67,17 @@ def test_pack_motor_frame_and_log_tx_record():
     assert counters.tx_frames == 1
 
 
+def test_pack_calibrate_motor_frame_uses_new_ctrl_state():
+    link = UARTLink(port=None)
+    cmd = MotorCommand(ctrl_state=CtrlState.CALIBRATE, speed_ref=0.0, id_ref=0.0, iq_ref=0.0)
+
+    frame = link.pack_motor(cmd)
+
+    assert len(frame) == TX_MOTOR_LEN
+    assert frame[2] == int(CtrlState.CALIBRATE)
+    assert frame[-1] == link._checksum(frame[:-1])
+
+
 def test_parse_status_frame_and_record_rx_state():
     link = UARTLink(port=None)
     expected = MCUStatus(
@@ -152,3 +163,9 @@ def test_parse_legacy_status_frame_without_checksum_mismatch():
     assert frames[0].decoded["legacy_status_frame"] is True
     assert counters.status_frames == 1
     assert counters.checksum_errors == 0
+
+
+def test_status_string_reports_calibrate_state():
+    status = MCUStatus(ctrl_state=CtrlState.CALIBRATE, isr_ticker=17)
+
+    assert "ctrl=CALIBRATE" in str(status)

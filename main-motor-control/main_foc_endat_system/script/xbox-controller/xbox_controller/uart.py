@@ -119,7 +119,10 @@ class MCUStatus:
     isr_ticker: int = 0         # ISR heartbeat counter
 
     def __str__(self):
-        state = CtrlState(self.ctrl_state).name if self.ctrl_state <= 4 else f"?{self.ctrl_state}"
+        try:
+            state = CtrlState(self.ctrl_state).name
+        except ValueError:
+            state = f"?{self.ctrl_state}"
         return (f"MCU: run={self.run_motor} ctrl={state} "
                 f"trip={self.trip_flag:#06x} spd_ref={self.speed_ref:+.4f} spd_fbk={self.speed_fbk:+.4f} "
                 f"theta={self.pos_mech_theta:+.4f} "

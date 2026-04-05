@@ -29,6 +29,10 @@ typedef struct
     volatile uint32_t crcFailCount;
     volatile uint32_t timeoutCount;
     volatile int16_t  positionDirection;
+    volatile uint16_t positionClocks;
+    volatile float    rawPositionScalePu;
+    volatile float    rawPositionOffsetPu;
+    volatile uint16_t offsetValid;
     volatile uint16_t reserved;
 } EndatRuntimeState;
 

@@ -47,6 +47,8 @@
 //
 // includes
 //
+#include <math.h>
+
 #include "dual_axis_servo_drive_settings.h"
 #include "dual_axis_servo_drive_user.h"
 #include "dual_axis_servo_drive_hal.h"
@@ -90,6 +92,8 @@ __interrupt void motor1ControlISR(void);
 #if(BUILDLEVEL > FCL_LEVEL2)
 static inline void getFCLTime(MOTOR_Num_e motorNum);
 #endif
+
+void measureElectricalAngleDesync(MOTOR_Vars_t *pMotor);
 
 
 
@@ -154,7 +158,7 @@ MOTOR_Vars_t motorVars[2] = {MOTOR1_DEFAULTS_NO_IU};
 //
 // Flag variables
 //
-volatile uint16_t enableFlag = false;
+volatile uint16_t enableFlag = true;
 
 uint16_t backTicker = 0;
 
@@ -164,12 +168,6 @@ uint16_t led2Cnt = 0;
 // Variables for Field Oriented Control
 float32_t VdTesting = 0.0;          // Vd reference (pu)
 float32_t VqTesting = 0.20;         // Vq reference (pu)
-
-// V/f profile variables for open-loop IPM control
-float32_t vfBoost  = 0.03f;   // minimum voltage at zero speed
-float32_t vfSlope  = 0.65f;   // V/f ratio (Vq per unit speed)
-float32_t vfVqMax  = 0.95f;   // maximum Vq clamp
-volatile uint16_t vfEnable = false;  // true = V/f active, false = manual VdTesting/VqTesting
 
 // Desynchronization detection variables
 float32_t desyncAngleError = 0.0f;
@@ -230,6 +228,33 @@ volatile uint32_t endatCrcFailCount = 0;
 volatile uint32_t endatTimeoutCount = 0;
 volatile uint32_t endatPublishCount = 0;
 volatile uint32_t endatSampleCounter = 0;
+
+#define ENDAT_CALIBRATION_SETTLE_TICKS   10000U
+#define ENDAT_CALIBRATION_SAMPLE_COUNT    256U
+#define ENDAT_CALIBRATION_STALL_TICKS     1000U
+
+typedef enum
+{
+    ENDAT_CAL_IDLE = 0,
+    ENDAT_CAL_SETTLING = 1,
+    ENDAT_CAL_SAMPLING = 2,
+    ENDAT_CAL_DONE = 3,
+    ENDAT_CAL_ABORTED = 4
+} EndatCalibrationState_e;
+
+typedef struct
+{
+    EndatCalibrationState_e state;
+    uint16_t settleTicks;
+    uint16_t stallTicks;
+    uint16_t sampleCount;
+    uint32_t lastSampleCounter;
+    float32_t sumSin;
+    float32_t sumCos;
+} EndatCalibrationContext_t;
+
+static EndatCalibrationContext_t gEndatCalibration = {ENDAT_CAL_IDLE};
+static uint16_t gEndatCalibrationCommandLatched = 0U;
 
 //
 // These are defined by the linker file
@@ -672,6 +697,223 @@ void C3(void) // SPARE
 //   Various Incremental Build levels
 //
 
+static inline float32_t wrapThetaPu(float32_t thetaPu)
+{
+    thetaPu = thetaPu - floorf(thetaPu);
+
+    if(thetaPu < 0.0F)
+    {
+        thetaPu += 1.0F;
+    }
+
+    return thetaPu;
+}
+
+static inline bool isMotorGateActive(const MOTOR_Vars_t *pMotor)
+{
+    return ((pMotor->ctrlState == CTRL_RUN) ||
+            (pMotor->ctrlState == CTRL_CALIBRATE));
+}
+
+static inline void resetEndatCalibrationContext(EndatCalibrationState_e state)
+{
+    gEndatCalibration.state = state;
+    gEndatCalibration.settleTicks = 0U;
+    gEndatCalibration.stallTicks = 0U;
+    gEndatCalibration.sampleCount = 0U;
+    gEndatCalibration.lastSampleCounter = endatSampleCounter;
+    gEndatCalibration.sumSin = 0.0F;
+    gEndatCalibration.sumCos = 0.0F;
+}
+
+static inline bool computeCorrectedEndatAngles(MOTOR_Vars_t *pMotor,
+                                               uint32_t rawPosition,
+                                               float32_t *mechThetaPu,
+                                               float32_t *elecThetaPu)
+{
+    float32_t rawOffsetPu = 0.0F;
+    float32_t mechTheta = 0.0F;
+    uint16_t offsetValid = 0U;
+
+    if(gEndatRuntimeState.rawPositionScalePu <= 0.0F)
+    {
+        return false;
+    }
+
+    mechTheta = wrapThetaPu((float32_t)rawPosition *
+                            gEndatRuntimeState.rawPositionScalePu);
+
+    endat21_getPositionOffset(&rawOffsetPu, &offsetValid);
+
+    if(offsetValid != 0U)
+    {
+        mechTheta = wrapThetaPu(mechTheta - rawOffsetPu);
+    }
+
+    if(gEndatRuntimeState.positionDirection < 0)
+    {
+        mechTheta = wrapThetaPu(1.0F - mechTheta);
+    }
+
+    if(mechThetaPu != (float32_t *)0)
+    {
+        *mechThetaPu = mechTheta;
+    }
+
+    if(elecThetaPu != (float32_t *)0)
+    {
+        *elecThetaPu = wrapThetaPu(mechTheta *
+                                  (float32_t)pMotor->ptrFCL->qep.PolePairs);
+    }
+
+    return true;
+}
+
+static inline void finalizeEndatCalibration(MOTOR_Vars_t *pMotor,
+                                            EndatCalibrationState_e terminalState)
+{
+    float32_t correctedElecThetaPu = 0.0F;
+    float32_t correctedMechThetaPu = 0.0F;
+
+    if(computeCorrectedEndatAngles(pMotor, endatPosRaw,
+                                   &correctedMechThetaPu,
+                                   &correctedElecThetaPu))
+    {
+        pMotor->posMechTheta = correctedMechThetaPu;
+        pMotor->posElecTheta = correctedElecThetaPu;
+        pMotor->speed.ElecTheta = correctedElecThetaPu;
+        pMotor->speed.OldElecTheta = correctedElecThetaPu;
+    }
+    else
+    {
+        pMotor->speed.ElecTheta = 0.0F;
+        pMotor->speed.OldElecTheta = 0.0F;
+    }
+
+    pMotor->speed.Speed = 0.0F;
+    pMotor->speed.SpeedRpm = 0;
+    FCL_resetController(pMotor);
+
+    pMotor->ctrlState = CTRL_STOP;
+    ctrlState = CTRL_STOP;
+    gEndatCalibration.state = terminalState;
+}
+
+static inline void runEndatCalibrationStateMachine(MOTOR_Vars_t *pMotor)
+{
+    bool freshSample = (endatSampleCounter != gEndatCalibration.lastSampleCounter);
+
+    if(pMotor->ctrlState != CTRL_CALIBRATE)
+    {
+        if((gEndatCalibration.state == ENDAT_CAL_SETTLING) ||
+           (gEndatCalibration.state == ENDAT_CAL_SAMPLING))
+        {
+            finalizeEndatCalibration(pMotor, ENDAT_CAL_ABORTED);
+        }
+        else if((gEndatCalibration.state == ENDAT_CAL_DONE) ||
+                (gEndatCalibration.state == ENDAT_CAL_ABORTED))
+        {
+            resetEndatCalibrationContext(ENDAT_CAL_IDLE);
+        }
+
+        return;
+    }
+
+    if((pMotor->tripFlagDMC != 0U) || (endatInitDone == 0U))
+    {
+        finalizeEndatCalibration(pMotor, ENDAT_CAL_ABORTED);
+        return;
+    }
+
+    if(pMotor->runMotor != MOTOR_RUN)
+    {
+        if(gEndatCalibration.state == ENDAT_CAL_IDLE)
+        {
+            resetEndatCalibrationContext(ENDAT_CAL_IDLE);
+        }
+
+        return;
+    }
+
+    if((gEndatCalibration.state == ENDAT_CAL_IDLE) ||
+       (gEndatCalibration.state == ENDAT_CAL_DONE) ||
+       (gEndatCalibration.state == ENDAT_CAL_ABORTED))
+    {
+        resetEndatCalibrationContext(ENDAT_CAL_SETTLING);
+        return;
+    }
+
+    if(freshSample)
+    {
+        gEndatCalibration.lastSampleCounter = endatSampleCounter;
+        gEndatCalibration.stallTicks = 0U;
+    }
+
+    switch(gEndatCalibration.state)
+    {
+        case ENDAT_CAL_SETTLING:
+            gEndatCalibration.settleTicks++;
+
+            if(gEndatCalibration.settleTicks >= ENDAT_CALIBRATION_SETTLE_TICKS)
+            {
+                gEndatCalibration.state = ENDAT_CAL_SAMPLING;
+                gEndatCalibration.sampleCount = 0U;
+                gEndatCalibration.sumSin = 0.0F;
+                gEndatCalibration.sumCos = 0.0F;
+                gEndatCalibration.stallTicks = 0U;
+            }
+            break;
+
+        case ENDAT_CAL_SAMPLING:
+            if(!freshSample)
+            {
+                gEndatCalibration.stallTicks++;
+
+                if(gEndatCalibration.stallTicks >= ENDAT_CALIBRATION_STALL_TICKS)
+                {
+                    finalizeEndatCalibration(pMotor, ENDAT_CAL_ABORTED);
+                    return;
+                }
+
+                break;
+            }
+
+            if(gEndatRuntimeState.rawPositionScalePu <= 0.0F)
+            {
+                finalizeEndatCalibration(pMotor, ENDAT_CAL_ABORTED);
+                break;
+            }
+
+            {
+                float32_t meanOffsetPu = 0.0F;
+                float32_t rawMechThetaPu = wrapThetaPu((float32_t)endatPosRaw *
+                                                      gEndatRuntimeState.rawPositionScalePu);
+
+                gEndatCalibration.sumSin += __sinpuf32(rawMechThetaPu);
+                gEndatCalibration.sumCos += __cospuf32(rawMechThetaPu);
+                gEndatCalibration.sampleCount++;
+
+                if(gEndatCalibration.sampleCount >= ENDAT_CALIBRATION_SAMPLE_COUNT)
+                {
+                    meanOffsetPu = atan2f(gEndatCalibration.sumSin,
+                                          gEndatCalibration.sumCos) /
+                                   (2.0F * PI);
+                    meanOffsetPu = wrapThetaPu(meanOffsetPu);
+
+                    endat21_setPositionOffset(meanOffsetPu);
+                    finalizeEndatCalibration(pMotor, ENDAT_CAL_DONE);
+                }
+            }
+            break;
+
+        case ENDAT_CAL_IDLE:
+        case ENDAT_CAL_DONE:
+        case ENDAT_CAL_ABORTED:
+        default:
+            break;
+    }
+}
+
 static inline bool updateMotorPositionFeedback(MOTOR_Num_e motorNum)
 {
     EndatPositionSample sample = {0};
@@ -902,21 +1144,10 @@ static inline void buildLevel2_M1(void)
     runPark(&motorVars[0].park);
 
 // ----------------------------------------------------------------------------
-//  Apply voltage commands: V/f profile or manual VdTesting/VqTesting
+//  Apply voltage commands: manual VdTesting/VqTesting
 // ----------------------------------------------------------------------------
-    if(vfEnable)
-    {
-        float32_t absSpeed = fabsf(motorVars[0].rc.SetpointValue);
-        float32_t vqCmd = vfBoost + vfSlope * absSpeed;
-        if(vqCmd > vfVqMax) vqCmd = vfVqMax;
-        motorVars[0].ipark.Qs = vqCmd;
-        motorVars[0].ipark.Ds = VdTesting;
-    }
-    else
-    {
-        motorVars[0].ipark.Ds = VdTesting;
-        motorVars[0].ipark.Qs = VqTesting;
-    }
+    motorVars[0].ipark.Ds = VdTesting;
+    motorVars[0].ipark.Qs = VqTesting;
 
 // ----------------------------------------------------------------------------
 // Connect inputs of the INV_PARK module and call the inverse park module
@@ -1049,14 +1280,12 @@ static inline void buildLevel3_M1(void)
         motorVars[0].IdRef = 0;
         FCL_resetController(&motorVars[0]);
     }
-    else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
+    else if(motorVars[0].ctrlState == CTRL_CALIBRATE)
     {
-        // Absolute encoders already provide rotor position, so skip the
-        // rotor-lock alignment hold and enable the current loop directly.
         motorVars[0].alignCntr = 0;
-        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
-        motorVars[0].IdRef = motorVars[0].IdRef_run;
-    } // end else if(lsw == ENC_ALIGNMENT)
+        motorVars[0].ptrFCL->lsw = ENC_ALIGNMENT;
+        motorVars[0].IdRef = motorVars[0].IdRef_start;
+    }
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
     {
         // IdRef and IqRef are now user-controllable via debugger
@@ -1100,6 +1329,10 @@ static inline void buildLevel3_M1(void)
 // ----------------------------------------------------------------------------
     motorVars[0].pi_id.ref =
            ramper(motorVars[0].IdRef, motorVars[0].pi_id.ref, 0.00001);
+
+    runEndatCalibrationStateMachine(&motorVars[0]);
+    measureElectricalAngleDesync(&motorVars[0]);
+    
 
     return;
 }
@@ -1178,7 +1411,7 @@ static inline void buildLevel46_M1(void)
         else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
         {
             motorVars[0].alignCntr = 0;
-            motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+            motorVars[0].ptrFCL->lsw = ENC_CALIBRATION_DONE;
             motorVars[0].IdRef = motorVars[0].IdRef_run;
             motorVars[0].rc.TargetValue = motorVars[0].speedRef;
         } // end else if(lsw == ENC_ALIGNMENT)
@@ -1357,7 +1590,7 @@ static inline void buildLevel5_M1(void)
     else if(motorVars[0].ptrFCL->lsw == ENC_ALIGNMENT)
     {
         motorVars[0].alignCntr = 0;
-        motorVars[0].ptrFCL->lsw = getPostAlignmentEncoderState();
+        motorVars[0].ptrFCL->lsw = ENC_CALIBRATION_DONE;
         motorVars[0].IdRef = motorVars[0].IdRef_run;
     } // end else if(lsw == ENC_ALIGNMENT)
     else if(motorVars[0].ptrFCL->lsw == ENC_CALIBRATION_DONE)
@@ -1537,10 +1770,15 @@ __interrupt void motor1ControlISR(void)
 //-----------------------------------------------------------------------------
     // DAC_setShadowValue(hal.dacHandle[0],
     //                    DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.ref));
+    // DAC_setShadowValue(hal.dacHandle[0],
+    //                    DAC_MACRO_PU(motorVars[0].posElecTheta));
+    // DAC_setShadowValue(hal.dacHandle[1],
+    //                    DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.fbk));
+
     DAC_setShadowValue(hal.dacHandle[0],
-                       DAC_MACRO_PU(motorVars[0].posElecTheta));
+                       DAC_MACRO_PU(motorVars[0].ptrFCL->rg.Out));
     DAC_setShadowValue(hal.dacHandle[1],
-                       DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.fbk));
+                       DAC_MACRO_PU(motorVars[0].posElecTheta));
 #endif   // DACOUT_EN
 
 #elif(BUILDLEVEL == FCL_LEVEL4)
@@ -1683,8 +1921,6 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
     HAL_MTR_Obj *obj = (HAL_MTR_Obj *)mtrHandle;
     (void)obj;
     float32_t currentLimitClamped = pMotor->currentLimit;
-    uint16_t cmpIdx;
-
     // *******************************************************
     // Current limit setting / tuning in Debug environment
     // *******************************************************
@@ -1876,7 +2112,7 @@ void runMotorControl(MOTOR_Vars_t *pMotor, HAL_MTR_Handle mtrHandle)
 
     // Gate driver logic runs regardless — kept outside the guard
     // so motor start/stop state machine still functions in bench mode
-    if(pMotor->ctrlState == CTRL_RUN)
+    if(isMotorGateActive(pMotor))
     {
         if(pMotor->runMotor == MOTOR_STOP)
         {
@@ -1922,10 +2158,29 @@ void runSyncControl(void)
             motorVars[0].IqRef = IqRef;
 #endif
 
+#if(BUILDLEVEL == FCL_LEVEL3)
+            if(ctrlState != CTRL_CALIBRATE)
+            {
+                gEndatCalibrationCommandLatched = 0U;
+                motorVars[0].ctrlState = ctrlState;
+            }
+            else if((gEndatCalibrationCommandLatched == 0U) ||
+                    (motorVars[0].ctrlState == CTRL_CALIBRATE))
+            {
+                gEndatCalibrationCommandLatched = 1U;
+                motorVars[0].ctrlState = CTRL_CALIBRATE;
+            }
+            else
+            {
+                motorVars[0].ctrlState = CTRL_STOP;
+            }
+#else
             motorVars[0].ctrlState = ctrlState;
+#endif
         }
         else
         {
+            gEndatCalibrationCommandLatched = 0U;
             motorVars[0].ctrlState = CTRL_STOP;
             motorVars[0].speedRef = 0.0;
         }
@@ -1941,6 +2196,21 @@ void runSyncControl(void)
     }
 
     return;
+}
+
+
+void measureElectricalAngleDesync(MOTOR_Vars_t *pMotor)
+{
+    float32_t openLoopAngle = pMotor->ptrFCL->rg.Out;
+    float32_t encoderAngle  = pMotor->posElecTheta;
+    // Normalize open-loop angle to [0, 1]
+    float32_t olNorm = openLoopAngle - floorf(openLoopAngle);
+    desyncAngleError = olNorm - encoderAngle;
+    // Wrap to [-0.5, 0.5]
+    if(desyncAngleError > 0.5f)  desyncAngleError -= 1.0f;
+    if(desyncAngleError < -0.5f) desyncAngleError += 1.0f;
+    desyncFlag = (fabsf(desyncAngleError) > desyncThreshold) ? true : false;
+
 }
 
 //*****************************************************************************

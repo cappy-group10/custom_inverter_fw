@@ -12,6 +12,7 @@ class CtrlState(IntEnum):
     BRAKE = 2
     RESET = 3
     FAULT = 4
+    CALIBRATE = 5
 
 
 @dataclass
