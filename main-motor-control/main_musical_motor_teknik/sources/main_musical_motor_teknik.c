@@ -47,7 +47,7 @@
 // TBCLK = SYSCLK (no prescaler) for maximum duty resolution.
 // Up-down count mode: TBPRD = SYSCLK / (2 * Fcarrier)
 //
-#define PWM_CARRIER_FREQ    10000U                              // 10 kHz
+#define PWM_CARRIER_FREQ    20000U                              // 10 kHz
 #define PWM_TBPRD           (SYSCLK_FREQ / (2U * PWM_CARRIER_FREQ))  // 10000
 #define PWM_HALF_TBPRD      (PWM_TBPRD / 2U)                         // 5000
 
@@ -74,7 +74,7 @@
 // Controls loudness.  Start LOW (~0.05) and increase gradually.
 // At 0.10 with a 24 V bus, peak phase voltage ≈ 2.4 V.
 //
-#define TONE_VQ_DEFAULT     0.05f
+#define TONE_VQ_DEFAULT     0.2f
 
 // ============================================================================
 // Hardware Pin Assignments
@@ -116,7 +116,7 @@
 
 typedef struct {
     float32_t freqHz;       // Note frequency in Hz (0 = rest)
-    uint16_t  durationMs;   // Duration in milliseconds
+    uint32_t  durationMs;   // Duration in milliseconds
 } NoteEntry;
 
 //
@@ -240,9 +240,9 @@ void main(void)
     Interrupt_enable(INT_TIMER0);
 
     //
-    // Enable DRV gate
+    // Enable DRV gate (Active Low)
     //
-    GPIO_writePin(GPIO_DRV_EN, 1);
+    GPIO_writePin(GPIO_DRV_EN, 0);
 
     //
     // Global interrupt enable
@@ -399,7 +399,7 @@ __interrupt void epwm1ISR(void)
     //
     // Clear EPWM1 INT flag and acknowledge PIE group 3
     //
-    EPWM_clearEventTrigInterruptFlag(EPWM1_BASE);
+    EPWM_clearEventTriggerInterruptFlag(EPWM1_BASE);
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP3);
 }
 
