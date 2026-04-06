@@ -137,6 +137,7 @@ typedef float _iq;
 #define  POSITION_ENCODER    QEP_POS_ENCODER
 
 #define  SFRA_MOTOR          MOTOR_1
+#define  DACOUT_EN
 
 //
 // Generate error if

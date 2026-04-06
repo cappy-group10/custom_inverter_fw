@@ -2193,10 +2193,15 @@ __interrupt void motor1ControlISR(void)
 //-----------------------------------------------------------------------------
 // Variable display on DACs
 //-----------------------------------------------------------------------------
+    // DAC_setShadowValue(hal.dacHandle[0],
+    //                    DAC_MACRO_PU(motorVars[0].ptrFCL->rg.Out));
+    // DAC_setShadowValue(hal.dacHandle[1],
+    //                    DAC_MACRO_PU(motorVars[0].posElecTheta));
+
     DAC_setShadowValue(hal.dacHandle[0],
-                       DAC_MACRO_PU(motorVars[0].ptrFCL->rg.Out));
+                       DAC_MACRO_PU(motorVars[0].svgen.Ta));
     DAC_setShadowValue(hal.dacHandle[1],
-                       DAC_MACRO_PU(motorVars[0].posElecTheta));
+                       DAC_MACRO_PU(motorVars[0].svgen.Tb));
 #endif   // DACOUT_EN
 
 #elif(BUILDLEVEL == FCL_LEVEL3)
