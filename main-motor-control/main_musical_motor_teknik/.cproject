@@ -61,6 +61,7 @@
                                     <listOptionValue value="${PROJECT_ROOT}/include/sensored_foc"/>
                                     <listOptionValue value="${PROJECT_ROOT}/include/boostxl_3phganinv"/>
                                     <listOptionValue value="${PROJECT_ROOT}/include/endat"/>
+                                    <listOptionValue value="${PROJECT_ROOT}/include/musical_motor"/>
                                     <listOptionValue value="${CG_TOOL_ROOT}/include"/>
                                 </option>
                                 <option id="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.ABI.1830994943" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.ABI" value="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.ABI.coffabi" valueType="enumerated"/>
@@ -188,6 +189,7 @@
                                     <listOptionValue value="${PROJECT_ROOT}/include/boostxl_3phganinv"/>
                                     <listOptionValue value="${PROJECT_ROOT}/include/endat"/>
                                     <listOptionValue value="${CG_TOOL_ROOT}/include"/>
+                                    <listOptionValue value="${PROJECT_ROOT}/include/musical_motor"/>
                                 </option>
                                 <option id="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.ABI.793348320" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.ABI" value="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.ABI.coffabi" valueType="enumerated"/>
                                 <option id="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.CLA_SUPPORT.1408925887" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.CLA_SUPPORT" value="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.CLA_SUPPORT.cla1" valueType="enumerated"/>
