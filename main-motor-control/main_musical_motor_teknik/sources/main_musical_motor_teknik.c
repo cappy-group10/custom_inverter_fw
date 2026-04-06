@@ -37,6 +37,7 @@ void main(void)
 
     Interrupt_register(INT_EPWM1, &MusicalMotorTone_epwm1ISR);
     Interrupt_register(INT_TIMER0, &MusicalMotorTone_cpuTimer0ISR);
+    Interrupt_register(INT_TIMER1, &MusicalMotorHw_heartbeatISR);
 
     MusicalMotorHw_initEPWM();
 
@@ -44,9 +45,11 @@ void main(void)
                           TONE_VQ_DEFAULT);
 
     MusicalMotorHw_initCPUTimer0();
+    MusicalMotorHw_initCPUTimer1();
 
     Interrupt_enable(INT_EPWM1);
     Interrupt_enable(INT_TIMER0);
+    Interrupt_enable(INT_TIMER1);
 
     MusicalMotorHw_enableGateDriver();
 
@@ -55,8 +58,6 @@ void main(void)
 
     for(;;)
     {
-        MusicalMotorHw_toggleHeartbeat();
-        DEVICE_DELAY_US(500000);
     }
 }
 

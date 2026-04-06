@@ -43,7 +43,6 @@
 
 // Frame IDs (host -> MCU)
 #define FRAME_ID_MOTOR_CMD  0x01U
-#define FRAME_ID_MUSIC_CMD  0x02U
 
 // Frame IDs (MCU -> host)
 #define FRAME_ID_STATUS     0x10U
@@ -51,7 +50,6 @@
 
 // Frame sizes in bytes
 #define MOTOR_CMD_LEN       16U     // sync+id+ctrl+3*float+chk
-#define MUSIC_CMD_LEN       17U     // sync+id+ctrl+3*float+sustain+chk
 #define STATUS_FRAME_LEN    47U     // sync+id+runMotor+ctrl+trip+8*float+ticker+chk
 #define FAULT_FRAME_LEN     8U      // sync+id+tripFlag+tripCount+chk
 
