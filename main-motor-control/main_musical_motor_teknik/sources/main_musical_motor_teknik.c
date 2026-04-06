@@ -92,7 +92,9 @@
 
 #define NOTE_REST   0.0f
 
+#define NOTE_D3     147.0f
 #define NOTE_E3     165.0f
+#define NOTE_F3     175.0f
 #define NOTE_G3     196.0f
 #define NOTE_A3     220.0f
 #define NOTE_Bb3    233.0f
@@ -132,9 +134,15 @@ typedef struct {
 } NoteEntry;
 
 //
-// Super Mario Bros - Main Theme (Overworld)
-// Tempo ~200 BPM -> quarter note = 300 ms
+// Song selector: change this to pick which melody plays
+//   0 = Super Mario Bros
+//   1 = Megalovania (Undertale)
 //
+#define SONG_SELECT     0
+
+// ============================================================================
+// Duration macros (undef'd after use)
+// ============================================================================
 #define W   1200    // whole note
 #define H   600     // half note
 #define Q   300     // quarter note
@@ -142,7 +150,10 @@ typedef struct {
 #define E   150     // eighth note
 #define S   75      // sixteenth note
 
-static const NoteEntry melody[] = {
+// ============================================================================
+// Song 0: Super Mario Bros - Main Theme (~200 BPM)
+// ============================================================================
+static const NoteEntry melodyMario[] = {
     // Intro phrase
     { NOTE_E5,  E }, { NOTE_E5,  E }, { NOTE_REST, E }, { NOTE_E5,  E },
     { NOTE_REST, E }, { NOTE_C5, E }, { NOTE_E5,  E }, { NOTE_REST, E },
@@ -171,9 +182,52 @@ static const NoteEntry melody[] = {
     { NOTE_REST, E }, { NOTE_E5,  E }, { NOTE_REST, E },
     { NOTE_C5,  E }, { NOTE_D5,  E }, { NOTE_B4,  Q_D },
 
-    // Ending pause before repeat
     { NOTE_REST, H },
 };
+#define MARIO_LEN  (sizeof(melodyMario) / sizeof(melodyMario[0]))
+
+// ============================================================================
+// Song 1: Megalovania - Undertale (~120 BPM, swing feel)
+// ============================================================================
+static const NoteEntry melodyMegalovania[] = {
+    // Iconic opening riff (D D D' A)
+    { NOTE_D4,  S }, { NOTE_D4,  S }, { NOTE_D5,  E }, { NOTE_REST, S },
+    { NOTE_A4,  Q_D }, { NOTE_REST, S },
+    { NOTE_Ab4, E }, { NOTE_G4,  E },
+    { NOTE_F4,  E }, { NOTE_D4,  E }, { NOTE_F4,  S }, { NOTE_G4,  S },
+
+    // Second phrase (C C D' A)
+    { NOTE_C4,  S }, { NOTE_C4,  S }, { NOTE_D5,  E }, { NOTE_REST, S },
+    { NOTE_A4,  Q_D }, { NOTE_REST, S },
+    { NOTE_Ab4, E }, { NOTE_G4,  E },
+    { NOTE_F4,  E }, { NOTE_D4,  E }, { NOTE_F4,  S }, { NOTE_G4,  S },
+
+    // Third phrase (B3 B3 D' A)
+    { NOTE_B3,  S }, { NOTE_B3,  S }, { NOTE_D5,  E }, { NOTE_REST, S },
+    { NOTE_A4,  Q_D }, { NOTE_REST, S },
+    { NOTE_Ab4, E }, { NOTE_G4,  E },
+    { NOTE_F4,  E }, { NOTE_D4,  E }, { NOTE_F4,  S }, { NOTE_G4,  S },
+
+    // Fourth phrase (Bb3 Bb3 D' A)
+    { NOTE_Bb3, S }, { NOTE_Bb3, S }, { NOTE_D5,  E }, { NOTE_REST, S },
+    { NOTE_A4,  Q_D }, { NOTE_REST, S },
+    { NOTE_Ab4, E }, { NOTE_G4,  E },
+    { NOTE_F4,  E }, { NOTE_D4,  E }, { NOTE_F4,  S }, { NOTE_G4,  S },
+
+    // Bridge / descending run
+    { NOTE_D4,  E }, { NOTE_D4,  E }, { NOTE_D5,  E }, { NOTE_REST, S },
+    { NOTE_A4,  E }, { NOTE_REST, S },
+    { NOTE_Ab4, E }, { NOTE_G4,  E },
+    { NOTE_F4,  Q },
+
+    { NOTE_D4,  S }, { NOTE_F4,  S }, { NOTE_G4,  E },
+    { NOTE_D4,  S }, { NOTE_F4,  S }, { NOTE_G4,  E },
+    { NOTE_E4,  S }, { NOTE_G4,  S }, { NOTE_A4,  E },
+    { NOTE_A4,  E }, { NOTE_A4,  E }, { NOTE_G4,  E },
+
+    { NOTE_REST, H },
+};
+#define MEGALOVANIA_LEN  (sizeof(melodyMegalovania) / sizeof(melodyMegalovania[0]))
 
 #undef W
 #undef H
@@ -182,7 +236,18 @@ static const NoteEntry melody[] = {
 #undef E
 #undef S
 
-#define MELODY_LEN  (sizeof(melody) / sizeof(melody[0]))
+// ============================================================================
+// Active melody pointer and length (set by SONG_SELECT)
+// ============================================================================
+#if SONG_SELECT == 0
+    static const NoteEntry * const melody = melodyMario;
+    #define MELODY_LEN  MARIO_LEN
+#elif SONG_SELECT == 1
+    static const NoteEntry * const melody = melodyMegalovania;
+    #define MELODY_LEN  MEGALOVANIA_LEN
+#else
+    #error "Invalid SONG_SELECT"
+#endif
 
 // ============================================================================
 // Global State
