@@ -6,7 +6,7 @@
 //
 //#############################################################################
 
-#include "include/musical_motor/musical_motor_hw.h"
+#include "musical_motor_hw.h"
 
 #define PWM_TBPRD      \
     (MUSICAL_MOTOR_HW_SYSCLK_FREQ_HZ / (2U * MUSICAL_MOTOR_HW_PWM_CARRIER_FREQ_HZ))
@@ -100,12 +100,23 @@ void MusicalMotorHw_initCPUTimer0(void)
     CPUTimer_startTimer(CPUTIMER0_BASE);
 }
 
+void MusicalMotorHw_initCPUTimer1(void)
+{
+    CPUTimer_setPeriod(CPUTIMER1_BASE,
+                       (uint32_t)(MUSICAL_MOTOR_HW_SYSCLK_FREQ_HZ / 2U));
+    CPUTimer_setPreScaler(CPUTIMER1_BASE, 0U);
+    CPUTimer_stopTimer(CPUTIMER1_BASE);
+    CPUTimer_reloadTimerCounter(CPUTIMER1_BASE);
+    CPUTimer_enableInterrupt(CPUTIMER1_BASE);
+    CPUTimer_startTimer(CPUTIMER1_BASE);
+}
+
 void MusicalMotorHw_enableGateDriver(void)
 {
     GPIO_writePin(GPIO_DRV_EN, 0U);
 }
 
-void MusicalMotorHw_toggleHeartbeat(void)
+__interrupt void MusicalMotorHw_heartbeatISR(void)
 {
     GPIO_togglePin(GPIO_LED1);
 }

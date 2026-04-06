@@ -11,9 +11,10 @@
 void MusicalMotorHw_initGPIO(void);
 void MusicalMotorHw_initEPWM(void);
 void MusicalMotorHw_initCPUTimer0(void);
+void MusicalMotorHw_initCPUTimer1(void);
 
 void MusicalMotorHw_enableGateDriver(void);
-void MusicalMotorHw_toggleHeartbeat(void);
+__interrupt void MusicalMotorHw_heartbeatISR(void);
 void MusicalMotorHw_setDebug1(uint16_t value);
 
 void MusicalMotorHw_writeTonePwm(float32_t tc, float32_t ta, float32_t tb);
