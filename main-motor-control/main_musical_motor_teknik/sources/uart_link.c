@@ -11,6 +11,7 @@
 //     Song Select  (0x20)  8 B : [AA][20][songId][amplitude:4BE][chk]
 //     Manual Tone  (0x21) 13 B : [AA][21][freqHz:4BE][amplitude:4BE][durMs:2BE][chk]
 //     Control      (0x22)  4 B : [AA][22][action][chk]
+//     Volume       (0x23)  7 B : [AA][23][volume:4BE][chk]
 //
 //   TX frames (MCU -> host):
 //     Status       (0x30) 22 B : [55][30][playState][playMode][songId]
@@ -28,7 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  Shared globals
 // ═══════════════════════════════════════════════════════════════════════════
-volatile UART_Cmd_t        uartCmd   = {false, 0, 0, 0.0f, 0.0f, 0, CTRL_ACTION_STOP};
+volatile UART_Cmd_t        uartCmd   = {false, 0, 0, 0.0f, 0.0f, 0, CTRL_ACTION_STOP, 0.0f};
 volatile UART_Link_Stats_t uartStats = {0, 0, 0, 0, 0, 0};
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -289,6 +290,15 @@ static void applyCtrlCmd(void)
     uartCmd.pending = true;
 }
 
+//  Volume frame layout (7 bytes):
+//    [0] 0xAA  [1] 0x23  [2..5] volume(f32 BE)  [6] chk
+static void applyVolCmd(void)
+{
+    uartCmd.frameId = FRAME_ID_VOL_CMD;
+    uartCmd.volume  = rxParseFloatBE(&rxBuf[2]);
+    uartCmd.pending = true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  UART_Link_pollCommand()
 //
@@ -357,6 +367,13 @@ bool UART_Link_pollCommand(void)
                 rxState    = RX_ACCUM;
                 break;
 
+            case FRAME_ID_VOL_CMD:
+                rxBuf[1]   = byte;
+                rxPos      = 2;
+                rxExpected = VOL_CMD_LEN;
+                rxState    = RX_ACCUM;
+                break;
+
             case TX_SYNC_BYTE:
                 // Another sync byte — restart (handles back-to-back syncs)
                 rxBuf[0] = byte;
@@ -399,6 +416,7 @@ bool UART_Link_pollCommand(void)
                     case FRAME_ID_SONG_CMD:  applySongCmd(); break;
                     case FRAME_ID_TONE_CMD:  applyToneCmd(); break;
                     case FRAME_ID_CTRL_CMD:  applyCtrlCmd(); break;
+                    case FRAME_ID_VOL_CMD:   applyVolCmd();  break;
                     default: break;
                     }
 

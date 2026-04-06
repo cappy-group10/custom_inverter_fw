@@ -47,6 +47,7 @@
 #define FRAME_ID_SONG_CMD       0x20U   // Select & play a predefined song
 #define FRAME_ID_TONE_CMD       0x21U   // Play a single tone (manual mode)
 #define FRAME_ID_CTRL_CMD       0x22U   // Stop / pause / resume
+#define FRAME_ID_VOL_CMD        0x23U   // Set sound volume
 
 // ---------------------------------------------------------------------------
 //  Frame IDs — MCU -> Host  (TX from MCU's perspective)
@@ -59,13 +60,15 @@
 //  Song Select : [0xAA][0x20][songId:1][amplitude:4]               [chk:1] = 8
 //  Manual Tone : [0xAA][0x21][freqHz:4][amplitude:4][durationMs:2] [chk:1] = 13
 //  Control     : [0xAA][0x22][action:1]                            [chk:1] = 4
+//  Volume      : [0xAA][0x23][volume:4]                            [chk:1] = 7
 //  Status (TX) : [0x55][0x30][playState:1][playMode:1][songId:1]
-//                [noteIdx:2][noteTotal:2][curFreq:4][amplitude:4]
+//                [noteIdx:2][noteTotal:2][curFreq:4][volume:4]
 //                [isrTicker:4]                                     [chk:1] = 22
 // ---------------------------------------------------------------------------
 #define SONG_CMD_LEN        8U
 #define TONE_CMD_LEN        13U
 #define CTRL_CMD_LEN        4U
+#define VOL_CMD_LEN         7U
 #define STATUS_FRAME_LEN    22U
 
 // RX buffer size — must hold the largest incoming frame
@@ -104,19 +107,22 @@ typedef enum {
 typedef struct {
     volatile bool       pending;        // true when a new command is ready
 
-    // Which frame was received (FRAME_ID_SONG_CMD / TONE_CMD / CTRL_CMD)
+    // Which frame was received (FRAME_ID_SONG_CMD / TONE_CMD / CTRL_CMD / VOL_CMD)
     uint16_t            frameId;
 
     // Song Select fields
     uint16_t            songId;         // MusicalMotorSongId enum value
-    float               amplitude;      // Vq per-unit (0.0 – 1.0)
+    float               amplitude;      // Vq per-unit for song start (0.0 – 1.0)
 
     // Manual Tone fields
     float               freqHz;         // Tone frequency in Hz
-    uint16_t            durationMs;     // Duration in ms (0 = sustain until stop)
+    uint16_t            durationMs;     // Duration in ms per tone burst
 
     // Control fields
     CtrlAction_e        action;
+
+    // Volume fields
+    float               volume;         // Sound volume, Vq per-unit (0.0 – 1.0)
 } UART_Cmd_t;
 
 // ═══════════════════════════════════════════════════════════════════════════
