@@ -92,20 +92,32 @@
 
 #define NOTE_REST   0.0f
 
+#define NOTE_E3     165.0f
+#define NOTE_G3     196.0f
+#define NOTE_A3     220.0f
+#define NOTE_Bb3    233.0f
+#define NOTE_B3     247.0f
+
 #define NOTE_C4     262.0f
 #define NOTE_D4     294.0f
 #define NOTE_E4     330.0f
 #define NOTE_F4     349.0f
+#define NOTE_Fs4    370.0f
 #define NOTE_G4     392.0f
+#define NOTE_Ab4    415.0f
 #define NOTE_A4     440.0f
+#define NOTE_Bb4    466.0f
 #define NOTE_B4     494.0f
 
 #define NOTE_C5     523.0f
 #define NOTE_D5     587.0f
 #define NOTE_E5     659.0f
 #define NOTE_F5     698.0f
+#define NOTE_Fs5    740.0f
 #define NOTE_G5     784.0f
+#define NOTE_Ab5    831.0f
 #define NOTE_A5     880.0f
+#define NOTE_Bb5    932.0f
 #define NOTE_B5     988.0f
 
 #define NOTE_C6     1047.0f
@@ -120,15 +132,55 @@ typedef struct {
 } NoteEntry;
 
 //
-// "Twinkle Twinkle Little Star"
+// Super Mario Bros - Main Theme (Overworld)
+// Tempo ~200 BPM -> quarter note = 300 ms
 //
+#define W   1200    // whole note
+#define H   600     // half note
+#define Q   300     // quarter note
+#define Q_D 450     // dotted quarter
+#define E   150     // eighth note
+#define S   75      // sixteenth note
+
 static const NoteEntry melody[] = {
-    { NOTE_C4, 250 }, { NOTE_C4, 250 }, { NOTE_G4, 250 }, { NOTE_G4, 250 },
-    { NOTE_A4, 250 }, { NOTE_A4, 250 }, { NOTE_G4, 500 },
-    { NOTE_F4, 250 }, { NOTE_F4, 250 }, { NOTE_E4, 250 }, { NOTE_E4, 250 },
-    { NOTE_D4, 250 }, { NOTE_D4, 250 }, { NOTE_C4, 500 },
-    { NOTE_REST, 250 },
+    // Intro phrase
+    { NOTE_E5,  E }, { NOTE_E5,  E }, { NOTE_REST, E }, { NOTE_E5,  E },
+    { NOTE_REST, E }, { NOTE_C5, E }, { NOTE_E5,  E }, { NOTE_REST, E },
+    { NOTE_G5,  Q }, { NOTE_REST, Q },
+    { NOTE_G4,  Q }, { NOTE_REST, Q },
+
+    // Phrase 1
+    { NOTE_C5,  Q_D }, { NOTE_G4, E }, { NOTE_REST, Q },
+    { NOTE_E4,  Q_D }, { NOTE_A4, E }, { NOTE_REST, E },
+    { NOTE_B4,  E }, { NOTE_REST, E }, { NOTE_Bb4, E }, { NOTE_A4,  E },
+    { NOTE_REST, E },
+
+    { NOTE_G4,  E }, { NOTE_E5,  E }, { NOTE_G5,  E },
+    { NOTE_A5,  E }, { NOTE_REST, E }, { NOTE_F5,  E }, { NOTE_G5,  E },
+    { NOTE_REST, E }, { NOTE_E5,  E }, { NOTE_REST, E },
+    { NOTE_C5,  E }, { NOTE_D5,  E }, { NOTE_B4,  Q_D },
+
+    // Phrase 2
+    { NOTE_C5,  Q_D }, { NOTE_G4, E }, { NOTE_REST, Q },
+    { NOTE_E4,  Q_D }, { NOTE_A4, E }, { NOTE_REST, E },
+    { NOTE_B4,  E }, { NOTE_REST, E }, { NOTE_Bb4, E }, { NOTE_A4,  E },
+    { NOTE_REST, E },
+
+    { NOTE_G4,  E }, { NOTE_E5,  E }, { NOTE_G5,  E },
+    { NOTE_A5,  E }, { NOTE_REST, E }, { NOTE_F5,  E }, { NOTE_G5,  E },
+    { NOTE_REST, E }, { NOTE_E5,  E }, { NOTE_REST, E },
+    { NOTE_C5,  E }, { NOTE_D5,  E }, { NOTE_B4,  Q_D },
+
+    // Ending pause before repeat
+    { NOTE_REST, H },
 };
+
+#undef W
+#undef H
+#undef Q
+#undef Q_D
+#undef E
+#undef S
 
 #define MELODY_LEN  (sizeof(melody) / sizeof(melody[0]))
 
