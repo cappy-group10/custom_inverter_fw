@@ -1,6 +1,11 @@
 # Tone Generation in `main_musical_motor_teknik.c`
 
-This document explains how `sources/main_musical_motor_teknik.c` turns note frequencies into audible sound from the motor.
+This document explains how the musical motor firmware turns note frequencies
+into audible sound from the motor.
+
+After the codebase refactor, `sources/main_musical_motor_teknik.c` is now the
+top-level wiring file, while the tone-generation path described below lives in
+`sources/musical_motor_tone.c`.
 
 ## Big Picture
 
