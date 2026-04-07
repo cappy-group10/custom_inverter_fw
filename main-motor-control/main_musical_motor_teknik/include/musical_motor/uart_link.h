@@ -99,6 +99,48 @@ typedef enum {
 } CtrlAction_e;
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  Optional startup default command
+//
+//  Useful when debugging from CCS without a host attached.  When enabled, the
+//  global uartCmd starts in the "pending" state and main() dispatches it on
+//  the first background-loop pass exactly like a real UART frame.
+//
+//  You can override any of these from the build by adding --define entries, or
+//  edit them here for local bring-up.
+// ═══════════════════════════════════════════════════════════════════════════
+#ifndef UART_LINK_ENABLE_DEFAULT_CMD
+#define UART_LINK_ENABLE_DEFAULT_CMD      0U
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_FRAME_ID
+#define UART_LINK_DEFAULT_CMD_FRAME_ID    FRAME_ID_SONG_CMD
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_SONG_ID
+#define UART_LINK_DEFAULT_CMD_SONG_ID     0U
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_AMPLITUDE
+#define UART_LINK_DEFAULT_CMD_AMPLITUDE   0.2f
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_FREQ_HZ
+#define UART_LINK_DEFAULT_CMD_FREQ_HZ     440.0f
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_DURATION_MS
+#define UART_LINK_DEFAULT_CMD_DURATION_MS 500U
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_ACTION
+#define UART_LINK_DEFAULT_CMD_ACTION      CTRL_ACTION_STOP
+#endif
+
+#ifndef UART_LINK_DEFAULT_CMD_VOLUME
+#define UART_LINK_DEFAULT_CMD_VOLUME      0.2f
+#endif
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  Shared command struct — written by UART RX, consumed by main loop
 // ═══════════════════════════════════════════════════════════════════════════
 

@@ -52,7 +52,7 @@ static volatile uint16_t  toneActive         = 0U;
 static volatile uint16_t  noteIndex          = 0U;
 static volatile uint32_t  noteTicksRemaining = 0U;
 
-// Free-running counter incremented in cpuTimer0 ISR (1 kHz → ms resolution)
+// Free-running counter incremented in cpuTimer0 ISR (1 kHz -> ms resolution)
 static volatile uint32_t isrTicker = 0U;
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -29,7 +29,30 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  Shared globals
 // ═══════════════════════════════════════════════════════════════════════════
-volatile UART_Cmd_t        uartCmd   = {false, 0, 0, 0.0f, 0.0f, 0, CTRL_ACTION_STOP, 0.0f};
+#ifdef UART_LINK_ENABLE_DEFAULT_CMD
+volatile UART_Cmd_t uartCmd = {
+    true,
+    UART_LINK_DEFAULT_CMD_FRAME_ID,
+    UART_LINK_DEFAULT_CMD_SONG_ID,
+    UART_LINK_DEFAULT_CMD_AMPLITUDE,
+    UART_LINK_DEFAULT_CMD_FREQ_HZ,
+    UART_LINK_DEFAULT_CMD_DURATION_MS,
+    UART_LINK_DEFAULT_CMD_ACTION,
+    UART_LINK_DEFAULT_CMD_VOLUME
+};
+#else
+volatile UART_Cmd_t uartCmd = {
+    false,
+    0U,
+    0U,
+    0.0f,
+    0.0f,
+    0U,
+    CTRL_ACTION_STOP,
+    0.0f
+};
+#endif
+
 volatile UART_Link_Stats_t uartStats = {0, 0, 0, 0, 0, 0};
 
 // ═══════════════════════════════════════════════════════════════════════════

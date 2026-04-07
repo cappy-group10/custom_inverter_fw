@@ -43,6 +43,28 @@ typedef struct {
 #define TONE_STATE_PAUSED   2U
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  Diagnostic mirror struct
+//
+//  Updated by the tone engine so the CCS watch window can inspect internal
+//  state. (The real state lives in static vars inside musical_motor_tone.c
+//  and is not visible to the debugger without this mirror.)
+// ═══════════════════════════════════════════════════════════════════════════
+typedef struct {
+    uint16_t  toneMode;
+    uint16_t  toneState;
+    uint16_t  toneActive;
+    float32_t currentFreqHz;
+    float32_t toneAmplitude;
+    uint16_t  noteIndex;
+    uint32_t  noteTicksRemaining;
+    uint32_t  isrTicker;
+    uint16_t  queueHead;
+    uint16_t  queueTail;
+} MusicalMotorTone_Debug_t;
+
+extern volatile MusicalMotorTone_Debug_t toneDebug;
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  Public API — initialisation
 // ═══════════════════════════════════════════════════════════════════════════
 

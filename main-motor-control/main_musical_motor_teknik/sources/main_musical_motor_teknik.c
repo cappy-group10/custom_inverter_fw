@@ -24,6 +24,8 @@
 #include "device.h"
 #include "driverlib.h"
 
+// #define UART_LINK_ENABLE_DEFAULT_CMD
+
 #include "musical_motor_hw.h"
 #include "musical_motor_songs.h"
 #include "musical_motor_tone.h"
@@ -36,7 +38,7 @@
 //  write to them; the background loop continuously applies them to the tone
 //  engine.  They are also reported back to the host in the status frame.
 // ═══════════════════════════════════════════════════════════════════════════
-volatile uint16_t  g_playPause   = PLAY_STATE_IDLE;   // PlayState_e value
+volatile PlayState_e  g_playPause   = PLAY_STATE_IDLE;   // PlayState_e value
 volatile float32_t g_soundVolume = 0.2f;              // Vq per-unit (0.0 – 1.0)
 
 // ---------------------------------------------------------------------------
@@ -54,14 +56,15 @@ volatile float32_t g_soundVolume = 0.2f;              // Vq per-unit (0.0 – 1.
 static void initPIE(void);
 static void dispatchUartCommand(void);
 static void applyGlobalState(void);
-static void buildAndSendStatus(void);
+static UART_Status_t buildAndSendStatus(void);
 
 // ---------------------------------------------------------------------------
 //  main()
 // ---------------------------------------------------------------------------
+uint32_t bgLoopCount = 0U;
+UART_Status_t dbg_uart_status;
 void main(void)
 {
-    uint32_t bgLoopCount = 0U;
 
     Device_init();
 
@@ -135,7 +138,7 @@ void main(void)
         if(bgLoopCount >= STATUS_TX_DIVIDER)
         {
             bgLoopCount = 0U;
-            buildAndSendStatus();
+            dbg_uart_status = buildAndSendStatus();
         }
     }
 }
@@ -232,7 +235,7 @@ static void applyGlobalState(void)
 //  Uses g_playPause and g_soundVolume as the authoritative values so the
 //  host sees what the MCU is actually applying.
 // ---------------------------------------------------------------------------
-static void buildAndSendStatus(void)
+static UART_Status_t buildAndSendStatus(void)
 {
     UART_Status_t status;
 
@@ -246,4 +249,6 @@ static void buildAndSendStatus(void)
     status.isrTicker     = MusicalMotorTone_getIsrTicker();
 
     UART_Link_sendStatus(&status);
+
+    return status;
 }
