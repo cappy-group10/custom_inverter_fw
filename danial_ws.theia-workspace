@@ -1,13 +1,10 @@
 {
   "folders": [
     {
-      "path": "endat/PM_endat22_init"
+      "path": "example/endat/PM_endat22_init"
     },
     {
       "path": "main-motor-control/main_foc_endat_system"
-    },
-    {
-      "path": "file:///Users/danialnoorizadeh/workspace_ccstheia/manual_test"
     },
     {
       "path": "main-motor-control/main_foc_teknik"
