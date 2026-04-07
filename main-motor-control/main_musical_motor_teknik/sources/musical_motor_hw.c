@@ -15,6 +15,8 @@
 #define PWM_DEADBAND_RED 100U
 #define PWM_DEADBAND_FED 100U
 
+#define GATE_DRIVER_ENABLE 1U
+
 #define GPIO_DRV_EN 124U
 #define GPIO_LED1   31U
 #define GPIO_LED2   34U
@@ -113,7 +115,7 @@ void MusicalMotorHw_initCPUTimer1(void)
 
 void MusicalMotorHw_enableGateDriver(void)
 {
-    GPIO_writePin(GPIO_DRV_EN, 0U);
+    GPIO_writePin(GPIO_DRV_EN, GATE_DRIVER_ENABLE);
 }
 
 __interrupt void MusicalMotorHw_heartbeatISR(void)
