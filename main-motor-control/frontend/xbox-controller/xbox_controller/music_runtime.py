@@ -41,6 +41,9 @@ MUSIC_SONG_CATALOG = [
     MusicSongOption(song_id=0, label="Mario"),
     MusicSongOption(song_id=1, label="Megalovania"),
     MusicSongOption(song_id=2, label="Jingle Bells"),
+    MusicSongOption(song_id=3, label="Happy Birthday"),
+    MusicSongOption(song_id=4, label="O Canada"),
+    MusicSongOption(song_id=5, label="Mission Impossible"),
 ]
 
 

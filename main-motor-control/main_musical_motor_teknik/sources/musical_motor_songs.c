@@ -32,8 +32,10 @@
 #define NOTE_D4     294.0f
 #define NOTE_D5     587.0f
 
+#define NOTE_Eb4    311.0f
 #define NOTE_E3     165.0f
 #define NOTE_E4     330.0f
+#define NOTE_Eb5    622.0f
 #define NOTE_E5     659.0f
 
 #define NOTE_F3     175.0f
@@ -153,6 +155,39 @@ static const MusicalMotorNoteEntry melodyJingleBells[] = {
     { NOTE_REST, H },
 };
 
+static const MusicalMotorNoteEntry melodyHappyBirthday[] = {
+    { NOTE_G4,  Q }, { NOTE_G4,  E }, { NOTE_A4,  Q_D }, { NOTE_G4,  Q_D }, { NOTE_C5,  Q_D }, { NOTE_B4,  H },
+    { NOTE_G4,  Q }, { NOTE_G4,  E }, { NOTE_A4,  Q_D }, { NOTE_G4,  Q_D }, { NOTE_D5,  Q_D }, { NOTE_C5,  H },
+    { NOTE_G4,  Q }, { NOTE_G4,  E }, { NOTE_G5,  Q_D }, { NOTE_E5,  Q_D }, { NOTE_C5,  Q_D }, { NOTE_B4,  Q_D }, { NOTE_A4,  H },
+    { NOTE_F5,  Q }, { NOTE_F5,  E }, { NOTE_E5,  Q_D }, { NOTE_C5,  Q_D }, { NOTE_D5,  Q_D }, { NOTE_C5,  H },
+    { NOTE_REST, H },
+};
+
+static const MusicalMotorNoteEntry melodyOCanada[] = {
+    { NOTE_G4,  Q }, { NOTE_C5,  Q_D }, { NOTE_E5,  E }, { NOTE_F5,  Q }, { NOTE_G5,  Q_D }, { NOTE_A5,  E },
+    { NOTE_G5,  Q }, { NOTE_F5,  Q }, { NOTE_E5,  Q }, { NOTE_D5,  Q },
+    { NOTE_E5,  Q }, { NOTE_F5,  Q }, { NOTE_G5,  Q_D }, { NOTE_E5,  E }, { NOTE_C5,  Q },
+    { NOTE_D5,  Q }, { NOTE_E5,  Q }, { NOTE_F5,  Q }, { NOTE_E5,  Q }, { NOTE_D5,  Q_D }, { NOTE_C5,  H },
+
+    { NOTE_G4,  Q }, { NOTE_C5,  Q_D }, { NOTE_E5,  E }, { NOTE_F5,  Q }, { NOTE_G5,  Q_D }, { NOTE_A5,  E },
+    { NOTE_G5,  Q }, { NOTE_F5,  Q }, { NOTE_E5,  Q }, { NOTE_D5,  Q },
+    { NOTE_E5,  Q }, { NOTE_F5,  Q }, { NOTE_G5,  Q_D }, { NOTE_E5,  E }, { NOTE_F5,  Q },
+    { NOTE_D5,  Q }, { NOTE_C5,  W },
+    { NOTE_REST, H },
+};
+
+static const MusicalMotorNoteEntry melodyMissionImpossible[] = {
+    { NOTE_G4,  E }, { NOTE_G4,  E }, { NOTE_G4,  E }, { NOTE_Eb4, Q }, { NOTE_Bb4, Q },
+    { NOTE_G4,  E }, { NOTE_Eb4, Q }, { NOTE_Bb4, Q }, { NOTE_G4,  H },
+
+    { NOTE_G4,  E }, { NOTE_G4,  E }, { NOTE_G4,  E }, { NOTE_Eb4, Q }, { NOTE_Bb4, Q },
+    { NOTE_G4,  E }, { NOTE_Eb4, Q }, { NOTE_Bb4, Q }, { NOTE_G4,  H },
+
+    { NOTE_D5,  E }, { NOTE_D5,  E }, { NOTE_D5,  E }, { NOTE_Eb5, Q }, { NOTE_Bb4, Q },
+    { NOTE_Fs5, E }, { NOTE_Eb5, Q }, { NOTE_Bb4, Q }, { NOTE_G4,  H },
+    { NOTE_REST, H },
+};
+
 
 // External Facing API to define melodies as MusicalMotorMelody structs
 // 
@@ -171,6 +206,21 @@ static const MusicalMotorMelody jingleBellsMelody = {
     ARRAY_LEN(melodyJingleBells)
 };
 
+static const MusicalMotorMelody happyBirthdayMelody = {
+    melodyHappyBirthday,
+    ARRAY_LEN(melodyHappyBirthday)
+};
+
+static const MusicalMotorMelody oCanadaMelody = {
+    melodyOCanada,
+    ARRAY_LEN(melodyOCanada)
+};
+
+static const MusicalMotorMelody missionImpossibleMelody = {
+    melodyMissionImpossible,
+    ARRAY_LEN(melodyMissionImpossible)
+};
+
 // External Facing API to retrieve melodies by ID
 //
 const MusicalMotorMelody *MusicalMotorSongs_getById(MusicalMotorSongId songId)
@@ -182,6 +232,15 @@ const MusicalMotorMelody *MusicalMotorSongs_getById(MusicalMotorSongId songId)
 
         case MUSICAL_MOTOR_SONG_JINGLE_BELLS:
             return &jingleBellsMelody;
+
+        case MUSICAL_MOTOR_SONG_HAPPY_BIRTHDAY:
+            return &happyBirthdayMelody;
+
+        case MUSICAL_MOTOR_SONG_O_CANADA:
+            return &oCanadaMelody;
+
+        case MUSICAL_MOTOR_SONG_MISSION_IMPOSSIBLE:
+            return &missionImpossibleMelody;
 
         case MUSICAL_MOTOR_SONG_MARIO:
         default:

@@ -1,7 +1,7 @@
 # This is an auto-generated file - do not add it to source-control
 
 CompileFlags:
-   CompilationDatabase: F2837x_FLASH/.clangd
+   CompilationDatabase: F2837x_RAM/.clangd
 
 Diagnostics:
    Suppress: '*'

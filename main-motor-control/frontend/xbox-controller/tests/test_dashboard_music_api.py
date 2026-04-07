@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from xbox_controller.dashboard import create_app
+from xbox_controller.music_runtime import MUSIC_SONG_CATALOG
 from xbox_controller.runtime_models import MusicCommandRecord, MusicSongOption, MusicState, MusicStatusRecord, SessionSnapshot, to_payload
 
 
@@ -18,6 +19,13 @@ class MusicManagerStub:
 
     def set_logger(self, _logger):
         return None
+
+    @staticmethod
+    def _song_label(song_id: int) -> str:
+        for song in MUSIC_SONG_CATALOG:
+            if song.song_id == song_id:
+                return song.label
+        return f"Song {song_id}"
 
     async def start_async(self, port=None, baudrate=115200, joystick_index=0, mode="drive"):
         del joystick_index
@@ -37,11 +45,7 @@ class MusicManagerStub:
         self.snapshot.counters = {"tx_frames": 1, "rx_frames": 1, "checksum_errors": 0, "serial_errors": 0}
         if mode == "music":
             self.snapshot.music_state = MusicState(
-                songs=[
-                    MusicSongOption(song_id=0, label="Mario"),
-                    MusicSongOption(song_id=1, label="Megalovania"),
-                    MusicSongOption(song_id=2, label="Jingle Bells"),
-                ],
+                songs=[MusicSongOption(song_id=song.song_id, label=song.label) for song in MUSIC_SONG_CATALOG],
                 selected_song_id=0,
                 volume=0.2,
                 play_state="IDLE",
@@ -69,7 +73,13 @@ class MusicManagerStub:
                 "selected_song_id": song_id,
                 "last_started_song_id": song_id,
                 "volume": volume,
-                "last_command": MusicCommandRecord(command_type="song", song_id=song_id, song_label="Megalovania", amplitude=volume, timestamp=124.0),
+                "last_command": MusicCommandRecord(
+                    command_type="song",
+                    song_id=song_id,
+                    song_label=self._song_label(song_id),
+                    amplitude=volume,
+                    timestamp=124.0,
+                ),
                 "latest_status": MusicStatusRecord(
                     play_state="PLAYING",
                     play_mode="SONG",
@@ -133,6 +143,7 @@ def test_dashboard_music_session_and_endpoints():
         payload = started.json()
         assert payload["mode"] == "music"
         assert payload["music_state"]["songs"][0]["label"] == "Mario"
+        assert payload["music_state"]["songs"][4]["label"] == "O Canada"
 
         detail = client.get("/api/mcus/primary/music")
         assert detail.status_code == 200
@@ -142,6 +153,7 @@ def test_dashboard_music_session_and_endpoints():
         assert played.status_code == 200
         assert played.json()["music_state"]["last_started_song_id"] == 1
         assert played.json()["music_state"]["play_state"] == "PLAYING"
+        assert played.json()["music_state"]["last_command"]["song_label"] == "Megalovania"
 
         paused = client.post("/api/mcus/primary/music/pause")
         assert paused.status_code == 200
@@ -169,3 +181,4 @@ def test_dashboard_music_websocket_snapshot_includes_music_state():
             assert initial["type"] == "snapshot"
             assert initial["payload"]["mode"] == "music"
             assert initial["payload"]["music_state"]["songs"][1]["label"] == "Megalovania"
+            assert initial["payload"]["music_state"]["songs"][5]["label"] == "Mission Impossible"
