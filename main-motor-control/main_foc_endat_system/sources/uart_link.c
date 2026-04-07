@@ -6,7 +6,8 @@
 //
 // DESCRIPTION:
 //   Phase 1: SCI-A initialization and byte-level echo.
-//   Phase 2: Transmit status frames (47 bytes, big-endian) to host PC.
+//   Phase 2: Transmit diagnostic status frames (55 bytes, big-endian) to
+//   host PC.
 //
 // Target: F2837xD  (SCIA, GPIO42=TX, GPIO43=RX — via FT2232H)
 // Baud:   115200, 8-bit, no parity, 1 stop bit, FIFO enabled
@@ -26,6 +27,7 @@ extern float32_t speedRef;
 extern float32_t IdRef;
 extern float32_t IqRef;
 extern CtrlState_e ctrlState;
+extern volatile uint32_t gEndatCrcFailCount;
 
 // ---------------------------------------------------------------------------
 //  Diagnostic counters — place in a named section so CCS can find them easily
@@ -148,7 +150,7 @@ void UART_Link_echoTask(void)
 // ---------------------------------------------------------------------------
 //  Byte-order helpers for big-endian transmission
 //
-//  Python expects ">BBBBHfffffffffIB" (big-endian).
+//  Python expects ">BBBBHffffffffffIIB" (big-endian).
 //  C2000 is little-endian at the word level:
 //    float32_t occupies 2 x 16-bit words: w[0]=bits[15:0], w[1]=bits[31:16]
 //    uint32_t  same layout.
@@ -210,13 +212,14 @@ static uint16_t txBufChecksum(void)
 // ---------------------------------------------------------------------------
 //  UART_Link_sendStatus()
 //
-//  Phase 2: Build and transmit a 47-byte status frame.
-//  Format (must match Python RX_STATUS_FMT = ">BBBBHfffffffffIB"):
-//    [0x55][0x10][runMotor][ctrlState][tripFlag:2][speedRef:4]
+//  Phase 2: Build and transmit a 55-byte diagnostic status frame.
+//  Format (must match Python RX_STATUS_DIAG_FMT = ">BBBBHffffffffffIIB"):
+//    [0x55][0x12][runMotor][ctrlState][tripFlag:2][speedRef:4]
 //    [speedFbk:4][posMechTheta:4][Vdcbus:4][IdFbk:4][IqFbk:4]
-//    [currentAs:4][currentBs:4][currentCs:4][isrTicker:4][checksum:1]
+//    [offsetCurrentBs:4][offsetCurrentCs:4][fclLatencyUs:4]
+//    [rawPositionOffsetPu:4][endatCrcFailCount:4][isrTicker:4][checksum:1]
 //
-//  Uses blocking FIFO writes — at 115200 baud, 47 bytes = ~4.1 ms.
+//  Uses blocking FIFO writes — at 115200 baud, 55 bytes = ~4.8 ms.
 //  Call from a slow background task (C2, every ~450 us cycle) with a
 //  rate divider so you don't saturate the link.
 // ---------------------------------------------------------------------------
@@ -226,7 +229,7 @@ void UART_Link_sendStatus(MOTOR_Vars_t *pMotor)
 
     // Header
     txBufPutByte(RX_SYNC_BYTE);                 // 0x55
-    txBufPutByte(FRAME_ID_STATUS);              // 0x10
+    txBufPutByte(FRAME_ID_STATUS_DIAG);         // 0x12
 
     // Motor state
     txBufPutByte((uint16_t)pMotor->runMotor);   // 1 byte
@@ -240,10 +243,13 @@ void UART_Link_sendStatus(MOTOR_Vars_t *pMotor)
     txBufPutFloatBE(pMotor->Vdcbus);
     txBufPutFloatBE(pMotor->pi_id.fbk);          // Id feedback
     txBufPutFloatBE(pMotor->ptrFCL->pi_iq.fbk);  // Iq feedback
-    txBufPutFloatBE(pMotor->currentAs);
-    txBufPutFloatBE(pMotor->currentBs);
-    txBufPutFloatBE(pMotor->currentCs);
+    txBufPutFloatBE(pMotor->offset_currentBs);
+    txBufPutFloatBE(pMotor->offset_currentCs);
+    txBufPutFloatBE(pMotor->fclLatencyInMicroSec);
+    txBufPutFloatBE(gEndatRuntimeState.rawPositionOffsetPu);
 
+    // 32-bit diagnostics
+    txBufPutU32BE(gEndatCrcFailCount);
     // ISR heartbeat (4 bytes, big-endian)
     txBufPutU32BE(pMotor->isrTicker);
 

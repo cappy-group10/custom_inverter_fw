@@ -290,9 +290,10 @@ function Sparkline({
           iq_ref: 0,
           iq_fbk: 0,
           vdc_bus: 0,
-          current_as: 0,
-          current_bs: 0,
-          current_cs: 0,
+          offset_current_bs: 0,
+          offset_current_cs: 0,
+          fcl_latency_us: 0,
+          raw_position_offset_pu: 0,
         },
       ];
   const width = 320;
@@ -827,9 +828,11 @@ function TelemetryTab({ snapshot }: { snapshot: SessionSnapshot }) {
           <div className="metric-card"><span>Trip Flag</span><strong>{formatTripFlag(status.trip_flag)}</strong></div>
           <div className="metric-card"><span>Id Fbk</span><strong>{formatSigned(status.id_fbk, 4)}</strong></div>
           <div className="metric-card"><span>Iq Fbk</span><strong>{formatSigned(status.iq_fbk, 4)}</strong></div>
-          <div className="metric-card"><span>Phase A</span><strong>{formatSigned(status.current_as, 3)}</strong></div>
-          <div className="metric-card"><span>Phase B</span><strong>{formatSigned(status.current_bs, 3)}</strong></div>
-          <div className="metric-card"><span>Phase C</span><strong>{formatSigned(status.current_cs, 3)}</strong></div>
+          <div className="metric-card"><span>Offset B</span><strong>{formatSigned(status.offset_current_bs, 5)}</strong></div>
+          <div className="metric-card"><span>Offset C</span><strong>{formatSigned(status.offset_current_cs, 5)}</strong></div>
+          <div className="metric-card"><span>FCL Latency</span><strong>{`${formatFixed(status.fcl_latency_us, 2)} us`}</strong></div>
+          <div className="metric-card"><span>Raw Pos Offset</span><strong>{`${formatSigned(status.raw_position_offset_pu, 5)} pu`}</strong></div>
+          <div className="metric-card"><span>CRC Fail Count</span><strong>{Math.trunc(Number(status.endat_crc_fail_count ?? 0))}</strong></div>
           <div className="metric-card"><span>ISR Ticker</span><strong>{status.isr_ticker ?? 0}</strong></div>
         </div>
         <div className="fault-list">
@@ -878,13 +881,14 @@ function TelemetryTab({ snapshot }: { snapshot: SessionSnapshot }) {
             <Sparkline samples={snapshot.telemetry_samples || []} series={[{ key: "vdc_bus", color: "#9de7ff" }]} />
           </article>
           <article className="chart-card">
-            <h3>Phase Currents</h3>
+            <h3>Drive Diagnostics</h3>
             <Sparkline
               samples={snapshot.telemetry_samples || []}
               series={[
-                { key: "current_as", color: "#44d1c2" },
-                { key: "current_bs", color: "#f18748" },
-                { key: "current_cs", color: "#ff6b6b" },
+                { key: "offset_current_bs", color: "#44d1c2" },
+                { key: "offset_current_cs", color: "#f18748" },
+                { key: "fcl_latency_us", color: "#ff6b6b" },
+                { key: "raw_position_offset_pu", color: "#9de7ff" },
               ]}
             />
           </article>

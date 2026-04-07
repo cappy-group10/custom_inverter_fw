@@ -88,6 +88,14 @@ function formatTemperature(value: number | null | undefined) {
   return `${value.toFixed(1)} C`;
 }
 
+function formatLatencyUs(value: number | null | undefined) {
+  return `${formatFixed(value, 2)} us`;
+}
+
+function formatCounter(value: number | null | undefined) {
+  return String(Math.trunc(Number(value ?? 0)));
+}
+
 function createEmptyTelemetrySample(): TelemetrySample {
   return {
     timestamp: 0,
@@ -98,9 +106,10 @@ function createEmptyTelemetrySample(): TelemetrySample {
     iq_ref: 0,
     iq_fbk: 0,
     vdc_bus: 0,
-    current_as: 0,
-    current_bs: 0,
-    current_cs: 0,
+    offset_current_bs: 0,
+    offset_current_cs: 0,
+    fcl_latency_us: 0,
+    raw_position_offset_pu: 0,
   };
 }
 
@@ -559,22 +568,30 @@ function SharedMotorPanel({
           <article className="motor-data-card">
             <div className="motor-card-head">
               <div>
-                <span className="motor-card-kicker">Phase Currents</span>
-                <strong>Instantaneous Snapshot</strong>
+                <span className="motor-card-kicker">Diagnostics</span>
+                <strong>Drive Runtime Snapshot</strong>
               </div>
             </div>
             <dl className="motor-pair-list">
               <div>
-                <dt>Phase A</dt>
-                <dd>{`${formatSigned(status.current_as, 3)} pu`}</dd>
+                <dt>Offset B</dt>
+                <dd>{formatSigned(status.offset_current_bs, 5)}</dd>
               </div>
               <div>
-                <dt>Phase B</dt>
-                <dd>{`${formatSigned(status.current_bs, 3)} pu`}</dd>
+                <dt>Offset C</dt>
+                <dd>{formatSigned(status.offset_current_cs, 5)}</dd>
               </div>
               <div>
-                <dt>Phase C</dt>
-                <dd>{`${formatSigned(status.current_cs, 3)} pu`}</dd>
+                <dt>FCL Latency</dt>
+                <dd>{formatLatencyUs(status.fcl_latency_us)}</dd>
+              </div>
+              <div>
+                <dt>Raw Pos Offset</dt>
+                <dd>{`${formatSigned(status.raw_position_offset_pu, 5)} pu`}</dd>
+              </div>
+              <div>
+                <dt>CRC Fail Count</dt>
+                <dd>{formatCounter(status.endat_crc_fail_count)}</dd>
               </div>
               <div>
                 <dt>Rotor Theta</dt>
@@ -844,22 +861,30 @@ function DedicatedMotorPanel({
               <article className="motor-data-card compact">
                 <div className="motor-card-head">
                   <div>
-                    <span className="motor-card-kicker">Phase Currents</span>
-                    <strong>Instantaneous Snapshot</strong>
+                    <span className="motor-card-kicker">Diagnostics</span>
+                    <strong>Drive Runtime Snapshot</strong>
                   </div>
                 </div>
                 <dl className="motor-pair-list compact dense">
                   <div>
-                    <dt>Phase A</dt>
-                    <dd>{`${formatSigned(status.current_as, 3)} pu`}</dd>
+                    <dt>Offset B</dt>
+                    <dd>{formatSigned(status.offset_current_bs, 5)}</dd>
                   </div>
                   <div>
-                    <dt>Phase B</dt>
-                    <dd>{`${formatSigned(status.current_bs, 3)} pu`}</dd>
+                    <dt>Offset C</dt>
+                    <dd>{formatSigned(status.offset_current_cs, 5)}</dd>
                   </div>
                   <div>
-                    <dt>Phase C</dt>
-                    <dd>{`${formatSigned(status.current_cs, 3)} pu`}</dd>
+                    <dt>FCL Latency</dt>
+                    <dd>{formatLatencyUs(status.fcl_latency_us)}</dd>
+                  </div>
+                  <div>
+                    <dt>Raw Pos Offset</dt>
+                    <dd>{`${formatSigned(status.raw_position_offset_pu, 5)} pu`}</dd>
+                  </div>
+                  <div>
+                    <dt>CRC Fail Count</dt>
+                    <dd>{formatCounter(status.endat_crc_fail_count)}</dd>
                   </div>
                   <div>
                     <dt>Rotor Theta</dt>

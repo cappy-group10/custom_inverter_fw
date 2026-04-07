@@ -28,6 +28,7 @@ FRAME_MUSIC_CMD = 0x02
 # Frame IDs (MCU -> host)
 FRAME_STATUS    = 0x10
 FRAME_FAULT     = 0x11
+FRAME_STATUS_DIAG = 0x12
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,15 @@ TX_MUSIC_LEN = struct.calcsize(TX_MUSIC_FMT)
 # ---------------------------------------------------------------------------
 #  RX frame formats (MCU -> host)
 # ---------------------------------------------------------------------------
+# Diagnostic status frame:
+#   [SYNC:1][ID:1][runMotor:1][ctrlState:1][tripFlag:2H][speedRef:4f]
+#   [speedFbk:4f][posMechTheta:4f][Vdcbus:4f][IdFbk:4f][IqFbk:4f]
+#   [offsetCurrentBs:4f][offsetCurrentCs:4f][fclLatencyUs:4f]
+#   [rawPositionOffsetPu:4f][endatCrcFailCount:4I][isrTicker:4I][chksum:1]
+#   total = 55 bytes
+RX_STATUS_DIAG_FMT = ">BBBBHffffffffffIIB"
+RX_STATUS_DIAG_LEN = struct.calcsize(RX_STATUS_DIAG_FMT)
+
 # Status frame:
 #   [SYNC:1][ID:1][runMotor:1][ctrlState:1][tripFlag:2H][speedRef:4f]
 #   [speedFbk:4f][posMechTheta:4f][Vdcbus:4f][IdFbk:4f][IqFbk:4f]
@@ -110,9 +120,11 @@ class MCUStatus:
     vdc_bus: float = 0.0        # DC bus voltage (Vdcbus)
     id_fbk: float = 0.0         # d-axis current feedback (pi_id.fbk)
     iq_fbk: float = 0.0         # q-axis current feedback (pi_iq.fbk)
-    current_as: float = 0.0     # phase A current
-    current_bs: float = 0.0     # phase B current
-    current_cs: float = 0.0     # phase C current
+    offset_current_bs: float = 0.0
+    offset_current_cs: float = 0.0
+    fcl_latency_us: float = 0.0
+    raw_position_offset_pu: float = 0.0
+    endat_crc_fail_count: int = 0
     temp_motor_winding_c: float | None = None
     temp_mcu_c: float | None = None
     temp_igbts_c: float | None = None
@@ -128,7 +140,9 @@ class MCUStatus:
                 f"theta={self.pos_mech_theta:+.4f} "
                 f"Vdc={self.vdc_bus:.1f} "
                 f"Id={self.id_fbk:+.4f} Iq={self.iq_fbk:+.4f} "
-                f"Ia={self.current_as:+.3f} Ib={self.current_bs:+.3f} Ic={self.current_cs:+.3f} "
+                f"offB={self.offset_current_bs:+.5f} offC={self.offset_current_cs:+.5f} "
+                f"lat={self.fcl_latency_us:.2f}us rawOff={self.raw_position_offset_pu:+.5f} "
+                f"crc={self.endat_crc_fail_count} "
                 f"tick={self.isr_ticker}")
 
 
@@ -258,6 +272,7 @@ class UARTLink:
             FRAME_MOTOR_CMD: "motor_cmd",
             FRAME_MUSIC_CMD: "music_cmd",
             FRAME_STATUS: "status",
+            FRAME_STATUS_DIAG: "status_diag",
             FRAME_FAULT: "fault",
         }.get(frame_id, f"frame_{frame_id:02X}")
 
@@ -380,6 +395,34 @@ class UARTLink:
 
             frame_id = self._rx_buf[1]
 
+            if frame_id == FRAME_STATUS_DIAG:
+                if len(self._rx_buf) < RX_STATUS_DIAG_LEN:
+                    return
+
+                frame = bytes(self._rx_buf[:RX_STATUS_DIAG_LEN])
+                if self._verify_checksum(frame):
+                    self._rx_buf = self._rx_buf[RX_STATUS_DIAG_LEN:]
+                    self._handle_status_diag(frame)
+                    continue
+
+                self._record_frame(
+                    direction="rx",
+                    frame_id=frame_id,
+                    frame=frame,
+                    decoded={"error": "diagnostic status checksum mismatch"},
+                    checksum_ok=False,
+                )
+                self._logger.log(
+                    "warning",
+                    "uart",
+                    "Diagnostic status frame checksum mismatch",
+                    route="/uart/rx",
+                    metadata={"frame_id": frame_id, "raw_hex": frame.hex(" ")},
+                )
+                print("[UART] diagnostic status frame checksum mismatch")
+                self._rx_buf = self._rx_buf[1:]
+                continue
+
             if frame_id == FRAME_STATUS:
                 if len(self._rx_buf) < RX_STATUS_LEN_LEGACY:
                     return
@@ -455,6 +498,39 @@ class UARTLink:
     def _verify_checksum(self, frame: bytes) -> bool:
         return self._checksum(frame[:-1]) == frame[-1]
 
+    def _handle_status_diag(self, frame: bytes):
+        vals = struct.unpack(RX_STATUS_DIAG_FMT, frame)
+        status = MCUStatus(
+            run_motor=vals[2],
+            ctrl_state=vals[3],
+            trip_flag=vals[4],
+            speed_ref=vals[5],
+            speed_fbk=vals[6],
+            pos_mech_theta=vals[7],
+            vdc_bus=vals[8],
+            id_fbk=vals[9],
+            iq_fbk=vals[10],
+            offset_current_bs=vals[11],
+            offset_current_cs=vals[12],
+            fcl_latency_us=vals[13],
+            raw_position_offset_pu=vals[14],
+            endat_crc_fail_count=vals[15],
+            isr_ticker=vals[16],
+        )
+        now = time.time()
+        with self._lock:
+            self.rx_status.append(status)
+            self._latest_status = status
+            self._health.last_status_at = now
+            self._counters.status_frames += 1
+        self._record_frame(
+            direction="rx",
+            frame_id=FRAME_STATUS_DIAG,
+            frame=frame,
+            decoded=to_payload(status),
+            checksum_ok=True,
+        )
+
     def _handle_status(self, frame: bytes):
         vals = struct.unpack(RX_STATUS_FMT, frame)
         # vals: (sync, id, runMotor, ctrlState, tripFlag, speedRef, speedFbk,
@@ -470,9 +546,6 @@ class UARTLink:
             vdc_bus=vals[8],
             id_fbk=vals[9],
             iq_fbk=vals[10],
-            current_as=vals[11],
-            current_bs=vals[12],
-            current_cs=vals[13],
             isr_ticker=vals[14],
         )
         now = time.time()
@@ -485,7 +558,7 @@ class UARTLink:
             direction="rx",
             frame_id=FRAME_STATUS,
             frame=frame,
-            decoded=to_payload(status),
+            decoded={**to_payload(status), "phase_current_status_frame": True, "diagnostic_fields_unavailable": True},
             checksum_ok=True,
         )
 
@@ -501,9 +574,6 @@ class UARTLink:
             vdc_bus=vals[7],
             id_fbk=vals[8],
             iq_fbk=vals[9],
-            current_as=vals[10],
-            current_bs=vals[11],
-            current_cs=vals[12],
             isr_ticker=vals[13],
         )
         now = time.time()
@@ -516,7 +586,7 @@ class UARTLink:
             direction="rx",
             frame_id=FRAME_STATUS,
             frame=frame,
-            decoded={**to_payload(status), "legacy_status_frame": True},
+            decoded={**to_payload(status), "legacy_status_frame": True, "diagnostic_fields_unavailable": True},
             checksum_ok=True,
         )
         if not self._legacy_status_warned:
@@ -528,7 +598,7 @@ class UARTLink:
                 route="/uart/rx",
                 metadata={
                     "frame_id": FRAME_STATUS,
-                    "message": "MCU telemetry is using the older status frame without speed feedback. Reflash the MCU to enable true speed_fbk telemetry.",
+                    "message": "MCU telemetry is using the older status frame without drive diagnostics. Reflash the MCU to enable full diagnostic telemetry.",
                 },
             )
 

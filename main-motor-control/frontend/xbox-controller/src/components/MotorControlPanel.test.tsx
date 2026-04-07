@@ -59,9 +59,11 @@ describe("MotorControlPanel", () => {
         vdc_bus: 650,
         id_fbk: 0.3,
         iq_fbk: 0.4,
-        current_as: 0.7,
-        current_bs: -0.2,
-        current_cs: -0.5,
+        offset_current_bs: 0.12,
+        offset_current_cs: -0.11,
+        fcl_latency_us: 3.4,
+        raw_position_offset_pu: -0.0625,
+        endat_crc_fail_count: 2,
         pos_mech_theta: 0.12,
       },
       health: {
@@ -81,9 +83,10 @@ describe("MotorControlPanel", () => {
           iq_ref: 0.1,
           iq_fbk: 0.4,
           vdc_bus: 650,
-          current_as: 0.7,
-          current_bs: -0.2,
-          current_cs: -0.5,
+          offset_current_bs: 0.12,
+          offset_current_cs: -0.11,
+          fcl_latency_us: 3.4,
+          raw_position_offset_pu: -0.0625,
         },
       ],
     });
@@ -111,6 +114,8 @@ describe("MotorControlPanel", () => {
     expect(screen.getAllByText("120 RPM").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /unlatch brake \(send stop\)/i })).toBeInTheDocument();
     expect(screen.getByText("Out of range")).toBeInTheDocument();
+    expect(screen.getByText("Drive Runtime Snapshot")).toBeInTheDocument();
+    expect(screen.getByText("CRC Fail Count")).toBeInTheDocument();
     expect(screen.getAllByText("Pending source")).toHaveLength(3);
     expect(screen.getByText("1625 W")).toBeInTheDocument();
   });
@@ -133,9 +138,11 @@ describe("MotorControlPanel", () => {
         vdc_bus: 40,
         id_fbk: 0.02,
         iq_fbk: 0.03,
-        current_as: 0.1,
-        current_bs: -0.05,
-        current_cs: -0.05,
+        offset_current_bs: 0.1,
+        offset_current_cs: -0.05,
+        fcl_latency_us: 3.1,
+        raw_position_offset_pu: 0.0125,
+        endat_crc_fail_count: 0,
         pos_mech_theta: 0.12,
       },
       health: {

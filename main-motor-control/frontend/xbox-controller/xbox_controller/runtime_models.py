@@ -56,9 +56,10 @@ class TelemetrySample:
     iq_ref: float
     iq_fbk: float
     vdc_bus: float
-    current_as: float
-    current_bs: float
-    current_cs: float
+    offset_current_bs: float
+    offset_current_cs: float
+    fcl_latency_us: float
+    raw_position_offset_pu: float
 
 
 @dataclass(slots=True)

@@ -22,15 +22,15 @@ class CommandLimits:
     Acts as a constraint layer between the input mapping and the MCU.
     Adjust these to match your motor and drive ratings.
     """
-    speed_min: float = -0.30   # per-unit (negative = reverse)
-    speed_max: float =  0.30
+    speed_min: float = -0.65   # per-unit (negative = reverse)
+    speed_max: float =  0.65
 
-    id_min: float = -0.30      # negative = field weakening
-    id_max: float =  0.30
+    id_min: float = -0.50      # negative = field weakening
+    id_max: float =  0.50
     id_step: float = 0.02
 
-    iq_min: float = -0.20
-    iq_max: float =  0.20
+    iq_min: float = -0.80      # q-axis torque command
+    iq_max: float =  0.80
     iq_step: float = 0.02
 
     def clamp_speed(self, val: float) -> float:
@@ -51,7 +51,7 @@ class MotorCommand:
       ctrlState, speedRef, IdRef, IqRef
     """
     ctrl_state: CtrlState = CtrlState.STOP
-    speed_ref: float = 0.0   # per-unit, typical range ±0.3
+    speed_ref: float = 0.0   # per-unit, typical range ±0.65
     id_ref: float = 0.0      # d-axis current reference
     iq_ref: float = 0.0      # q-axis current reference (torque)
 

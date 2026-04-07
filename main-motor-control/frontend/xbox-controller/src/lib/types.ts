@@ -83,9 +83,11 @@ export interface MCUStatus {
   vdc_bus?: number;
   id_fbk?: number;
   iq_fbk?: number;
-  current_as?: number;
-  current_bs?: number;
-  current_cs?: number;
+  offset_current_bs?: number;
+  offset_current_cs?: number;
+  fcl_latency_us?: number;
+  raw_position_offset_pu?: number;
+  endat_crc_fail_count?: number;
   temp_motor_winding_c?: number | null;
   temp_mcu_c?: number | null;
   temp_igbts_c?: number | null;
@@ -124,9 +126,10 @@ export interface TelemetrySample {
   iq_ref: number;
   iq_fbk: number;
   vdc_bus: number;
-  current_as: number;
-  current_bs: number;
-  current_cs: number;
+  offset_current_bs: number;
+  offset_current_cs: number;
+  fcl_latency_us: number;
+  raw_position_offset_pu: number;
 }
 
 export interface MusicSongOption {
@@ -248,9 +251,11 @@ export interface McuDetail extends McuSummary {
     id_fbk: number;
     iq_ref: number;
     iq_fbk: number;
-    current_as: number;
-    current_bs: number;
-    current_cs: number;
+    offset_current_bs: number;
+    offset_current_cs: number;
+    fcl_latency_us: number;
+    raw_position_offset_pu: number;
+    endat_crc_fail_count: number;
     vdc_bus: number;
     temp_motor_winding_c: number | null;
     temp_mcu_c: number | null;

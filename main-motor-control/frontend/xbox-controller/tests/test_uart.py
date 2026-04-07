@@ -3,10 +3,40 @@ import struct
 import pytest
 
 from xbox_controller.commands import CtrlState, MotorCommand
-from xbox_controller.uart import FRAME_STATUS, RX_SYNC, TX_MOTOR_LEN, MCUStatus, UARTLink
+from xbox_controller.uart import FRAME_STATUS, FRAME_STATUS_DIAG, RX_SYNC, TX_MOTOR_LEN, MCUStatus, UARTLink
 
 
-def build_status_frame(link: UARTLink, status: MCUStatus) -> bytes:
+def build_diag_status_frame(link: UARTLink, status: MCUStatus) -> bytes:
+    payload = struct.pack(
+        ">BBBBHffffffffffII",
+        RX_SYNC,
+        FRAME_STATUS_DIAG,
+        status.run_motor,
+        status.ctrl_state,
+        status.trip_flag,
+        status.speed_ref,
+        status.speed_fbk,
+        status.pos_mech_theta,
+        status.vdc_bus,
+        status.id_fbk,
+        status.iq_fbk,
+        status.offset_current_bs,
+        status.offset_current_cs,
+        status.fcl_latency_us,
+        status.raw_position_offset_pu,
+        status.endat_crc_fail_count,
+        status.isr_ticker,
+    )
+    return payload + bytes([link._checksum(payload)])
+
+
+def build_phase_status_frame(
+    link: UARTLink,
+    status: MCUStatus,
+    current_as: float = 0.0,
+    current_bs: float = 0.0,
+    current_cs: float = 0.0,
+) -> bytes:
     payload = struct.pack(
         ">BBBBHfffffffffI",
         RX_SYNC,
@@ -20,15 +50,21 @@ def build_status_frame(link: UARTLink, status: MCUStatus) -> bytes:
         status.vdc_bus,
         status.id_fbk,
         status.iq_fbk,
-        status.current_as,
-        status.current_bs,
-        status.current_cs,
+        current_as,
+        current_bs,
+        current_cs,
         status.isr_ticker,
     )
     return payload + bytes([link._checksum(payload)])
 
 
-def build_legacy_status_frame(link: UARTLink, status: MCUStatus) -> bytes:
+def build_legacy_status_frame(
+    link: UARTLink,
+    status: MCUStatus,
+    current_as: float = 0.0,
+    current_bs: float = 0.0,
+    current_cs: float = 0.0,
+) -> bytes:
     payload = struct.pack(
         ">BBBBHffffffffI",
         RX_SYNC,
@@ -41,9 +77,9 @@ def build_legacy_status_frame(link: UARTLink, status: MCUStatus) -> bytes:
         status.vdc_bus,
         status.id_fbk,
         status.iq_fbk,
-        status.current_as,
-        status.current_bs,
-        status.current_cs,
+        current_as,
+        current_bs,
+        current_cs,
         status.isr_ticker,
     )
     return payload + bytes([link._checksum(payload)])
@@ -78,7 +114,7 @@ def test_pack_calibrate_motor_frame_uses_new_ctrl_state():
     assert frame[-1] == link._checksum(frame[:-1])
 
 
-def test_parse_status_frame_and_record_rx_state():
+def test_parse_diagnostic_status_frame_and_record_rx_state():
     link = UARTLink(port=None)
     expected = MCUStatus(
         run_motor=1,
@@ -90,13 +126,15 @@ def test_parse_status_frame_and_record_rx_state():
         vdc_bus=34.5,
         id_fbk=-0.02,
         iq_fbk=0.07,
-        current_as=1.0,
-        current_bs=-0.4,
-        current_cs=-0.6,
+        offset_current_bs=0.125,
+        offset_current_cs=-0.115,
+        fcl_latency_us=3.75,
+        raw_position_offset_pu=-0.0625,
+        endat_crc_fail_count=7,
         isr_ticker=42,
     )
 
-    link._rx_buf.extend(build_status_frame(link, expected))
+    link._rx_buf.extend(build_diag_status_frame(link, expected))
     link._parse_rx_buf()
 
     statuses = link.pop_statuses()
@@ -106,9 +144,14 @@ def test_parse_status_frame_and_record_rx_state():
     assert len(statuses) == 1
     assert statuses[0].speed_ref == pytest.approx(expected.speed_ref)
     assert statuses[0].speed_fbk == pytest.approx(expected.speed_fbk)
+    assert statuses[0].offset_current_bs == pytest.approx(expected.offset_current_bs)
+    assert statuses[0].offset_current_cs == pytest.approx(expected.offset_current_cs)
+    assert statuses[0].fcl_latency_us == pytest.approx(expected.fcl_latency_us)
+    assert statuses[0].raw_position_offset_pu == pytest.approx(expected.raw_position_offset_pu)
+    assert statuses[0].endat_crc_fail_count == expected.endat_crc_fail_count
     assert len(frames) == 1
     assert frames[0].direction == "rx"
-    assert frames[0].frame_name == "status"
+    assert frames[0].frame_name == "status_diag"
     assert counters.rx_frames == 1
     assert counters.status_frames == 1
 
@@ -116,7 +159,7 @@ def test_parse_status_frame_and_record_rx_state():
 def test_checksum_mismatch_is_counted_without_status_update():
     link = UARTLink(port=None)
     status = MCUStatus(ctrl_state=CtrlState.RUN, speed_ref=0.2, speed_fbk=0.18, vdc_bus=36.0, isr_ticker=7)
-    frame = bytearray(build_status_frame(link, status))
+    frame = bytearray(build_diag_status_frame(link, status))
     frame[-1] ^= 0xFF
 
     link._rx_buf.extend(frame)
@@ -131,6 +174,42 @@ def test_checksum_mismatch_is_counted_without_status_update():
     assert counters.checksum_errors == 1
 
 
+def test_parse_phase_current_status_frame_without_diag_values():
+    link = UARTLink(port=None)
+    expected = MCUStatus(
+        run_motor=1,
+        ctrl_state=CtrlState.RUN,
+        trip_flag=0x0002,
+        speed_ref=0.15,
+        speed_fbk=0.12,
+        pos_mech_theta=0.33,
+        vdc_bus=34.5,
+        id_fbk=-0.02,
+        iq_fbk=0.07,
+        isr_ticker=42,
+    )
+
+    link._rx_buf.extend(build_phase_status_frame(link, expected, current_as=1.0, current_bs=-0.4, current_cs=-0.6))
+    link._parse_rx_buf()
+
+    statuses = link.pop_statuses()
+    frames = link.pop_frame_records()
+    counters = link.get_counters()
+
+    assert len(statuses) == 1
+    assert statuses[0].speed_ref == pytest.approx(expected.speed_ref)
+    assert statuses[0].speed_fbk == pytest.approx(expected.speed_fbk)
+    assert statuses[0].offset_current_bs == pytest.approx(0.0)
+    assert statuses[0].offset_current_cs == pytest.approx(0.0)
+    assert statuses[0].fcl_latency_us == pytest.approx(0.0)
+    assert statuses[0].raw_position_offset_pu == pytest.approx(0.0)
+    assert statuses[0].endat_crc_fail_count == 0
+    assert len(frames) == 1
+    assert frames[0].decoded["phase_current_status_frame"] is True
+    assert frames[0].decoded["diagnostic_fields_unavailable"] is True
+    assert counters.status_frames == 1
+
+
 def test_parse_legacy_status_frame_without_checksum_mismatch():
     link = UARTLink(port=None)
     expected = MCUStatus(
@@ -142,13 +221,10 @@ def test_parse_legacy_status_frame_without_checksum_mismatch():
         vdc_bus=48.0,
         id_fbk=0.01,
         iq_fbk=0.05,
-        current_as=0.8,
-        current_bs=-0.4,
-        current_cs=-0.4,
         isr_ticker=99,
     )
 
-    link._rx_buf.extend(build_legacy_status_frame(link, expected))
+    link._rx_buf.extend(build_legacy_status_frame(link, expected, current_as=0.8, current_bs=-0.4, current_cs=-0.4))
     link._parse_rx_buf()
 
     statuses = link.pop_statuses()
@@ -158,9 +234,15 @@ def test_parse_legacy_status_frame_without_checksum_mismatch():
     assert len(statuses) == 1
     assert statuses[0].speed_ref == pytest.approx(expected.speed_ref)
     assert statuses[0].speed_fbk == pytest.approx(0.0)
+    assert statuses[0].offset_current_bs == pytest.approx(0.0)
+    assert statuses[0].offset_current_cs == pytest.approx(0.0)
+    assert statuses[0].fcl_latency_us == pytest.approx(0.0)
+    assert statuses[0].raw_position_offset_pu == pytest.approx(0.0)
+    assert statuses[0].endat_crc_fail_count == 0
     assert len(frames) == 1
     assert frames[0].checksum_ok is True
     assert frames[0].decoded["legacy_status_frame"] is True
+    assert frames[0].decoded["diagnostic_fields_unavailable"] is True
     assert counters.status_frames == 1
     assert counters.checksum_errors == 0
 

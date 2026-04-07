@@ -130,9 +130,9 @@ typedef float _iq;
 // User can select choices from available control configurations
 //
 #define  CGND                COLD
-#define  BUILDLEVEL          FCL_LEVEL3
+#define  BUILDLEVEL          FCL_LEVEL4
 #define  SAMPLING_METHOD     SINGLE_SAMPLING   // DOUBLE_SAMPLING   // SINGLE_SAMPLING
-#define  FCL_CNTLR           CMPLX_CNTLR          // CMPLX_CNTLR       // PI_CNTLR
+#define  FCL_CNTLR           PI_CNTLR          // CMPLX_CNTLR       // PI_CNTLR
 #define  CURRENT_SENSE       LEM_CURRENT_SENSE
 #define  POSITION_ENCODER    ENDAT_POS_ENCODER
 
@@ -157,7 +157,7 @@ typedef float _iq;
 // Saved EnDat position offset (per-unit).
 // Set to a previously calibrated value to skip runtime calibration.
 // Comment out or set to 0.0 to require a fresh calibration each boot.
-#define ENDAT_POSITION_OFFSET_PU   0.174197152F
+#define ENDAT_POSITION_OFFSET_PU   0.677F
 #define ENDAT_APPLY_DEFAULT_OFFSET
 
 #define DACOUT_EN

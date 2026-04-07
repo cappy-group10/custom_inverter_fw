@@ -510,9 +510,10 @@ class DriveRuntime:
                         iq_ref=latest_command.iq_ref,
                         iq_fbk=status.iq_fbk,
                         vdc_bus=status.vdc_bus,
-                        current_as=status.current_as,
-                        current_bs=status.current_bs,
-                        current_cs=status.current_cs,
+                        offset_current_bs=status.offset_current_bs,
+                        offset_current_cs=status.offset_current_cs,
+                        fcl_latency_us=status.fcl_latency_us,
+                        raw_position_offset_pu=status.raw_position_offset_pu,
                     )
                 )
                 self._next_ui_sample_at = timestamp + self._ui_sample_interval

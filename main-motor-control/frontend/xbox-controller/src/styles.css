@@ -1,22 +1,117 @@
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/ibm-plex/ibm-plex-sans-latin-ext-400-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/ibm-plex/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/ibm-plex/ibm-plex-sans-latin-ext-500-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/ibm-plex/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("/fonts/ibm-plex/ibm-plex-sans-latin-ext-600-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("/fonts/ibm-plex/ibm-plex-sans-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/ibm-plex/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/ibm-plex/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/ibm-plex/ibm-plex-mono-latin-ext-500-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/ibm-plex/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
-  --bg: #0c1319;
-  --panel: rgba(14, 24, 31, 0.78);
-  --panel-strong: rgba(18, 31, 40, 0.95);
-  --panel-border: rgba(179, 204, 217, 0.14);
-  --text: #eef5f7;
-  --muted: #9db4bf;
-  --accent: #f18748;
-  --accent-soft: rgba(241, 135, 72, 0.18);
-  --teal: #44d1c2;
-  --teal-soft: rgba(68, 209, 194, 0.18);
-  --danger: #ff6b6b;
-  --danger-soft: rgba(255, 107, 107, 0.18);
-  --warning: #ffc857;
-  --shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  --bg: #121619;
+  --panel: rgba(33, 39, 42, 0.84);
+  --panel-strong: rgba(52, 58, 63, 0.94);
+  --panel-border: rgba(221, 225, 230, 0.14);
+  --text: #f2f4f8;
+  --muted: #a2a9b0;
+  --accent: #0f62fe;
+  --accent-strong: #4589ff;
+  --accent-soft: rgba(15, 98, 254, 0.16);
+  --info: #4589ff;
+  --info-soft: rgba(69, 137, 255, 0.16);
+  --success: #42be65;
+  --success-soft: rgba(66, 190, 101, 0.16);
+  --warning: #f1c21b;
+  --warning-soft: rgba(241, 194, 27, 0.16);
+  --danger: #fa4d56;
+  --danger-soft: rgba(250, 77, 86, 0.16);
+  --danger-strong: #da1e28;
+  --shadow: 0 26px 72px rgba(0, 0, 0, 0.38);
   --radius: 22px;
   --radius-sm: 14px;
-  --mono: "SFMono-Regular", "Menlo", "Consolas", monospace;
-  --ui: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", "Menlo", "Consolas", monospace;
+  --ui: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 * {
@@ -35,9 +130,9 @@ body {
   font-family: var(--ui);
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(68, 209, 194, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(241, 135, 72, 0.18), transparent 22%),
-    linear-gradient(160deg, #071017 0%, #0c1319 45%, #111f27 100%);
+    radial-gradient(circle at top left, rgba(69, 137, 255, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(15, 98, 254, 0.1), transparent 22%),
+    linear-gradient(160deg, #0d1114 0%, #121619 48%, #1a2126 100%);
 }
 
 body::before {
@@ -70,7 +165,7 @@ a {
   padding: 30px 34px;
   border: 1px solid var(--panel-border);
   border-radius: 30px;
-  background: linear-gradient(135deg, rgba(21, 36, 46, 0.98), rgba(12, 20, 27, 0.88));
+  background: linear-gradient(135deg, rgba(33, 39, 42, 0.98), rgba(18, 22, 25, 0.92));
   box-shadow: var(--shadow);
   animation: fade-up 500ms ease-out;
 }
@@ -116,23 +211,23 @@ a {
   padding: 16px 20px;
   border-radius: 18px;
   border: 1px solid var(--panel-border);
-  background: rgba(13, 22, 29, 0.92);
+  background: rgba(26, 33, 38, 0.92);
   backdrop-filter: blur(14px);
 }
 
 .health-banner.good {
-  border-color: rgba(68, 209, 194, 0.24);
-  background: rgba(68, 209, 194, 0.08);
+  border-color: rgba(66, 190, 101, 0.28);
+  background: rgba(66, 190, 101, 0.1);
 }
 
 .health-banner.warn {
-  border-color: rgba(255, 200, 87, 0.24);
-  background: rgba(255, 200, 87, 0.09);
+  border-color: rgba(241, 194, 27, 0.24);
+  background: rgba(241, 194, 27, 0.09);
 }
 
 .health-banner.danger {
-  border-color: rgba(255, 107, 107, 0.28);
-  background: rgba(255, 107, 107, 0.09);
+  border-color: rgba(250, 77, 86, 0.3);
+  background: rgba(250, 77, 86, 0.1);
 }
 
 .workspace {
@@ -161,7 +256,7 @@ a {
   padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(12, 21, 28, 0.82);
+  background: rgba(24, 30, 34, 0.82);
   backdrop-filter: blur(16px);
 }
 
@@ -175,8 +270,8 @@ a {
 }
 
 .tab-button.active {
-  border-color: rgba(241, 135, 72, 0.4);
-  background: linear-gradient(180deg, rgba(241, 135, 72, 0.18), rgba(255, 255, 255, 0.04));
+  border-color: rgba(15, 98, 254, 0.38);
+  background: linear-gradient(180deg, rgba(15, 98, 254, 0.16), rgba(255, 255, 255, 0.04));
 }
 
 .tab-panel {
@@ -328,8 +423,8 @@ a {
 }
 
 .badge.online {
-  background: var(--teal-soft);
-  color: var(--teal);
+  background: var(--info-soft);
+  color: var(--info);
 }
 
 .badge.offline {
@@ -338,7 +433,7 @@ a {
 }
 
 .badge.warn {
-  background: rgba(255, 200, 87, 0.16);
+  background: var(--warning-soft);
   color: var(--warning);
 }
 
@@ -348,17 +443,17 @@ a {
 }
 
 .badge.good {
-  background: var(--teal-soft);
-  color: var(--teal);
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .status-chip.good {
-  background: var(--teal-soft);
-  color: var(--teal);
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .status-chip.warn {
-  background: rgba(255, 200, 87, 0.16);
+  background: var(--warning-soft);
   color: var(--warning);
 }
 
@@ -419,6 +514,18 @@ button {
   font: inherit;
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.tab-button:focus-visible,
+.panel-link-button:focus-visible,
+.uart-line:focus-visible,
+.info-hint:focus-visible {
+  outline: none;
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(69, 137, 255, 0.22);
 }
 
 button:not(.tab-button),
@@ -483,7 +590,7 @@ button:not(.tab-button) {
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 18, 24, 0.96);
+  background: rgba(18, 22, 25, 0.96);
   color: var(--text);
   font-size: 0.78rem;
   line-height: 1.45;
@@ -522,7 +629,7 @@ select {
 }
 
 .control-help.good {
-  color: var(--teal);
+  color: var(--success);
 }
 
 .control-help.warn {
@@ -551,14 +658,14 @@ button:disabled {
 }
 
 button.primary {
-  background: linear-gradient(135deg, var(--accent), #fb9a58);
-  color: #1f1208;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #f5f8ff;
   border-color: transparent;
   font-weight: 700;
 }
 
 button.danger-button {
-  background: linear-gradient(135deg, #ff7767, #ff5b5b);
+  background: linear-gradient(135deg, var(--danger), var(--danger-strong));
   color: #fff4f3;
 }
 
@@ -639,7 +746,7 @@ button.danger-button {
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
-    radial-gradient(circle at top center, rgba(68, 209, 194, 0.08), transparent 34%),
+    radial-gradient(circle at top center, rgba(15, 98, 254, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
     var(--panel-strong);
 }
@@ -689,8 +796,8 @@ button.danger-button {
   height: 100%;
   width: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(68, 209, 194, 0.92), rgba(241, 135, 72, 0.96));
-  box-shadow: 0 0 20px rgba(241, 135, 72, 0.22);
+  background: linear-gradient(90deg, var(--info), var(--accent-strong));
+  box-shadow: 0 0 20px rgba(69, 137, 255, 0.22);
   transition: width 100ms linear;
 }
 
@@ -722,8 +829,8 @@ button.danger-button {
   padding: 24px 24px 22px;
   border-radius: 36px;
   background:
-    radial-gradient(circle at 24% 48%, rgba(68, 209, 194, 0.08), transparent 28%),
-    radial-gradient(circle at 76% 48%, rgba(241, 135, 72, 0.08), transparent 28%),
+    radial-gradient(circle at 24% 48%, rgba(69, 137, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 76% 48%, rgba(15, 98, 254, 0.08), transparent 28%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
   overflow: hidden;
 }
@@ -785,7 +892,7 @@ button.danger-button {
   background:
     linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    radial-gradient(circle at center, rgba(68, 209, 194, 0.18), transparent 48%);
+    radial-gradient(circle at center, rgba(15, 98, 254, 0.16), transparent 48%);
   background-size: 50% 50%;
 }
 
@@ -813,8 +920,8 @@ button.danger-button {
   border-radius: 999px;
   transform: translateY(-50%);
   transform-origin: left center;
-  background: linear-gradient(90deg, rgba(68, 209, 194, 0.95), rgba(241, 135, 72, 0.98));
-  box-shadow: 0 0 16px rgba(241, 135, 72, 0.18);
+  background: linear-gradient(90deg, var(--info), var(--accent-strong));
+  box-shadow: 0 0 16px rgba(69, 137, 255, 0.18);
   transition: width 90ms linear, transform 90ms linear, opacity 90ms linear;
   opacity: 0;
 }
@@ -827,7 +934,7 @@ button.danger-button {
   transform: translateY(-50%);
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  border-left: 10px solid rgba(241, 135, 72, 0.98);
+  border-left: 10px solid var(--accent-strong);
 }
 
 .stick-dot {
@@ -836,8 +943,8 @@ button.danger-button {
   border-radius: 50%;
   margin-left: -9px;
   margin-top: -9px;
-  background: radial-gradient(circle at 35% 35%, #ffd59d 0%, #ffb867 34%, #f18748 72%, #cf6c30 100%);
-  box-shadow: 0 0 0 4px rgba(241, 135, 72, 0.12), 0 0 24px rgba(241, 135, 72, 0.34);
+  background: radial-gradient(circle at 35% 35%, #d0e2ff 0%, #78a9ff 34%, #4589ff 72%, #0043ce 100%);
+  box-shadow: 0 0 0 4px rgba(69, 137, 255, 0.12), 0 0 24px rgba(15, 98, 254, 0.26);
   transition: left 90ms linear, top 90ms linear;
 }
 
@@ -884,10 +991,10 @@ button.danger-button {
 .trigger-module.active,
 .shoulder-button.active,
 .thumb-module.active {
-  border-color: rgba(68, 209, 194, 0.45);
-  background: linear-gradient(180deg, rgba(68, 209, 194, 0.22), rgba(68, 209, 194, 0.08));
+  border-color: rgba(15, 98, 254, 0.36);
+  background: linear-gradient(180deg, rgba(15, 98, 254, 0.18), rgba(69, 137, 255, 0.08));
   color: var(--text);
-  box-shadow: 0 0 22px rgba(68, 209, 194, 0.12);
+  box-shadow: 0 0 22px rgba(15, 98, 254, 0.12);
 }
 
 .control-node.unmapped,
@@ -952,19 +1059,19 @@ button.danger-button {
 }
 
 .face-node.a.active {
-  border-color: rgba(68, 209, 194, 0.55);
+  border-color: rgba(66, 190, 101, 0.5);
 }
 
 .face-node.b.active {
-  border-color: rgba(255, 107, 107, 0.5);
+  border-color: rgba(250, 77, 86, 0.5);
 }
 
 .face-node.x.active {
-  border-color: rgba(157, 231, 255, 0.55);
+  border-color: rgba(69, 137, 255, 0.5);
 }
 
 .face-node.y.active {
-  border-color: rgba(255, 200, 87, 0.55);
+  border-color: rgba(241, 194, 27, 0.5);
 }
 
 .center-cluster {
@@ -1079,8 +1186,8 @@ button.danger-button {
 }
 
 .mapping-chip.mapped {
-  color: var(--teal);
-  border-color: rgba(68, 209, 194, 0.2);
+  color: var(--accent);
+  border-color: rgba(15, 98, 254, 0.22);
 }
 
 .telemetry-grid {
@@ -1095,8 +1202,8 @@ button.danger-button {
 .fault-card {
   padding: 14px 16px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 107, 107, 0.2);
-  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(250, 77, 86, 0.22);
+  background: rgba(250, 77, 86, 0.08);
 }
 
 .fault-card p {
@@ -1157,7 +1264,7 @@ button.danger-button {
 .motor-emphasis-card,
 .speedometer-card {
   background:
-    radial-gradient(circle at center, rgba(68, 209, 194, 0.05), transparent 40%),
+    radial-gradient(circle at center, rgba(15, 98, 254, 0.05), transparent 40%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
     var(--panel-strong);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1244,13 +1351,13 @@ button.danger-button {
 .direction-chip.is-forward,
 .speedometer-chip.is-forward,
 .speedometer-legend.is-forward {
-  color: var(--teal);
+  color: var(--accent);
 }
 
 .direction-chip.is-reverse,
 .speedometer-chip.is-reverse,
 .speedometer-legend.is-reverse {
-  color: #ff8d5c;
+  color: var(--info);
 }
 
 .direction-chip.is-zero,
@@ -1279,13 +1386,13 @@ button.danger-button {
 
 .speedometer-needle.command {
   stroke: var(--accent);
-  filter: drop-shadow(0 0 14px rgba(241, 135, 72, 0.24));
+  filter: drop-shadow(0 0 14px rgba(15, 98, 254, 0.24));
 }
 
 .speedometer-needle.feedback {
-  stroke: var(--teal);
+  stroke: var(--info);
   stroke-width: 4;
-  filter: drop-shadow(0 0 14px rgba(68, 209, 194, 0.24));
+  filter: drop-shadow(0 0 14px rgba(69, 137, 255, 0.24));
 }
 
 .speedometer-hub {
@@ -1317,7 +1424,7 @@ button.danger-button {
 }
 
 .speedometer-override {
-  fill: #ff9a9a;
+  fill: var(--danger);
   font-size: 0.82rem;
   font-family: var(--mono);
   letter-spacing: 0.08em;
@@ -1400,7 +1507,7 @@ button.danger-button {
   padding: 16px;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 50% 15%, rgba(68, 209, 194, 0.07), transparent 44%),
+    radial-gradient(circle at 50% 15%, rgba(15, 98, 254, 0.07), transparent 44%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
     var(--panel-strong);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1470,12 +1577,12 @@ button.danger-button {
 
 .motor-speed-band-metric.is-forward,
 .motor-speed-band-marker.is-forward {
-  color: var(--teal);
+  color: var(--accent);
 }
 
 .motor-speed-band-metric.is-reverse,
 .motor-speed-band-marker.is-reverse {
-  color: #ff8d5c;
+  color: var(--info);
 }
 
 .motor-speed-band-metric.is-zero,
@@ -1508,11 +1615,11 @@ button.danger-button {
   background:
     linear-gradient(
       90deg,
-      rgba(255, 141, 92, 0.15) 0%,
-      rgba(255, 141, 92, 0.07) 46%,
+      rgba(69, 137, 255, 0.15) 0%,
+      rgba(69, 137, 255, 0.07) 46%,
       rgba(255, 255, 255, 0.05) 50%,
-      rgba(68, 209, 194, 0.07) 54%,
-      rgba(68, 209, 194, 0.15) 100%
+      rgba(15, 98, 254, 0.07) 54%,
+      rgba(15, 98, 254, 0.15) 100%
     ),
     rgba(255, 255, 255, 0.02);
 }
@@ -1725,7 +1832,7 @@ button.danger-button {
   gap: 14px;
   align-content: start;
   background:
-    linear-gradient(180deg, rgba(255, 107, 107, 0.1), rgba(255, 255, 255, 0.02)),
+    linear-gradient(180deg, rgba(250, 77, 86, 0.1), rgba(255, 255, 255, 0.02)),
     var(--panel-strong);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -1779,8 +1886,8 @@ button.danger-button {
 
 .motor-trend-line.fbk,
 .legend-chip.fbk {
-  stroke: var(--teal);
-  color: var(--teal);
+  stroke: var(--info);
+  color: var(--info);
 }
 
 .motor-trend-values {
@@ -1797,27 +1904,27 @@ button.danger-button {
 
 .motor-emphasis-card {
   background:
-    radial-gradient(circle at top right, rgba(68, 209, 194, 0.12), transparent 42%),
+    radial-gradient(circle at top right, rgba(15, 98, 254, 0.12), transparent 42%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
     var(--panel-strong);
 }
 
 .voltage-card.good {
-  border-color: rgba(68, 209, 194, 0.24);
+  border-color: rgba(66, 190, 101, 0.28);
 }
 
 .voltage-card.warn {
-  border-color: rgba(255, 200, 87, 0.24);
+  border-color: rgba(241, 194, 27, 0.24);
   background:
-    radial-gradient(circle at top right, rgba(255, 200, 87, 0.14), transparent 42%),
+    radial-gradient(circle at top right, rgba(241, 194, 27, 0.14), transparent 42%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
     var(--panel-strong);
 }
 
 .voltage-card.danger {
-  border-color: rgba(255, 107, 107, 0.3);
+  border-color: rgba(250, 77, 86, 0.3);
   background:
-    radial-gradient(circle at top right, rgba(255, 107, 107, 0.16), transparent 42%),
+    radial-gradient(circle at top right, rgba(250, 77, 86, 0.16), transparent 42%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
     var(--panel-strong);
 }
@@ -1885,8 +1992,8 @@ button.danger-button {
 .power-bar-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--teal), var(--accent));
-  box-shadow: 0 0 18px rgba(68, 209, 194, 0.22);
+  background: linear-gradient(90deg, var(--info), var(--accent));
+  box-shadow: 0 0 18px rgba(15, 98, 254, 0.22);
 }
 
 .motor-page-shell {
@@ -1978,7 +2085,7 @@ button.danger-button {
 }
 
 .inline-toggle input {
-  accent-color: var(--teal);
+  accent-color: var(--accent);
 }
 
 .mono-muted {
@@ -2099,7 +2206,7 @@ button.danger-button {
   border: 1px solid rgba(255, 255, 255, 0.04);
   background:
     linear-gradient(180deg, rgba(5, 10, 16, 0.96), rgba(9, 14, 20, 0.98)),
-    radial-gradient(circle at top left, rgba(68, 209, 194, 0.08), transparent 34%);
+    radial-gradient(circle at top left, rgba(15, 98, 254, 0.08), transparent 34%);
 }
 
 .uart-line {
@@ -2127,16 +2234,16 @@ button.danger-button {
 }
 
 .uart-line.tx {
-  border-left: 3px solid rgba(241, 135, 72, 0.84);
+  border-left: 3px solid rgba(15, 98, 254, 0.84);
 }
 
 .uart-line.rx {
-  border-left: 3px solid rgba(68, 209, 194, 0.84);
+  border-left: 3px solid rgba(69, 137, 255, 0.84);
 }
 
 .uart-line.error {
-  border-left: 3px solid rgba(255, 107, 107, 0.9);
-  background: rgba(255, 107, 107, 0.08);
+  border-left: 3px solid rgba(250, 77, 86, 0.9);
+  background: rgba(250, 77, 86, 0.08);
 }
 
 .uart-line-header,
@@ -2172,22 +2279,22 @@ button.danger-button {
 }
 
 .uart-line-badge.tx {
-  color: #ffbf91;
-  border-color: rgba(241, 135, 72, 0.28);
+  color: var(--accent-strong);
+  border-color: rgba(15, 98, 254, 0.28);
 }
 
 .uart-line-badge.rx {
-  color: #9de7ff;
-  border-color: rgba(68, 209, 194, 0.24);
+  color: var(--info);
+  border-color: rgba(69, 137, 255, 0.24);
 }
 
 .uart-line-badge.ok {
-  color: var(--teal);
+  color: var(--success);
 }
 
 .uart-line-badge.error {
-  color: #ff9a9a;
-  border-color: rgba(255, 107, 107, 0.22);
+  color: var(--danger);
+  border-color: rgba(250, 77, 86, 0.22);
 }
 
 .uart-line-title {
@@ -2302,18 +2409,18 @@ button.danger-button {
 }
 
 .byte-token.sync {
-  border-color: rgba(241, 135, 72, 0.32);
-  color: #ffbf91;
+  border-color: rgba(15, 98, 254, 0.32);
+  color: var(--accent-strong);
 }
 
 .byte-token.frame-id {
-  border-color: rgba(157, 231, 255, 0.26);
-  color: #9de7ff;
+  border-color: rgba(69, 137, 255, 0.26);
+  color: var(--info);
 }
 
 .byte-token.checksum {
-  border-color: rgba(255, 200, 87, 0.3);
-  color: #ffd787;
+  border-color: rgba(241, 194, 27, 0.3);
+  color: var(--warning);
 }
 
 .log-list {

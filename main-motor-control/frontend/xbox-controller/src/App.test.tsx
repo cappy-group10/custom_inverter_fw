@@ -148,9 +148,11 @@ describe("React dashboard routes", () => {
       latest_mcu_status: {
         ctrl_state: "RUN",
         speed_ref: 0.15,
-        current_as: 1.2,
-        current_bs: -0.6,
-        current_cs: -0.6,
+        offset_current_bs: 0.12,
+        offset_current_cs: -0.11,
+        fcl_latency_us: 3.4,
+        raw_position_offset_pu: -0.0625,
+        endat_crc_fail_count: 2,
         vdc_bus: 38.4,
       },
       counters: {
@@ -176,5 +178,6 @@ describe("React dashboard routes", () => {
     expect(screen.getByTestId("compact-speed-band")).toBeInTheDocument();
     expect(screen.queryByTestId("speedometer")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: /session context/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Drive Runtime Snapshot")).toBeInTheDocument();
   });
 });

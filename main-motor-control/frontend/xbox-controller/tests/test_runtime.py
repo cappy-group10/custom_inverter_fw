@@ -10,7 +10,7 @@ from xbox_controller.controller import ButtonEdge, ButtonEvent, ControllerState,
 from xbox_controller.motor_config import load_motor_config
 from xbox_controller.runtime import DriveRuntime
 from xbox_controller.runtime_models import FrameRecord, to_payload
-from xbox_controller.uart import FRAME_FAULT, FRAME_STATUS, MCUFault, MCUStatus, UARTCounters, UARTHealth
+from xbox_controller.uart import FRAME_FAULT, FRAME_STATUS_DIAG, MCUFault, MCUStatus, UARTCounters, UARTHealth
 
 
 class FakeJoystick:
@@ -202,14 +202,16 @@ class FakeLink:
                 vdc_bus=36.2,
                 id_fbk=0.01,
                 iq_fbk=0.04,
-                current_as=0.7,
-                current_bs=-0.2,
-                current_cs=-0.5,
+                offset_current_bs=0.12,
+                offset_current_cs=-0.11,
+                fcl_latency_us=3.4,
+                raw_position_offset_pu=-0.0625,
+                endat_crc_fail_count=2,
                 isr_ticker=11,
             )
             self._statuses.append(status)
             self._frames.append(
-                FrameRecord("rx", FRAME_STATUS, "status", "55 10", to_payload(status), True, now)
+                FrameRecord("rx", FRAME_STATUS_DIAG, "status_diag", "55 12", to_payload(status), True, now)
             )
             self._counters.rx_frames += 1
             self._counters.status_frames += 1
@@ -262,13 +264,15 @@ class ReleaseBrakeLink(FakeLink):
             vdc_bus=36.0,
             id_fbk=cmd.id_ref,
             iq_fbk=cmd.iq_ref,
-            current_as=0.1,
-            current_bs=-0.05,
-            current_cs=-0.05,
+            offset_current_bs=0.1,
+            offset_current_cs=-0.05,
+            fcl_latency_us=3.1,
+            raw_position_offset_pu=0.0125,
+            endat_crc_fail_count=0,
             isr_ticker=len(self._sent),
         )
         self._statuses.append(status)
-        self._frames.append(FrameRecord("rx", FRAME_STATUS, "status", "55 10", to_payload(status), True, now))
+        self._frames.append(FrameRecord("rx", FRAME_STATUS_DIAG, "status_diag", "55 12", to_payload(status), True, now))
         self._counters.rx_frames += 1
         self._counters.status_frames += 1
         self._health.last_status_at = now
