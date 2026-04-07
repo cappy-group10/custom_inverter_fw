@@ -35,6 +35,39 @@
 #define UART_LINK_BAUDRATE  115200U
 #define UART_LINK_LSPCLK    DEVICE_LSPCLK_FREQ
 
+// Explicit SCI pin routing. Override these at build time if you want to probe
+// SCIA on a different mux-capable GPIO than the device defaults.
+#ifndef UART_LINK_TX_GPIO_PIN
+#define UART_LINK_TX_GPIO_PIN   DEVICE_GPIO_PIN_SCITXDA
+#endif
+
+#ifndef UART_LINK_RX_GPIO_PIN
+#define UART_LINK_RX_GPIO_PIN   DEVICE_GPIO_PIN_SCIRXDA
+#endif
+
+#ifndef UART_LINK_TX_GPIO_CFG
+#define UART_LINK_TX_GPIO_CFG   DEVICE_GPIO_CFG_SCITXDA
+#endif
+
+#ifndef UART_LINK_RX_GPIO_CFG
+#define UART_LINK_RX_GPIO_CFG   DEVICE_GPIO_CFG_SCIRXDA
+#endif
+
+// Optional debug probe: drives the already-configured debug GPIO high while a
+// status frame is queued into the SCI TX path. This is not the UART waveform;
+// it is a simple "status send attempted" probe for a scope or logic analyzer.
+#ifndef UART_LINK_ENABLE_TX_ACTIVITY_PROBE
+#define UART_LINK_ENABLE_TX_ACTIVITY_PROBE  1U
+#endif
+
+#ifndef UART_LINK_TX_ACTIVITY_PROBE_GPIO_CFG
+#define UART_LINK_TX_ACTIVITY_PROBE_GPIO_CFG GPIO_16_GPIO16
+#endif
+
+#ifndef UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN
+#define UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN 16U
+#endif
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  Wire protocol constants  (must match Python host code)
 // ═══════════════════════════════════════════════════════════════════════════

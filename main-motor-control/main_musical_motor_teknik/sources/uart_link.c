@@ -61,9 +61,24 @@ volatile UART_Link_Stats_t uartStats = {0, 0, 0, 0, 0, 0};
 void UART_Link_init(void)
 {
     //
-    // RX pin async qualification (GPIO43)
+    // Route SCIA onto the selected GPIO pair so the UART waveform is
+    // observable on the board, even when debugging without the host UI.
     //
-    GPIO_setQualificationMode(43, GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(UART_LINK_TX_GPIO_CFG);
+    GPIO_setPadConfig(UART_LINK_TX_GPIO_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(UART_LINK_TX_GPIO_PIN, GPIO_DIR_MODE_OUT);
+
+    GPIO_setPinConfig(UART_LINK_RX_GPIO_CFG);
+    GPIO_setPadConfig(UART_LINK_RX_GPIO_PIN, GPIO_PIN_TYPE_PULLUP);
+    GPIO_setDirectionMode(UART_LINK_RX_GPIO_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setQualificationMode(UART_LINK_RX_GPIO_PIN, GPIO_QUAL_ASYNC);
+
+#if UART_LINK_ENABLE_TX_ACTIVITY_PROBE
+    GPIO_setPinConfig(UART_LINK_TX_ACTIVITY_PROBE_GPIO_CFG);
+    GPIO_setPadConfig(UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_writePin(UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN, 0U);
+#endif
 
     //
     // Reset SCI module
@@ -230,7 +245,13 @@ void UART_Link_sendStatus(const UART_Status_t *pStatus)
     txBufPutByte(txBufChecksum());
 
     // Transmit
+#if UART_LINK_ENABLE_TX_ACTIVITY_PROBE
+    GPIO_writePin(UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN, 1U);
+#endif
     SCI_writeCharArray(UART_LINK_BASE, txBuf, STATUS_FRAME_LEN);
+#if UART_LINK_ENABLE_TX_ACTIVITY_PROBE
+    GPIO_writePin(UART_LINK_TX_ACTIVITY_PROBE_GPIO_PIN, 0U);
+#endif
 
     uartStats.txBytes += STATUS_FRAME_LEN;
     uartStats.txFrames++;
