@@ -1,69 +1,67 @@
-# Dual-Axis Servo Drive Control Algorithm - Architecture & Execution Map
+# `main_foc_endat_system` Control Algorithm Architecture
 
 **Primary file:** `dual_axis_servo_drive.c`  
-**Supporting files:** `dual_axis_servo_drive_user.c`, `dual_axis_servo_drive.h`, `dual_axis_servo_drive_user.h`, `dual_axis_servo_drive_settings.h`, `dual_axis_servo_drive_hal.h`, `fcl_cla_code_dm.cla`  
-**Target:** TI F2837x (C2000) - `main_foc_endat_system`  
-**Last reviewed:** 2026
+**Supporting files:** `dual_axis_servo_drive_user.c`, `dual_axis_servo_drive_settings.h`, `dual_axis_servo_drive_hal.c`, `fcl_cla_code_dm.cla`, `endat/*.c`  
+**Target:** TI F28379D / `main_foc_endat_system`  
+**Last reviewed:** 2026-04-07
 
 ---
 
 ## 1. Big Picture
 
-`main()` is the orchestration point for the servo-drive application. It does not implement the control laws directly; instead it:
+`main()` is the orchestration layer for the checked-in FOC + EnDat build. It does not implement the control law directly. Instead it:
 
-1. initializes the device, HAL, motor data, and protection,
-2. calibrates current sensing,
-3. brings up the EnDat encoder pipeline,
+1. initializes the device, HAL, motor parameters, and runtime defaults,
+2. calibrates current offsets,
+3. brings up the EnDat stack and publishes an initial valid position sample,
 4. enables the interrupt-driven runtime,
-5. then stays in a foreground loop that services slower background tasks and synchronizes command variables.
+5. then stays in a foreground loop that services the A/B/C background framework and synchronizes host/debug commands.
 
-At runtime, the control algorithm is split across several timing domains:
+At runtime, the control work is split across several timing domains:
 
-| Timing domain | Typical rate in this build | Main responsibility |
+| Timing domain | Rate in current build | Main responsibility |
 |---|---:|---|
-| `EPWM1` + CLA Task 1 + `motor1ControlISR()` | `10 kHz` | Fast current-loop execution, position/speed feedback update, build-level logic |
-| `EPWM9` EnDat producer ISR | `40 kHz` | Independent EnDat position acquisition and publish |
-| CPU Timer 0 A-branch | `50 us` base event | Motor run/stop and fault/gate logic (`A1`) plus spare slots |
-| CPU Timer 1 B-branch | `100 us` base event | SFRA background communications in level 6 |
-| CPU Timer 2 C-branch | `150 us` base event | LEDs and spare slots |
-| Foreground `for(;;)` loop | as fast as possible | Dispatch A/B/C framework and synchronize user/system references |
+| `EPWM1` + `Cla1Task1()` + `motor1ControlISR()` | `10 kHz` | Fast current loop, PWM-synchronous angle handoff, speed-loop supervision |
+| `EPWM9` + `endatProducerISR()` | `30 kHz` | Independent EnDat acquisition and publish |
+| CPU Timer 0 / A branch | `50 us` base event | `runMotorControl()` plus spare A tasks |
+| CPU Timer 1 / B branch | `100 us` base event | SFRA background work in level 6, otherwise mostly spare |
+| CPU Timer 2 / C branch | `150 us` base event | LEDs, UART status cadence, spare C tasks |
+| Foreground `for(;;)` loop | best effort | A/B/C dispatch plus `runSyncControl()` |
 
-The control structure is layered:
-
-- Fast current control is handled by the FCL path on each PWM interrupt.
-- Speed control is a slower outer loop that runs every `speedLoopPrescaler` ISR cycles.
-- Position control exists only in build level 5 and wraps the speed loop.
-- EnDat feedback is produced independently, then consumed synchronously at the PWM edge.
-
-Although the project name says "dual axis", the current `main()` path initializes and runs only `MTR_1`.
+Although the naming still comes from TI's dual-axis example, the checked-in project initializes and runs only `MTR_1`.
 
 ---
 
-## 2. Current Configuration Snapshot
+## 2. Current Checked-In Build Snapshot
 
-These settings define the active behavior of the checked-in build:
+These values are the ones currently compiled in the repository on 2026-04-07:
 
 | Setting | Value | Meaning |
 |---|---|---|
-| `BUILDLEVEL` | `FCL_LEVEL4` | Speed loop enabled on top of current loop |
-| `SAMPLING_METHOD` | `SINGLE_SAMPLING` | One ISR/current-loop execution per PWM period |
-| `FCL_CNTLR` | `PI_CNTLR` | PI-based fast current loop |
-| `POSITION_ENCODER` | `ENDAT_POS_ENCODER` | Absolute position feedback from EnDat |
-| `M1_PWM_FREQUENCY` | `10 kHz` | Inverter PWM frequency |
-| `M1_ISR_FREQUENCY` | `10 kHz` | `EPWM1` control ISR rate in single sampling |
-| `ENDAT_PRODUCER_RATE_RATIO` | `4` | EnDat runtime producer runs at `4x` PWM |
-| `speedLoopPrescaler` | `10` | Speed loop runs at `1 kHz` in this build |
+| `BUILDLEVEL` | `FCL_LEVEL4` | Speed loop on top of the fast current loop |
+| `SAMPLING_METHOD` | `SINGLE_SAMPLING` | One control ISR per PWM period |
+| `FCL_CNTLR` | `PI_CNTLR` | PI-based FCL path |
+| `POSITION_ENCODER` | `ENDAT_POS_ENCODER` | Position feedback comes from EnDat |
+| `ENCODER_TYPE` | `21` | EnDat 2.1 runtime path is active |
+| `M1_PWM_FREQUENCY` | `10 kHz` | Inverter carrier frequency |
+| `M1_ISR_FREQUENCY` | `10 kHz` | `EPWM1` ISR rate in this build |
+| `speedLoopPrescaler` | `10` | Speed PID runs at `1 kHz` |
+| `ENDAT_PRODUCER_RATE_RATIO` | `3` | EnDat producer runs at `30 kHz` |
+| `ENDAT_RUNTIME_FREQ_DIVIDER` | `6` | EnDat runtime clock is about `8.33 MHz` at `200 MHz` SYSCLK |
+| `ENDAT_POSITION_OFFSET_PU` | `0.677F` | Saved default raw-position offset |
 
-Important compile-time notes for the present bench configuration:
+Important compile-time flags in the current bench configuration:
 
-- `ENDAT_HACK` is defined, so `main()` does not wait on `enableFlag`.
-- `DISABLE_MOTOR_FAULTS` is defined, so fault-protection configuration and trip handling are bypassed in the current test build.
+- `ENDAT_HACK` is defined, so `main()` does not block waiting for `enableFlag`.
+- `DISABLE_MOTOR_FAULTS` is defined, so trip-protection logic is bypassed from `main()`.
+- `ENDAT_APPLY_DEFAULT_OFFSET` is defined, so the saved EnDat position offset is applied during startup.
+- `DACOUT_EN` is defined, so the EPWM7/8 debug DAC mux is enabled.
 
 ---
 
 ## 3. Initialization Sequence From `main()`
 
-This is the effective control-oriented startup order:
+This is the effective checked-in startup order:
 
 ```text
 main()
@@ -74,7 +72,6 @@ main()
 +-[3]  HAL_MTR_init(MTR_1)
 |
 +-[4]  Disable TBCLKSYNC
-|       \- freeze PWM time bases during configuration
 |
 +-[5]  HAL_setParams()
 +-[6]  HAL_setMotorParams(MTR_1)
@@ -82,102 +79,80 @@ main()
 +-[7]  Enable TBCLKSYNC
 |
 +-[8]  initMotorParameters()
-|       \- bind FCL object, motor constants, scaling, PWM/ADC/QEP hooks
-|
 +-[9]  initControlVars()
-|       \- initialize PI/PID controllers and default references
-|
-+-[10] Set runtime limits / defaults
-|       +- current limit override
-|       +- alignment and startup references
-|       \- datalog configuration
-|
++-[10] [unless DISABLE_MOTOR_FAULTS] HAL_setupMotorFaultProtection()
 +-[11] resetControlVars()
 +-[12] HAL_clearTZFlag()
 |
-+-[13] [Level 6 only] configureSFRA()
-|
-+-[14] Initialize background task pointers A/B/C
-|
-+-[15] Wait for FCL library version check
++-[13] Initialize A/B/C task pointers
++-[14] Optional SFRA setup for level 6
++-[15] Wait for FCL software-version check
 |
 +-[16] HAL_setupInterrupts()
-|       +- register `motor1ControlISR()` on `EPWM1`
-|       \- register EnDat producer ISR on `EPWM9`
-|
 +-[17] runOffsetsCalculation()
-|       \- calibrate current ADC offsets before enabling control
 |
 +-[18] EnDat bring-up
-|       +- `EnDat_Init()`
-|       +- `endat21_runCommandSet()`
-|       +- `[EnDat 2.2] endat22_setupAddlData()`
-|       +- `EnDat_initDelayComp()`
-|       +- `PM_endat22_setFreq()`
-|       +- `endat21_initProducer(polePairs)`
-|       \- `endat21_startProducer()`
+|       +- EnDat_Init()
+|       +- endat21_runCommandSet()
+|       +- [only if ENCODER_TYPE == 22] endat22_setupAddlData()
+|       +- EnDat_initDelayComp()
+|       +- PM_endat22_setFreq(ENDAT_RUNTIME_FREQ_DIVIDER)
+|       +- endat21_initProducer(polePairs)
+|       +- endat21_setPositionDirection(speedDirection)
+|       +- endat21_readPosition()       // publish one valid sample immediately
+|       +- [if ENDAT_APPLY_DEFAULT_OFFSET] endat21_setPositionOffset(0.677F)
+|       +- endatInitDone = 1
+|       \- endat21_startProducer()
 |
 +-[19] HAL_enableInterrupts()
-|
-+-[20] Force gate disabled, then enable global interrupts
-|       +- `GPIO_writePin(..., 1)` disables the driver gate
-|       +- `EINT`
-|       \- `ERTM`
++-[20] Disable gate driver, init UART, enable global interrupts
 |
 \-[21] Forever:
-        +- run A/B/C background task framework
-        \- run `runSyncControl()`
+        +- dispatch A/B/C background tasks
+        \- runSyncControl()
 ```
 
-### Why this order matters
+Why this order matters:
 
-- PWM clocks stay frozen during setup so no partial PWM configuration reaches the inverter.
-- Current-sense offsets are calibrated before the fast current loop uses ADC data.
-- EnDat runtime acquisition is started before normal control begins, so valid position can be published before the drive is commanded to run.
-- The driver gate remains disabled until the runtime state machine explicitly moves the motor into `CTRL_RUN`.
+- Current-offset calibration happens before the fast current loop trusts ADC data.
+- One blocking EnDat read is forced before interrupts start so the control side already has a valid published sample.
+- The saved position offset is applied before normal runtime consumption begins.
+- The gate driver stays off until the state machine moves into a run-capable state.
 
 ---
 
-## 4. Runtime Scheduling Model
+## 4. Current Runtime Scheduling Model
 
-### 4.1 Foreground/background framework
+### 4.1 Foreground and background framework
 
-After initialization, `main()` does not perform control math directly. Its infinite loop does two things:
+After initialization, the foreground loop repeatedly does two things:
 
-1. dispatches the A/B/C background task framework through `Alpha_State_Ptr`, and
-2. calls `runSyncControl()` to copy external/global commands into `motorVars[0]`.
+1. dispatches the `A0 -> B0 -> C0` background framework, and
+2. calls `runSyncControl()` to mirror host/debug-owned globals into `motorVars[0]`.
 
-The A/B/C scheduler is a round-robin state machine:
+The timers behind the A/B/C framework are configured in `HAL_setParams()`:
 
-```text
-A0 -> B0 -> C0 -> A0 -> ...
-```
-
-Each branch is armed by a different CPU timer:
-
-| Branch | Timer base period | Implemented tasks |
+| Branch | Timer period | Current use |
 |---|---:|---|
-| A branch | `50 us` | `A1` = `runMotorControl()`, `A2/A3` spare, LED toggle in `A3` |
-| B branch | `100 us` | `B1` = SFRA background comms in level 6, `B2/B3` spare |
-| C branch | `150 us` | `C1` = LED toggle, `C2/C3` spare |
-
-Each branch rotates among three task slots. For example, the A branch receives a `50 us` event, but `A1`, `A2`, and `A3` execute on successive A-branch opportunities.
+| A | `50 us` | `A1 = runMotorControl()` |
+| B | `100 us` | `B1 = SFRA background work` in level 6 |
+| C | `150 us` | status/LED housekeeping |
 
 ### 4.2 Fast control path
 
-The main control loop is interrupt-driven:
+The fast control path is ISR-driven:
 
 ```text
 EPWM1 event
 |
-+- CLA Task 1
-|   \- latch PWM-synchronous position into FCL state
++- Cla1Task1()
+|   \- latch the latest EnDat-published angle into FCL-compatible fields
 |
 \- motor1ControlISR()
-    +- mirror latest published EnDat sample into CPU-side motorVars
-    +- execute build-level-specific control logic
-    +- update datalog / optional DAC outputs
-    \- acknowledge PWM/ADC/CLA interrupts
+    +- updateMotorPositionFeedback()
+    +- buildLevel46_M1() in the checked-in build
+    +- DLOG / optional DAC bookkeeping
+    \- interrupt acknowledge + heartbeat update
 ```
 
 ### 4.3 EnDat runtime path
@@ -185,134 +160,55 @@ EPWM1 event
 The encoder runtime is intentionally decoupled from the PWM ISR:
 
 ```text
-EPWM9 @ 40 kHz
+EPWM9 @ 30 kHz
     -> endatProducerISR()
-       -> non-blocking EnDat producer tick
-          -> publish latest valid sample into shared double buffer
+       -> endat21_runProducerTick()
+          -> schedule or service one non-blocking position read
+          -> CRC-check, decode, publish into the double buffer
 
 EPWM1 edge
     -> Cla1Task1()
-       -> read the active published EnDat slot
-       -> copy mech/electrical angle into `fclVars[0].qep`
-       -> set `pangle` for FCL use
+       -> consume the currently published sample for FCL timing
 
 EPWM1 ISR
     -> updateMotorPositionFeedback()
-       -> mirror the same published sample into `motorVars[0]`
-       -> update CPU-visible position/speed variables and diagnostics
+       -> mirror the same published sample into CPU-visible motor variables
 ```
 
-This split keeps EnDat I/O asynchronous while preserving PWM-synchronous angle consumption by the FCL.
+That split keeps CRC/decode work off the tight FCL timing edge while preserving a PWM-synchronous angle handoff.
 
 ---
 
-## 5. Control-State Layers
+## 5. Current Build Control Flow (`FCL_LEVEL4`)
 
-Two state machines are important when reading the control logic.
+This is the most relevant execution path for the checked-in firmware.
 
-### 5.1 Drive state (`ctrlState` / `runMotor`)
-
-The foreground path writes command variables into `motorVars[0]` through `runSyncControl()`. The background A-task then applies them in `runMotorControl()`:
-
-```text
-Global refs (`ctrlState`, `speedRef`, `IdRef`, `IqRef`)
-    -> runSyncControl()
-    -> motorVars[0].ctrlState / speedRef / IdRef_run / IqRef
-    -> runMotorControl()
-    -> motorVars[0].runMotor + gate enable/disable
-```
-
-`runMotorControl()` is responsible for:
-
-- honoring `CTRL_RUN` versus stop states,
-- enabling or disabling the gate driver,
-- handling trip flags and reset behavior,
-- forcing `runMotor = MOTOR_STOP` on faults.
-
-### 5.2 Encoder/FCL state (`lsw`)
-
-The fast loop uses the encoder/FCL local state machine:
-
-| State | Meaning | Typical behavior |
-|---|---|---|
-| `ENC_ALIGNMENT` | Rotor alignment phase | Apply d-axis current and hold angle at zero |
-| `ENC_WAIT_FOR_INDEX` | Incremental encoder only | Spin slowly until index is found |
-| `ENC_CALIBRATION_DONE` | Closed-loop-ready state | Use real position feedback for closed control |
-
-For the current EnDat build, `getPostAlignmentEncoderState()` returns `ENC_CALIBRATION_DONE`, so the `ENC_WAIT_FOR_INDEX` state is effectively skipped after alignment. That path remains in the code because the file still supports generic QEP-based build levels.
-
----
-
-## 6. Build-Level Guide
-
-The file uses incremental build levels to stage functionality from open-loop bring-up to full cascaded control.
-
-| Build level | Primary goal | Closed loops | Main algorithm summary |
-|---|---|---|---|
-| `FCL_LEVEL1` | Verify PWM generation and SVPWM path | none | Ramp control generates an angle, inverse Park creates alpha/beta voltage commands, SVGEN writes duty cycles directly |
-| `FCL_LEVEL2` | Verify ADC/current sensing and transforms | none | Adds current sampling, Clarke/Park transforms, encoder/speed measurement, but still drives voltage commands open-loop |
-| `FCL_LEVEL3` | Verify d/q current regulation | current loop | FCL closes the fast current loop; CPU logic still mainly supervises alignment and provides fixed `IqRef` / `IdRef` references |
-| `FCL_LEVEL4` | Verify speed regulation | speed + current loops | Speed PID becomes the outer loop; its output becomes `Iq` reference for the FCL current loop |
-| `FCL_LEVEL5` | Verify position regulation | position + speed + current loops | Position PI generates a speed command, speed PID generates `Iq`, and FCL closes the current loop |
-| `FCL_LEVEL6` | Verify bandwidth with SFRA | same as level 4 | Reuses the level 4 speed/current structure and injects SFRA perturbations into d-axis, q-axis, or speed loop |
-
-### Big-picture loop nesting by build level
-
-```text
-Level 1:
-    angle generator -> inverse Park -> SVPWM
-
-Level 2:
-    angle generator + current feedback verification
-
-Level 3:
-    Iq/Id references -> fast current loop (FCL)
-
-Level 4:
-    speed reference -> speed PID -> Iq reference -> fast current loop
-
-Level 5:
-    position reference -> position PI -> speed PID -> Iq reference -> fast current loop
-
-Level 6:
-    level 4 structure + SFRA injection/collection
-```
-
----
-
-## 7. Current Build Control Flow (`FCL_LEVEL4`, EnDat, Single Sampling)
-
-This is the most relevant execution path for the checked-in project.
-
-### 7.1 ISR-level flow
+### 5.1 ISR-level flow
 
 ```text
 motor1ControlISR()
 |
 +-[1] updateMotorPositionFeedback()
-|       \- copy latest published EnDat sample into `motorVars[0]`
+|       \- copy the latest published EnDat sample into `motorVars[0]`
 |
 +-[2] buildLevel46_M1()
 |       |
-|       +- run FCL current-controller math and wrapper
-|       +- measure DC bus voltage
-|       +- execute alignment / post-alignment supervisor logic
-|       +- run speed estimator from electrical angle
-|       +- every 10th ISR, run speed PID
-|       +- set `pi_iq.ref` from speed PID output
-|       \- ramp `IdRef` into `pi_id.ref`
+|       +- run FCL current-controller math
+|       +- update DC bus measurement
+|       +- handle alignment / post-alignment logic
+|       +- run the speed estimator
+|       +- every 10th ISR, run the speed PID
+|       \- feed `pi_iq.ref` from the speed PID output
 |
-+-[3] write DLOG / optional DAC channels
++-[3] update DLOG / optional DAC channels
 |
-+-[4] acknowledge interrupt group(s)
-|
-\-[5] increment `isrTicker`
+\-[4] increment `isrTicker` and acknowledge interrupts
 ```
 
-### 7.2 Reference and feedback chain
+### 5.2 Reference and feedback chain
 
 ```text
-User/global speed command
+Host/debug speed command
     -> runSyncControl()
     -> motorVars[0].speedRef
     -> ramp control (`rc`)
@@ -330,71 +226,83 @@ Id command
 
 EnDat position
     -> producer double buffer
-    -> CLA Task 1 PWM-edge latch
+    -> Cla1Task1() PWM-edge latch
     -> `fclVars[0].qep` / `pangle`
     -> speed estimator + FCL angle input
 ```
 
-### 7.3 Alignment and transition logic
+### 5.3 Alignment and transition logic
 
-At level 4, the CPU-side supervisor around the FCL behaves as follows:
+At level 4, the CPU-side supervisor behaves as follows:
 
-- If `runMotor == MOTOR_STOP`, the code resets back to `ENC_ALIGNMENT`, clears the controller state, and commands zero speed/current.
-- During `ENC_ALIGNMENT`, the code applies `IdRef_start` and waits for the alignment counter to expire.
-- After alignment, the EnDat build transitions directly to `ENC_CALIBRATION_DONE`.
-- In `ENC_CALIBRATION_DONE`, `IdRef` becomes `IdRef_run`, the speed reference becomes active, and the speed PID closes the outer loop.
+- If `runMotor == MOTOR_STOP`, the code resets back toward alignment and clears controller state.
+- On the first run transition, `ENC_ALIGNMENT` is collapsed directly into `ENC_CALIBRATION_DONE` for the EnDat build.
+- Once `lsw == ENC_CALIBRATION_DONE`, `IdRef_run` and the speed loop become active.
+- Because `speedLoopPrescaler = 10`, the speed loop runs at `1 kHz` while the current loop stays at `10 kHz`.
 
-Because `speedLoopPrescaler = 10`, the speed PID executes once every 10 current-loop passes:
+Important contrast with the calibration doc:
 
-- Current loop: `10 kHz`
-- Speed loop: `1 kHz`
-
-That is the key loop-separation used in the current project.
+- The runtime EnDat offset calibration state machine exists only in `FCL_LEVEL3`.
+- The checked-in `FCL_LEVEL4` build relies on the saved default offset applied at startup.
 
 ---
 
-## 8. Support Functions That Matter To The Algorithm
+## 6. Build-Level Guide
 
-| Function | Role in overall control behavior |
+The file still supports TI's incremental build-level model:
+
+| Build level | Primary goal | Closed loops | Notes |
+|---|---|---|---|
+| `FCL_LEVEL1` | Verify PWM generation and SVPWM path | none | Open-loop angle generation only |
+| `FCL_LEVEL2` | Verify ADC/current sensing and transforms | none | Current feedback and transforms visible, still open-loop |
+| `FCL_LEVEL3` | Verify d/q current regulation | current loop | Also contains the runtime EnDat offset-calibration state machine |
+| `FCL_LEVEL4` | Verify speed regulation | speed + current loops | Current checked-in build |
+| `FCL_LEVEL5` | Verify position regulation | position + speed + current loops | Host speed command path changes here |
+| `FCL_LEVEL6` | Verify bandwidth with SFRA | speed + current loops | Level 4 structure plus SFRA injection/collection |
+
+---
+
+## 7. Support Functions That Matter Most
+
+| Function | Role |
 |---|---|
-| `initMotorParameters()` | Binds hardware, scaling, motor constants, and FCL data structures |
-| `initControlVars()` | Initializes PI/PID gains, references, and ramp generator state |
-| `resetControlVars()` | Resets FCL/current-loop state when stopping or restarting |
-| `runOffsetsCalculation()` | Calibrates ADC current offsets before control is enabled |
-| `runMotorControl()` | Applies run/stop/fault state and controls gate-driver enable |
-| `runSyncControl()` | Copies external/global commands into the active motor control structure |
-| `updateMotorPositionFeedback()` | Mirrors the latest valid EnDat sample into CPU-side variables |
-| `ramper()` | Slew-limits `IdRef` and position reference changes |
-| `refPosGen()` | Generates the local stepped position command sequence for level 5 |
+| `initMotorParameters()` | Binds motor constants, scaling, and FCL data structures |
+| `initControlVars()` | Initializes PI/PID gains, ramps, and default references |
+| `runOffsetsCalculation()` | Calibrates current-sense offsets before enabling control |
+| `runMotorControl()` | Applies run/stop/fault/gate-driver state |
+| `runSyncControl()` | Mirrors host/debug-owned globals into `motorVars[0]` |
+| `updateMotorPositionFeedback()` | Mirrors the latest published EnDat sample into CPU-side variables |
+| `buildLevel46_M1()` | Checked-in fast-loop supervisor for speed + current control |
 
 ---
 
-## 9. Notes And Constraints
+## 8. Notes and Constraints
 
-### Present build is effectively single-axis
+### Single-axis runtime on top of dual-axis naming
 
-The file and object naming still reflect the TI dual-axis example, but `main()` only initializes one motor object and one ISR path in this project.
+The file, objects, and many helper names still come from TI's dual-axis reference, but only motor 1 is actively initialized and controlled in this project.
 
-### Fault handling is currently bench-oriented
+### Bench-oriented safety configuration
 
-Because `DISABLE_MOTOR_FAULTS` is defined in `dual_axis_servo_drive_user.h`, the checked-in build bypasses the normal trip-protection setup and recovery path. That is fine for bench EnDat bring-up, but it should be revisited before inverter-powered testing.
+`DISABLE_MOTOR_FAULTS` is currently defined. That keeps the checked-in build convenient for bench bring-up, but it also means the normal trip-protection path is not active from `main()`.
 
-### Enable gating is bypassed in the current test build
+### `enableFlag` wait is bypassed
 
-Because `ENDAT_HACK` is defined, the startup wait on `enableFlag` is skipped. The runtime still uses `ctrlState` and `runMotor` to decide whether to enable the gate, but the explicit wait-for-enable step in `main()` is disabled.
+`ENDAT_HACK` is defined, so startup does not pause waiting for an external enable handshake.
 
-### Absolute and incremental encoders share one framework
+### Saved EnDat offset is part of the current runtime
 
-The alignment and `lsw` logic is generic. With EnDat, post-alignment goes straight to `ENC_CALIBRATION_DONE`; with QEP, the same framework would insert `ENC_WAIT_FOR_INDEX`.
+The checked-in build applies `ENDAT_POSITION_OFFSET_PU` during boot. If that value is no longer correct for the mechanical installation, update it or switch temporarily to the `FCL_LEVEL3` calibration flow documented in `OFFSET_CALIBRATION.md`.
 
 ---
 
-## 10. Quick Reading Guide For Future Changes
+## 9. Quick Reading Guide For Future Changes
 
-When changing the control algorithm, these are the fastest places to inspect:
+When changing the control behavior, start here:
 
-1. `dual_axis_servo_drive_settings.h` for build-level and feedback configuration.
-2. `dual_axis_servo_drive_user.c` for controller gains, scaling, and loop prescalers.
-3. `dual_axis_servo_drive.c` for startup order, background state machine, and build-level supervisor logic.
-4. `fcl_cla_code_dm.cla` for PWM-synchronous position handoff and CLA-side fast-loop behavior.
-5. `ENDAT_ARCHITECTURE.md` and `HAL_ARCHITECTURE.md` for the lower-level encoder and hardware execution maps.
+1. `include/boostxl_3phganinv/dual_axis_servo_drive_settings.h`
+2. `include/boostxl_3phganinv/dual_axis_servo_drive_user.h`
+3. `sources/dual_axis_servo_drive_user.c`
+4. `sources/dual_axis_servo_drive.c`
+5. `doc/ENDAT_ARCHITECTURE.md`
+6. `doc/HAL_ARCHITECTURE.md`

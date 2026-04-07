@@ -1,274 +1,209 @@
-# EnDat Position Offset Calibration - Architecture & Interface
+# EnDat Position Offset Calibration
 
-**Primary file:** `dual_axis_servo_drive.c`  
-**Supporting files:** `endat_ops.c`, `endat_shared.h`, `fcl_enum.h`, `uart_link.c`, `commands.py`  
-**Target:** TMS320F28379D (C2000 F2837x)  
-**Build level:** `FCL_LEVEL3` (current-loop with manual Id/Iq control)  
-**Last reviewed:** 2026
+**Primary files:** `dual_axis_servo_drive.c`, `endat_ops.c`, `endat_shared.h`, `uart_link.c`  
+**Target:** TMS320F28379D / `main_foc_endat_system`  
+**Last reviewed:** 2026-04-07
 
 ---
 
-## 1. Purpose
+## 1. Current Checked-In Behavior
 
-The offset calibration routine measures and removes the mechanical zero-point
-error of the EnDat absolute encoder.  When a motor is first installed (or the
-encoder coupling shifts), the raw position reported by the encoder does not
-correspond to the true mechanical zero of the stator/rotor alignment.
+The checked-in project is currently built as `FCL_LEVEL4`, not `FCL_LEVEL3`.
 
-The calibration holds the rotor stationary with a known d-axis alignment
-current, collects a burst of raw encoder readings, and computes the mean
-angular offset using circular averaging.  That offset is then stored in
-`gEndatRuntimeState.rawPositionOffsetPu` and subtracted from every subsequent
-position sample, so downstream control code (speed loop, position loop) sees a
-corrected angle.
+That matters because:
 
----
+- the runtime calibration state machine is only compiled in `FCL_LEVEL3`,
+- while the checked-in `FCL_LEVEL4` build applies a saved default offset during startup.
 
-## 2. State Machine
-
-The calibration is driven by `runEndatCalibrationStateMachine()`, a static
-inline function called once per PWM ISR tick inside `buildLevel3_M1()`.
+Today, the active boot path is:
 
 ```text
-              ctrlState = CTRL_CALIBRATE
-              runMotor  = MOTOR_RUN
-                      |
-                      v
-               +-----------+
-               |   IDLE    |
-               +-----------+
-                      |
-      resetEndatCalibrationContext(SETTLING)
-                      |
-                      v
-               +-----------+    settleTicks >= 1000
-               | SETTLING  | -------------------------+
-               +-----------+                          |
-                      |                               v
-                      |                      +-----------+
-                      |                      | SAMPLING  |---+
-                      |                      +-----------+   |
-                      |                            |         |
-                      |             sampleCount >= 256       |
-                      |                            |    stall >= 100 ticks
-                      |                            v         | (no fresh sample)
-                      |                      +-----------+   |
-                      |                      |   DONE    |   |
-                      |                      +-----------+   |
-                      |                                      v
-                      |                              +-----------+
-                      +---(abort on fault/stall)---->| ABORTED   |
-                                                     +-----------+
+main()
+    -> endat21_readPosition()                  // publish one valid raw sample
+    -> endat21_setPositionOffset(0.677F)       // because ENDAT_APPLY_DEFAULT_OFFSET is defined
+    -> normal runtime producer starts
 ```
 
-### States
+So the checked-in firmware already performs offset correction, but it does so from a stored value rather than a live calibration run.
 
-| State | Value | Description |
-|---|:---:|---|
-| `ENDAT_CAL_IDLE` | 0 | Inactive, waiting for `CTRL_CALIBRATE` command |
-| `ENDAT_CAL_SETTLING` | 1 | Alignment current applied, waiting for rotor to settle (1000 ISR ticks) |
-| `ENDAT_CAL_SAMPLING` | 2 | Collecting 256 raw encoder samples for circular mean |
-| `ENDAT_CAL_DONE` | 3 | Offset computed and applied, terminal success state |
-| `ENDAT_CAL_ABORTED` | 4 | Calibration aborted (fault, stall, or user cancel), terminal failure state |
+---
 
-### Timing constants
+## 2. Where the Offset Is Applied
+
+The runtime offset lives in:
+
+```text
+gEndatRuntimeState.rawPositionOffsetPu
+gEndatRuntimeState.offsetValid
+```
+
+Every published sample flows through `endatDecodePositionSample()` in `endat_ops.c`, which:
+
+1. reconstructs the raw position,
+2. converts it to mechanical angle in per-unit,
+3. subtracts `rawPositionOffsetPu` when `offsetValid != 0`,
+4. then applies direction inversion if needed.
+
+That means the saved or calibrated offset is part of the normal EnDat publish path, not a one-off correction after the fact.
+
+---
+
+## 3. Current Startup Offset Path
+
+The checked-in startup behavior is:
+
+| Setting | Value |
+|---|---|
+| `ENDAT_APPLY_DEFAULT_OFFSET` | defined |
+| `ENDAT_POSITION_OFFSET_PU` | `0.677F` |
+| Current build level | `FCL_LEVEL4` |
+
+Practical implication:
+
+- if the mechanical installation still matches the calibration that produced `0.677F`, the current build is ready to use that stored value on every boot,
+- if the coupling or zero position changed, this saved value should be updated or temporarily replaced by the runtime calibration flow described below.
+
+---
+
+## 4. Optional Runtime Calibration Path (`FCL_LEVEL3` Only)
+
+The source still contains a runtime EnDat calibration state machine in `dual_axis_servo_drive.c`, but it is compiled only when:
+
+```text
+BUILDLEVEL == FCL_LEVEL3
+```
+
+That path:
+
+- locks the rotor with alignment current,
+- collects raw EnDat samples,
+- computes a circular mean of the mechanical angle,
+- writes the result through `endat21_setPositionOffset()`,
+- then stops the motor cleanly.
+
+### State machine summary
+
+| State | Description |
+|---|---|
+| `ENDAT_CAL_IDLE` | Waiting for a calibration request |
+| `ENDAT_CAL_SETTLING` | Holding alignment current so the rotor settles |
+| `ENDAT_CAL_SAMPLING` | Collecting raw position samples |
+| `ENDAT_CAL_DONE` | Offset computed and applied successfully |
+| `ENDAT_CAL_ABORTED` | Calibration aborted because of a fault, stall, or cancel condition |
+
+### Timing constants in the current source
 
 | Constant | Value | Meaning |
-|---|---|---|
-| `ENDAT_CALIBRATION_SETTLE_TICKS` | 1000 | ISR ticks to wait for alignment current to stabilize (~100 ms at 10 kHz) |
-| `ENDAT_CALIBRATION_SAMPLE_COUNT` | 256 | Number of raw encoder samples to average |
-| `ENDAT_CALIBRATION_STALL_TICKS` | 100 | Consecutive ISR ticks in SAMPLING without a fresh EnDat sample before abort |
+|---|---:|---|
+| `ENDAT_CALIBRATION_SETTLE_TICKS` | `1000` | About `100 ms` at `10 kHz` ISR rate |
+| `ENDAT_CALIBRATION_SAMPLE_COUNT` | `256` | Number of samples used in the circular mean |
+| `ENDAT_CALIBRATION_STALL_TICKS` | `100` | Abort threshold if fresh EnDat samples stop arriving |
 
 ---
 
-## 3. Detailed Flow
+## 5. How the Runtime Calibration Works
 
-### 3.1 Entry: IDLE to SETTLING
+When `BUILDLEVEL == FCL_LEVEL3`, the state machine runs inside `buildLevel3_M1()`.
 
-When `pMotor->ctrlState == CTRL_CALIBRATE`, `runMotor == MOTOR_RUN`, and the
-state is IDLE (or DONE/ABORTED from a previous run), `resetEndatCalibrationContext()`
-initializes all accumulators and transitions to `ENDAT_CAL_SETTLING`.
-
-During SETTLING the ISR alignment logic in `buildLevel3_M1()` forces:
-
-```c
-motorVars[0].alignCntr = 0;
-motorVars[0].ptrFCL->lsw = ENC_ALIGNMENT;
-motorVars[0].IdRef = motorVars[0].IdRef_start;
-```
-
-This applies a d-axis alignment current (`IdRef_start`) with zero q-axis
-current, locking the rotor in a known electrical position.  The speed ramp
-target and Iq reference are both zeroed:
-
-```c
-ptrFCL->pi_iq.ref = (lsw == ENC_ALIGNMENT) ? 0 : IqRef;
-rc.TargetValue = 0;
-```
-
-Stall detection is **not active** during SETTLING.  The system only needs to
-wait for the alignment current to reach steady state; fresh encoder samples are
-not required.
-
-### 3.2 SETTLING to SAMPLING
-
-After `ENDAT_CALIBRATION_SETTLE_TICKS` (1000) ISR ticks, the state transitions
-to `ENDAT_CAL_SAMPLING`.  The sample accumulators (`sumSin`, `sumCos`,
-`sampleCount`) and the stall counter are reset.
-
-### 3.3 SAMPLING
-
-On each ISR tick with a fresh encoder sample (`endatSampleCounter` changed
-since last capture):
-
-1. Compute `rawMechThetaPu = wrapThetaPu(endatPosRaw * rawPositionScalePu)`
-2. Accumulate `sumSin += __sinpuf32(rawMechThetaPu)` and
-   `sumCos += __cospuf32(rawMechThetaPu)`
-3. Increment `sampleCount`
-
-If no fresh sample arrives for `ENDAT_CALIBRATION_STALL_TICKS` (100)
-consecutive ISR ticks, the calibration aborts.  This guards against encoder
-communication failure during active sampling.
-
-### 3.4 Offset computation
-
-When `sampleCount` reaches `ENDAT_CALIBRATION_SAMPLE_COUNT` (256):
-
-```c
-meanOffsetPu = atan2f(sumSin, sumCos) / (2.0F * PI);
-meanOffsetPu = wrapThetaPu(meanOffsetPu);
-endat21_setPositionOffset(meanOffsetPu);
-```
-
-The circular mean avoids the 0/1 wraparound problem that a naive arithmetic
-average would suffer from.  The result is stored via `endat21_setPositionOffset()`:
-
-```c
-gEndatRuntimeState.rawPositionOffsetPu = endatWrapThetaPu(rawOffsetPu);
-gEndatRuntimeState.offsetValid = 1U;
-```
-
-### 3.5 Finalization
-
-`finalizeEndatCalibration()` is called on both success (`ENDAT_CAL_DONE`) and
-failure (`ENDAT_CAL_ABORTED`).  It:
-
-1. Computes corrected angles from the current raw position (if offset is now valid)
-2. Primes the speed differentiator with the corrected angle to avoid a startup spike
-3. Resets the FCL controller
-4. Sets `pMotor->ctrlState = CTRL_STOP` and `ctrlState = CTRL_STOP`
-
----
-
-## 4. Command Interface
-
-### 4.1 UART (host to MCU)
-
-The host sends a 16-byte motor command frame:
-
-```
-[0xAA] [0x01] [ctrlState:1] [speedRef:4] [idRef:4] [iqRef:4] [checksum:1]
-```
-
-Setting `ctrlState = 5` (`CTRL_CALIBRATE`) triggers calibration.
-`applyMotorCmd()` in `uart_link.c` writes the global `ctrlState` variable.
-
-### 4.2 Python side
-
-```python
-from commands import CtrlState, MotorCommand
-
-cmd = MotorCommand(ctrl_state=CtrlState.CALIBRATE,
-                   speed_ref=0.0, id_ref=0.0, iq_ref=0.0)
-```
-
-### 4.3 runSyncControl() latch logic
-
-Because `runSyncControl()` runs on every main-loop iteration (much faster than
-UART frames arrive), a latch mechanism prevents repeated CTRL_CALIBRATE frames
-from re-triggering calibration while one is already in progress:
+High-level flow:
 
 ```text
-ctrlState != CALIBRATE        -> clear latch, pass ctrlState through
-ctrlState == CALIBRATE, unlatch or already running -> set latch, apply CALIBRATE
-ctrlState == CALIBRATE, latched, motor not CALIBRATE -> force STOP (prevent re-trigger)
+CTRL_CALIBRATE request
+    -> force ENC_ALIGNMENT
+    -> apply d-axis alignment current
+    -> wait for settling
+    -> collect fresh raw EnDat samples
+    -> circular-average the mechanical angle
+    -> endat21_setPositionOffset(meanOffsetPu)
+    -> finalize, reset controller, force CTRL_STOP
 ```
 
-This means: to restart calibration after completion, the host must first send a
-non-CALIBRATE state (e.g., `CTRL_STOP`) to clear the latch, then send
-`CTRL_CALIBRATE` again.
-
-### 4.4 CCS / debugger
-
-Write `ctrlState = 5` in the Expressions window.  The same `runSyncControl()`
-path propagates it to `motorVars[0].ctrlState`.  The calibration state can be
-observed via `gEndatCalibration.state` (0-4).
+The circular mean is used so the result is robust across the `0.0 -> 1.0` wrap boundary.
 
 ---
 
-## 5. How the Offset is Applied at Runtime
+## 6. Host / Debug Interface
 
-Once `offsetValid == 1`, every position sample published by the EnDat producer
-is corrected in `computeCorrectedEndatAngles()`:
+### UART command
 
-```c
-mechTheta = wrapThetaPu(rawPosition * rawPositionScalePu);
-mechTheta = wrapThetaPu(mechTheta - rawOffsetPu);          // subtract offset
+The host command frame still carries `ctrlState`, and `CTRL_CALIBRATE` is still the calibration request value.
+
+### Important build-level detail
+
+`runSyncControl()` only applies the special one-shot latch behavior for `CTRL_CALIBRATE` when:
+
+```text
+BUILDLEVEL == FCL_LEVEL3
 ```
 
-The corrected mechanical angle is then multiplied by `PolePairs` to produce the
-electrical angle.  Direction inversion (`positionDirection`) is also applied.
+In other words:
 
-This correction runs in the ISR path and adds approximately 1 call to
-`wrapThetaPu()` (a `floorf` + conditional add) when offset is valid.
+- in the checked-in `FCL_LEVEL4` build, `CTRL_CALIBRATE` is not the supported operator path,
+- the supported offset path in the checked-in build is the saved startup offset.
 
----
+### Debugger use
 
-## 6. Abort Conditions
+If you temporarily switch the project to `FCL_LEVEL3`, you can still trigger calibration from CCS by writing:
 
-| Condition | Where checked | Result |
-|---|---|---|
-| `pMotor->ctrlState != CTRL_CALIBRATE` | Guard at top of SM | Abort if in SETTLING or SAMPLING |
-| `tripFlagDMC != 0` (overcurrent fault) | Guard after ctrlState check | Abort unconditionally |
-| `endatInitDone == 0` (encoder not ready) | Guard after ctrlState check | Abort unconditionally |
-| Stall: no fresh EnDat sample for 100 ticks | Inside SAMPLING case only | Abort (encoder comm failure) |
-| `rawPositionScalePu <= 0` | Inside SAMPLING on fresh sample | Abort (invalid encoder config) |
+```text
+ctrlState = CTRL_CALIBRATE
+```
+
+and then watching `gEndatCalibration.state`.
 
 ---
 
-## 7. ISR Cycle Cost
+## 7. Activation Requirements for a Live Recalibration Run
 
-The calibration state machine is designed to add minimal overhead to the 10 kHz
-PWM ISR:
+To use the runtime calibration path intentionally:
 
-| Operation | When | Approximate cost |
-|---|---|---|
-| `freshSample` comparison | Every ISR tick during cal | ~1 cycle |
-| `settleTicks++` and compare | SETTLING phase | ~2 cycles |
-| `__sinpuf32` / `__cospuf32` | SAMPLING, fresh sample only | ~1-2 cycles each (TMU) |
-| `wrapThetaPu` (`floorf`) | SAMPLING, fresh sample only | ~10-30 cycles |
-| `atan2f` + division | Once at completion | ~50-200 cycles (software) |
+1. Set `BUILDLEVEL = FCL_LEVEL3`.
+2. Keep EnDat enabled.
+3. Rebuild and flash.
+4. Command `CTRL_CALIBRATE`.
+5. After a successful run, copy the resulting offset into `ENDAT_POSITION_OFFSET_PU` if you want the boot-time default to use it later.
 
-The `atan2f` call could be replaced with the TMU intrinsic `__atan2puf32()`
-which returns directly in per-unit and avoids the `/ (2*PI)` division, but
-since it fires only once per calibration run, the cost is negligible.
+If you stay on the checked-in `FCL_LEVEL4` build, step 4 is not enough by itself because the dedicated calibration state machine is not compiled into that image.
 
 ---
 
-## 8. Key Source Locations
+## 8. Failure and Finalization Behavior
 
-| Item | File | Line(s) |
-|---|---|---|
-| State enum and context struct | `dual_axis_servo_drive.c` | 236-257 |
-| Timing constants | `dual_axis_servo_drive.c` | 232-234 |
-| `resetEndatCalibrationContext()` | `dual_axis_servo_drive.c` | 718-727 |
-| `computeCorrectedEndatAngles()` | `dual_axis_servo_drive.c` | 729-769 |
-| `finalizeEndatCalibration()` | `dual_axis_servo_drive.c` | 772-799 |
-| `runEndatCalibrationStateMachine()` | `dual_axis_servo_drive.c` | 802-916 |
-| ISR alignment logic for CALIBRATE | `dual_axis_servo_drive.c` | 1284-1289 |
-| `runSyncControl()` latch logic | `dual_axis_servo_drive.c` | 2156-2174 |
-| `endat21_setPositionOffset()` | `endat_ops.c` | 480-484 |
-| `endat21_clearPositionOffset()` | `endat_ops.c` | 486-490 |
-| `endat21_getPositionOffset()` | `endat_ops.c` | 492-503 |
-| `CtrlState.CALIBRATE` (Python) | `commands.py` | 15 |
-| UART frame parsing | `uart_link.c` | 309-315 |
+The runtime calibration path aborts or finishes when:
+
+- the control state leaves `CTRL_CALIBRATE`,
+- a trip/fault occurs,
+- EnDat is not initialized,
+- fresh samples stop arriving,
+- or sample collection completes successfully.
+
+On both success and failure, the code:
+
+- recomputes corrected angles if possible,
+- primes the speed differentiator,
+- resets the FCL controller,
+- forces `CTRL_STOP`.
+
+That behavior is intentional so a calibration run does not leave the controller half-armed.
+
+---
+
+## 9. Useful API Points
+
+| Function | Role |
+|---|---|
+| `endat21_setPositionOffset()` | Store a raw-position offset and mark it valid |
+| `endat21_clearPositionOffset()` | Remove the saved offset |
+| `endat21_getPositionOffset()` | Read back the saved offset and validity flag |
+| `UART_Link_sendStatus()` | Exposes `rawPositionOffsetPu` on the status frame |
+
+---
+
+## 10. Bottom Line
+
+There are really two offset stories in this project now:
+
+1. **Current checked-in behavior:** boot with a saved offset (`0.677F`) in the normal `FCL_LEVEL4` runtime.
+2. **Optional live recalibration path:** switch temporarily to `FCL_LEVEL3`, run `CTRL_CALIBRATE`, then save the new result back into the default offset if desired.
+
+That distinction is the main thing older notes tended to blur, and it is the key detail to keep in mind when working on this project now.
