@@ -10,6 +10,13 @@ import { formatTimestamp } from "../lib/selectors";
 
 function getHealthCopy(snapshot: ReturnType<typeof useDashboard>["snapshot"]) {
   const health = snapshot.health || {};
+  if (snapshot.mode === "music") {
+    return {
+      title: "Music session active",
+      message: "The dedicated motor page remains drive-only. Use the dashboard Music tab for song playback and compact music status.",
+      level: "neutral",
+    };
+  }
   if (snapshot.session_state === "running") {
     if (health.terminal_only) {
       return {
@@ -109,6 +116,22 @@ export function McuPage() {
         <section className="panel empty-panel">
           <h2>Unknown MCU route</h2>
           <p className="panel-copy">The current backend only exposes one live MCU page at `/mcu/primary`.</p>
+          <div className="button-row">
+            <Link className="panel-link-button" to={dashboardPath}>
+              Back to Dashboard
+            </Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (snapshot.mode === "music") {
+    return (
+      <div className="page-shell">
+        <section className="panel empty-panel">
+          <h2>Drive-only page</h2>
+          <p className="panel-copy">The active session is in music mode. Use the dashboard Music tab for playback, volume, and UART status.</p>
           <div className="button-row">
             <Link className="panel-link-button" to={dashboardPath}>
               Back to Dashboard

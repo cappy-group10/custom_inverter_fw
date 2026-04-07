@@ -73,6 +73,60 @@ class MotorConfig:
 
 
 @dataclass(slots=True)
+class MusicSongOption:
+    """One predefined musical-motor song exposed to the dashboard."""
+
+    song_id: int
+    label: str
+
+
+@dataclass(slots=True)
+class MusicCommandRecord:
+    """Last host-originated music command sent to the MCU."""
+
+    command_type: str = ""
+    song_id: int | None = None
+    song_label: str | None = None
+    action: str | None = None
+    volume: float | None = None
+    amplitude: float | None = None
+    timestamp: float = 0.0
+
+
+@dataclass(slots=True)
+class MusicStatusRecord:
+    """Decoded musical-motor status telemetry from the MCU."""
+
+    play_state: str = "IDLE"
+    play_mode: str = "SONG"
+    song_id: int = 0
+    note_index: int = 0
+    note_total: int = 0
+    current_freq_hz: float = 0.0
+    amplitude: float = 0.0
+    isr_ticker: int = 0
+
+
+@dataclass(slots=True)
+class MusicState:
+    """Thread-safe dashboard view of the music-mode session state."""
+
+    songs: list[MusicSongOption] = field(default_factory=list)
+    selected_song_id: int | None = None
+    last_started_song_id: int | None = None
+    volume: float = 0.0
+    last_command: MusicCommandRecord | None = None
+    latest_status: MusicStatusRecord | None = None
+    play_state: str = "IDLE"
+    play_mode: str = "SONG"
+    note_index: int = 0
+    note_total: int = 0
+    current_freq_hz: float = 0.0
+    amplitude: float = 0.0
+    isr_ticker: int = 0
+
+
+@dataclass(slots=True)
 class SessionSnapshot:
     """Thread-safe view of the current drive session state."""
 
@@ -94,6 +148,7 @@ class SessionSnapshot:
     recent_frames: list[FrameRecord] = field(default_factory=list)
     recent_events: list[EventRecord] = field(default_factory=list)
     telemetry_samples: list[TelemetrySample] = field(default_factory=list)
+    music_state: MusicState | None = None
     counters: dict[str, int] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
     updated_at: float = 0.0

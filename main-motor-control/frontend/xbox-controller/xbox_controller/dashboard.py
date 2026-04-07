@@ -7,6 +7,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -17,7 +18,7 @@ from serial.tools import list_ports
 
 from .app_logging import create_timestamped_loggers
 from .commands import CtrlState
-from .runtime import DriveRuntime
+from .dashboard_runtime import DashboardRuntimeManager
 from .runtime_models import to_payload
 
 
@@ -30,11 +31,25 @@ PRIMARY_MCU_ID = "primary"
 
 
 class StartSessionRequest(BaseModel):
-    """Request body for starting the drive runtime."""
+    """Request body for starting the active dashboard runtime."""
 
     port: str | None = None
     baudrate: int = Field(default=115200, ge=1)
     joystick_index: int = Field(default=0, ge=0)
+    mode: Literal["drive", "music"] = "drive"
+
+
+class MusicPlayRequest(BaseModel):
+    """Request body for starting a predefined musical-motor song."""
+
+    song_id: int = Field(ge=0)
+    amplitude: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class MusicVolumeRequest(BaseModel):
+    """Request body for updating the global musical-motor volume."""
+
+    volume: float = Field(ge=0.0, le=1.0)
 
 
 class FrontendLogRecordRequest(BaseModel):
@@ -132,9 +147,9 @@ class EventHub:
 
 
 class DashboardServer(uvicorn.Server):
-    """Uvicorn server that tells the drive runtime to stop on process exit."""
+    """Uvicorn server that tells the active runtime to stop on process exit."""
 
-    def __init__(self, runtime: DriveRuntime, config: uvicorn.Config):
+    def __init__(self, runtime, config: uvicorn.Config):
         super().__init__(config)
         self._runtime = runtime
 
@@ -336,6 +351,13 @@ def _ctrl_state_name(value) -> str:
         return str(value)
 
 
+def _music_play_state_name(snapshot) -> str:
+    music_state = getattr(snapshot, "music_state", None)
+    if music_state is None:
+        return "IDLE"
+    return getattr(music_state, "play_state", "IDLE") or "IDLE"
+
+
 def _session_has_primary_mcu(snapshot) -> bool:
     return snapshot.session_state in {"starting", "running", "error"} and snapshot.started_at is not None
 
@@ -345,17 +367,26 @@ def _build_mcu_summary(snapshot) -> dict | None:
         return None
 
     health = snapshot.health or {}
-    latest_status = snapshot.latest_mcu_status
-    command = snapshot.last_host_command
-    ctrl_source = getattr(latest_status, "ctrl_state", None)
-    if ctrl_source is None and command is not None:
-        ctrl_source = getattr(command, "ctrl_state", None)
+    mode = getattr(snapshot, "mode", "drive") or "drive"
+
+    if mode == "music":
+        ctrl_source = _music_play_state_name(snapshot)
+        detail_path = "/configure#music"
+        configure_path = "/configure#music"
+    else:
+        latest_status = snapshot.latest_mcu_status
+        command = snapshot.last_host_command
+        ctrl_source = getattr(latest_status, "ctrl_state", None)
+        if ctrl_source is None and command is not None:
+            ctrl_source = getattr(command, "ctrl_state", None)
+        detail_path = f"/mcu/{PRIMARY_MCU_ID}"
+        configure_path = "/configure"
 
     return {
         "id": PRIMARY_MCU_ID,
         "name": "Primary MCU",
-        "detail_path": f"/mcu/{PRIMARY_MCU_ID}",
-        "configure_path": "/configure",
+        "detail_path": detail_path,
+        "configure_path": configure_path,
         "port": snapshot.port or "demo",
         "session_state": snapshot.session_state,
         "controller_connected": snapshot.controller_connected,
@@ -364,7 +395,8 @@ def _build_mcu_summary(snapshot) -> dict | None:
         "telemetry_stale": bool(health.get("telemetry_stale", False)),
         "last_frame_at": health.get("last_frame_at"),
         "ctrl_state": _ctrl_state_name(ctrl_source),
-        "active_override": snapshot.active_override,
+        "active_override": snapshot.active_override if mode == "drive" else None,
+        "mode": mode,
     }
 
 
@@ -381,7 +413,7 @@ def _build_mcu_detail(snapshot, mcu_id: str) -> dict:
     counters = snapshot.counters or {}
     health = snapshot.health or {}
 
-    return {
+    detail = {
         **summary,
         "baudrate": snapshot.baudrate,
         "joystick_index": snapshot.joystick_index,
@@ -413,13 +445,43 @@ def _build_mcu_detail(snapshot, mcu_id: str) -> dict:
             "last_status_at": health.get("last_status_at"),
         },
     }
+    if getattr(snapshot, "mode", "drive") == "music":
+        detail["music_state"] = to_payload(snapshot.music_state)
+    return detail
 
 
-def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None) -> FastAPI:
+def _build_music_detail(snapshot, mcu_id: str) -> dict:
+    if mcu_id != PRIMARY_MCU_ID:
+        raise KeyError(mcu_id)
+
+    summary = _build_mcu_summary(snapshot)
+    if summary is None or summary.get("mode") != "music":
+        raise LookupError("No active music session")
+
+    counters = snapshot.counters or {}
+    health = snapshot.health or {}
+    return {
+        **summary,
+        "baudrate": snapshot.baudrate,
+        "songs": to_payload(getattr(snapshot.music_state, "songs", [])),
+        "music_state": to_payload(snapshot.music_state),
+        "transport": {
+            "tx_frames": int(counters.get("tx_frames", 0)),
+            "rx_frames": int(counters.get("rx_frames", 0)),
+            "checksum_errors": int(counters.get("checksum_errors", 0)),
+            "serial_errors": int(counters.get("serial_errors", 0)),
+            "last_frame_at": health.get("last_frame_at"),
+            "last_status_at": health.get("last_status_at"),
+        },
+        "health": to_payload(health),
+    }
+
+
+def create_app(runtime: DashboardRuntimeManager | None = None, log_dir: Path | None = None) -> FastAPI:
     """Create the FastAPI application."""
 
     hub = EventHub()
-    runtime = runtime or DriveRuntime()
+    runtime = runtime or DashboardRuntimeManager()
     backend_logger, frontend_logger = create_timestamped_loggers(log_dir or LOG_DIR)
     if hasattr(runtime, "set_logger"):
         runtime.set_logger(backend_logger)
@@ -449,7 +511,7 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
             backend_logger.close()
             frontend_logger.close()
 
-    app = FastAPI(title="Xbox Drive Dashboard", lifespan=lifespan)
+    app = FastAPI(title="Xbox Motor Dashboard", lifespan=lifespan)
 
     app.state.runtime = runtime
     app.state.hub = hub
@@ -510,6 +572,7 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
                 "port": request.port or "demo",
                 "baudrate": request.baudrate,
                 "joystick_index": request.joystick_index,
+                "mode": request.mode,
             },
         )
         try:
@@ -517,6 +580,7 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
                 port=request.port,
                 baudrate=request.baudrate,
                 joystick_index=request.joystick_index,
+                mode=request.mode,
             )
         except RuntimeError as exc:
             backend_logger.log(
@@ -555,6 +619,16 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
         snapshot = app.state.runtime.get_snapshot()
         try:
             return _build_mcu_detail(snapshot, mcu_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="MCU not found") from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/mcus/{mcu_id}/music")
+    async def get_music_detail(mcu_id: str):
+        snapshot = app.state.runtime.get_snapshot()
+        try:
+            return _build_music_detail(snapshot, mcu_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="MCU not found") from exc
         except LookupError as exc:
@@ -607,6 +681,98 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
             metadata={"mcu_id": mcu_id},
         )
         return _build_mcu_detail(snapshot, mcu_id)
+
+    @app.post("/api/mcus/{mcu_id}/music/play")
+    async def play_music(mcu_id: str, request: MusicPlayRequest):
+        if mcu_id != PRIMARY_MCU_ID:
+            raise HTTPException(status_code=404, detail="MCU not found")
+        try:
+            snapshot = app.state.runtime.play_music(request.song_id, amplitude=request.amplitude)
+        except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Music play rejected",
+                route=f"/api/mcus/{mcu_id}/music/play",
+                metadata={"error": str(exc), "song_id": request.song_id},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        backend_logger.log(
+            "info",
+            "session",
+            "Music play accepted",
+            route=f"/api/mcus/{mcu_id}/music/play",
+            metadata={"song_id": request.song_id, "mode": "music"},
+        )
+        return to_payload(snapshot)
+
+    @app.post("/api/mcus/{mcu_id}/music/pause")
+    async def pause_music(mcu_id: str):
+        if mcu_id != PRIMARY_MCU_ID:
+            raise HTTPException(status_code=404, detail="MCU not found")
+        try:
+            snapshot = app.state.runtime.pause_music()
+        except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Music pause rejected",
+                route=f"/api/mcus/{mcu_id}/music/pause",
+                metadata={"error": str(exc)},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return to_payload(snapshot)
+
+    @app.post("/api/mcus/{mcu_id}/music/resume")
+    async def resume_music(mcu_id: str):
+        if mcu_id != PRIMARY_MCU_ID:
+            raise HTTPException(status_code=404, detail="MCU not found")
+        try:
+            snapshot = app.state.runtime.resume_music()
+        except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Music resume rejected",
+                route=f"/api/mcus/{mcu_id}/music/resume",
+                metadata={"error": str(exc)},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return to_payload(snapshot)
+
+    @app.post("/api/mcus/{mcu_id}/music/stop")
+    async def stop_music(mcu_id: str):
+        if mcu_id != PRIMARY_MCU_ID:
+            raise HTTPException(status_code=404, detail="MCU not found")
+        try:
+            snapshot = app.state.runtime.stop_music()
+        except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Music stop rejected",
+                route=f"/api/mcus/{mcu_id}/music/stop",
+                metadata={"error": str(exc)},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return to_payload(snapshot)
+
+    @app.post("/api/mcus/{mcu_id}/music/volume")
+    async def set_music_volume(mcu_id: str, request: MusicVolumeRequest):
+        if mcu_id != PRIMARY_MCU_ID:
+            raise HTTPException(status_code=404, detail="MCU not found")
+        try:
+            snapshot = app.state.runtime.set_music_volume(request.volume)
+        except RuntimeError as exc:
+            backend_logger.log(
+                "warning",
+                "session",
+                "Music volume rejected",
+                route=f"/api/mcus/{mcu_id}/music/volume",
+                metadata={"error": str(exc), "volume": request.volume},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return to_payload(snapshot)
 
     @app.post("/api/logs/frontend")
     async def ingest_frontend_logs(payload: FrontendLogBatchRequest):
@@ -693,7 +859,7 @@ def create_app(runtime: DriveRuntime | None = None, log_dir: Path | None = None)
 
 def main():
     """Run the dashboard locally."""
-    runtime = DriveRuntime()
+    runtime = DashboardRuntimeManager()
     app = create_app(runtime=runtime)
     config = uvicorn.Config(app, host="127.0.0.1", port=8000, log_level="info")
     server = DashboardServer(runtime=runtime, config=config)

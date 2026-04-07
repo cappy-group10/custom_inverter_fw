@@ -125,4 +125,94 @@ describe("mergeStreamEvent", () => {
     expect(next.telemetry_samples).toHaveLength(1);
     expect(next.telemetry_samples[0]?.speed_ref).toBeCloseTo(0.05);
   });
+
+  test("merges music ui_tick payloads into the shared snapshot", () => {
+    const lastChartSampleMsRef = { current: 0 };
+    const previous = buildSnapshot({
+      mode: "music",
+      music_state: {
+        songs: [{ song_id: 0, label: "Mario" }],
+        selected_song_id: 0,
+        last_started_song_id: null,
+        volume: 0.2,
+        last_command: null,
+        latest_status: null,
+        play_state: "IDLE",
+        play_mode: "SONG",
+        note_index: 0,
+        note_total: 0,
+        current_freq_hz: 0,
+        amplitude: 0.2,
+        isr_ticker: 0,
+      },
+    });
+
+    const next = mergeStreamEvent(
+      previous,
+      "ui_tick",
+      {
+        mode: "music",
+        music_state: {
+          songs: [
+            { song_id: 0, label: "Mario" },
+            { song_id: 1, label: "Megalovania" },
+          ],
+          selected_song_id: 1,
+          last_started_song_id: 1,
+          volume: 0.35,
+          last_command: { command_type: "song", song_id: 1, song_label: "Megalovania", amplitude: 0.35, timestamp: 12 },
+          latest_status: {
+            play_state: "PLAYING",
+            play_mode: "SONG",
+            song_id: 1,
+            note_index: 2,
+            note_total: 16,
+            current_freq_hz: 440,
+            amplitude: 0.35,
+            isr_ticker: 99,
+          },
+          play_state: "PLAYING",
+          play_mode: "SONG",
+          note_index: 2,
+          note_total: 16,
+          current_freq_hz: 440,
+          amplitude: 0.35,
+          isr_ticker: 99,
+        },
+        health: {
+          terminal_only: false,
+          has_mcu_telemetry: true,
+          telemetry_stale: false,
+          last_frame_at: 5,
+          last_status_at: 5,
+        },
+        counters: {
+          tx_frames: 3,
+          rx_frames: 4,
+          checksum_errors: 0,
+          serial_errors: 0,
+        },
+        new_frames: [
+          {
+            direction: "tx",
+            frame_id: 0x20,
+            frame_name: "song_cmd",
+            raw_hex: "aa 20",
+            decoded: { song_id: 1 },
+            checksum_ok: true,
+            timestamp: 5,
+          },
+        ],
+        new_faults: [],
+        new_events: [],
+      },
+      lastChartSampleMsRef,
+    );
+
+    expect(next.mode).toBe("music");
+    expect(next.music_state?.selected_song_id).toBe(1);
+    expect(next.music_state?.play_state).toBe("PLAYING");
+    expect(next.recent_frames).toHaveLength(1);
+    expect(next.counters.tx_frames).toBe(3);
+  });
 });

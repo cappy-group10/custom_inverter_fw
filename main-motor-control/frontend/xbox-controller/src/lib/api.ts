@@ -1,4 +1,12 @@
-import type { FrontendLogRecord, McuDetail, McuSummary, PortOption, SessionSnapshot, StartSessionPayload } from "./types";
+import type {
+  FrontendLogRecord,
+  McuDetail,
+  McuSummary,
+  MusicDetail,
+  PortOption,
+  SessionSnapshot,
+  StartSessionPayload,
+} from "./types";
 
 async function fetchJSON<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
@@ -44,6 +52,29 @@ export const api = {
   releaseBrake: (mcuId = "primary") =>
     fetchJSON<McuDetail>(`/api/mcus/${mcuId}/brake/release`, {
       method: "POST",
+    }),
+  getMusicDetail: (mcuId = "primary") => fetchJSON<MusicDetail>(`/api/mcus/${mcuId}/music`),
+  playMusic: (songId: number, amplitude?: number, mcuId = "primary") =>
+    fetchJSON<SessionSnapshot>(`/api/mcus/${mcuId}/music/play`, {
+      method: "POST",
+      body: JSON.stringify({ song_id: songId, amplitude }),
+    }),
+  pauseMusic: (mcuId = "primary") =>
+    fetchJSON<SessionSnapshot>(`/api/mcus/${mcuId}/music/pause`, {
+      method: "POST",
+    }),
+  resumeMusic: (mcuId = "primary") =>
+    fetchJSON<SessionSnapshot>(`/api/mcus/${mcuId}/music/resume`, {
+      method: "POST",
+    }),
+  stopMusic: (mcuId = "primary") =>
+    fetchJSON<SessionSnapshot>(`/api/mcus/${mcuId}/music/stop`, {
+      method: "POST",
+    }),
+  setMusicVolume: (volume: number, mcuId = "primary") =>
+    fetchJSON<SessionSnapshot>(`/api/mcus/${mcuId}/music/volume`, {
+      method: "POST",
+      body: JSON.stringify({ volume }),
     }),
   postFrontendLogs: (records: FrontendLogRecord[]) =>
     fetchJSON<{ accepted: number }>("/api/logs/frontend", {

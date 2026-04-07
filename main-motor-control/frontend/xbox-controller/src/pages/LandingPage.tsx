@@ -22,6 +22,10 @@ function buildInstanceMotorPath(instanceId: string) {
   return `/mcu/primary?instance=${encodeURIComponent(instanceId)}`;
 }
 
+function buildInstanceMusicPath(instanceId: string) {
+  return `/configure?instance=${encodeURIComponent(instanceId)}#music`;
+}
+
 export function LandingPage() {
   const navigate = useNavigate();
   const { primaryMcu, snapshot } = useDashboard();
@@ -102,7 +106,7 @@ export function LandingPage() {
         <div className="hero-status">
           <span className="status-chip muted">
             <UiIcon name="controller-pad" />
-            Drive Mode
+            {snapshot.mode === "music" ? "Music Mode" : "Drive Mode"}
           </span>
           <span className={`status-chip ${hasInstances ? "good" : "muted"}`}>
             <UiIcon name="instances" />
@@ -178,9 +182,12 @@ export function LandingPage() {
                   <UiIcon name="open" />
                   Resume dashboard
                 </Link>
-                <Link className="panel-link-button" to={buildInstanceMotorPath(latestInstance.id)}>
+                <Link
+                  className="panel-link-button"
+                  to={primaryMcu?.mode === "music" ? buildInstanceMusicPath(latestInstance.id) : buildInstanceMotorPath(latestInstance.id)}
+                >
                   <UiIcon name="motor" />
-                  Open motor page
+                  {primaryMcu?.mode === "music" ? "Open music tab" : "Open motor page"}
                 </Link>
               </div>
             </div>

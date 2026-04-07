@@ -36,9 +36,10 @@ class StubRuntime:
     def set_event_callback(self, callback):
         self.callback = callback
 
-    async def start_async(self, port=None, baudrate=115200, joystick_index=0):
+    async def start_async(self, port=None, baudrate=115200, joystick_index=0, mode="drive"):
         self.started.append((port, baudrate, joystick_index))
         self.snapshot.session_state = "running"
+        self.snapshot.mode = mode
         self.snapshot.port = None if port in (None, "", "demo") else port
         self.snapshot.baudrate = baudrate
         self.snapshot.joystick_index = joystick_index

@@ -13,6 +13,7 @@ export type IconName =
   | "controller"
   | "telemetry"
   | "motor"
+  | "music"
   | "uart"
   | "events"
   | "session"
@@ -121,6 +122,12 @@ function iconPath(name: IconName): ReactNode {
           <path d="M6.5 16a7 7 0 1 1 11 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           <path d="M12 12 16.2 9.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+        </>
+      );
+    case "music":
+      return (
+        <>
+          <path d="M15 6v8.2a2.8 2.8 0 1 1-1.6-2.5V8.5l-4 1V17a2.8 2.8 0 1 1-1.6-2.5V7.2l7.2-1.6Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </>
       );
     case "uart":

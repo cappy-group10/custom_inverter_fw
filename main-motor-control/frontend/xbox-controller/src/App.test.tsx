@@ -48,6 +48,7 @@ function buildContext(snapshot: SessionSnapshot): DashboardContextValue {
       ports: false,
       session: false,
       brake: false,
+      music: false,
     },
     error: null,
     primaryMcu: derivePrimaryMcuSummary(snapshot),
@@ -58,6 +59,11 @@ function buildContext(snapshot: SessionSnapshot): DashboardContextValue {
     stopSession: vi.fn(async () => undefined),
     engageBrake: vi.fn(async () => undefined),
     releaseBrake: vi.fn(async () => undefined),
+    playMusic: vi.fn(async () => undefined),
+    pauseMusic: vi.fn(async () => undefined),
+    resumeMusic: vi.fn(async () => undefined),
+    stopMusic: vi.fn(async () => undefined),
+    setMusicVolume: vi.fn(async () => undefined),
     clearError: vi.fn(),
   };
 }

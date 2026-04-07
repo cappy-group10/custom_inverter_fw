@@ -22,6 +22,7 @@ interface DashboardContextValue {
     ports: boolean;
     session: boolean;
     brake: boolean;
+    music: boolean;
   };
   error: string | null;
   primaryMcu: McuSummary | null;
@@ -32,6 +33,11 @@ interface DashboardContextValue {
   stopSession: () => Promise<void>;
   engageBrake: () => Promise<void>;
   releaseBrake: () => Promise<void>;
+  playMusic: (songId: number, amplitude?: number) => Promise<void>;
+  pauseMusic: () => Promise<void>;
+  resumeMusic: () => Promise<void>;
+  stopMusic: () => Promise<void>;
+  setMusicVolume: (volume: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -43,7 +49,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [ports, setPorts] = useState<PortOption[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState({ ports: false, session: false, brake: false });
+  const [loading, setLoading] = useState({ ports: false, session: false, brake: false, music: false });
 
   const reconnectTimerRef = useRef<number | null>(null);
   const chartSampleMsRef = useRef(0);
@@ -176,6 +182,101 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const playMusic = async (songId: number, amplitude?: number) => {
+    setLoading((current) => ({ ...current, music: true }));
+    try {
+      setError(null);
+      frontendLogger.info("frontend", "Music play requested", { song_id: songId, amplitude });
+      const nextSnapshot = await api.playMusic(songId, amplitude);
+      setSnapshot(nextSnapshot);
+      frontendLogger.info("frontend", "Music play succeeded", {
+        song_id: songId,
+        play_state: nextSnapshot.music_state?.play_state || null,
+      });
+    } catch (err) {
+      frontendLogger.error("frontend", "Music play failed", {
+        error: err instanceof Error ? err.message : "Unknown error",
+        song_id: songId,
+      });
+      setError(err instanceof Error ? err.message : "Unable to start music playback");
+      throw err;
+    } finally {
+      setLoading((current) => ({ ...current, music: false }));
+    }
+  };
+
+  const pauseMusic = async () => {
+    setLoading((current) => ({ ...current, music: true }));
+    try {
+      setError(null);
+      frontendLogger.info("frontend", "Music pause requested");
+      const nextSnapshot = await api.pauseMusic();
+      setSnapshot(nextSnapshot);
+    } catch (err) {
+      frontendLogger.error("frontend", "Music pause failed", {
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+      setError(err instanceof Error ? err.message : "Unable to pause music playback");
+      throw err;
+    } finally {
+      setLoading((current) => ({ ...current, music: false }));
+    }
+  };
+
+  const resumeMusic = async () => {
+    setLoading((current) => ({ ...current, music: true }));
+    try {
+      setError(null);
+      frontendLogger.info("frontend", "Music resume requested");
+      const nextSnapshot = await api.resumeMusic();
+      setSnapshot(nextSnapshot);
+    } catch (err) {
+      frontendLogger.error("frontend", "Music resume failed", {
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+      setError(err instanceof Error ? err.message : "Unable to resume music playback");
+      throw err;
+    } finally {
+      setLoading((current) => ({ ...current, music: false }));
+    }
+  };
+
+  const stopMusic = async () => {
+    setLoading((current) => ({ ...current, music: true }));
+    try {
+      setError(null);
+      frontendLogger.info("frontend", "Music stop requested");
+      const nextSnapshot = await api.stopMusic();
+      setSnapshot(nextSnapshot);
+    } catch (err) {
+      frontendLogger.error("frontend", "Music stop failed", {
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+      setError(err instanceof Error ? err.message : "Unable to stop music playback");
+      throw err;
+    } finally {
+      setLoading((current) => ({ ...current, music: false }));
+    }
+  };
+
+  const setMusicVolume = async (volume: number) => {
+    setLoading((current) => ({ ...current, music: true }));
+    try {
+      setError(null);
+      const nextSnapshot = await api.setMusicVolume(volume);
+      setSnapshot(nextSnapshot);
+    } catch (err) {
+      frontendLogger.error("frontend", "Music volume update failed", {
+        error: err instanceof Error ? err.message : "Unknown error",
+        volume,
+      });
+      setError(err instanceof Error ? err.message : "Unable to update music volume");
+      throw err;
+    } finally {
+      setLoading((current) => ({ ...current, music: false }));
+    }
+  };
+
   useEffect(() => {
     void reloadPorts();
     void refreshState();
@@ -246,6 +347,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       stopSession,
       engageBrake,
       releaseBrake,
+      playMusic,
+      pauseMusic,
+      resumeMusic,
+      stopMusic,
+      setMusicVolume,
       clearError: () => setError(null),
     }),
     [snapshot, ports, wsConnected, loading, error],

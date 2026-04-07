@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { MotorControlPanel } from "../components/MotorControlPanel";
+import { MusicControlPanel } from "../components/MusicControlPanel";
 import { InfoHint, UiIcon, type IconName } from "../components/UiChrome";
 import { UartDebugTerminal } from "../components/UartDebugTerminal";
 import { useDashboard } from "../context/DashboardContext";
@@ -24,6 +25,7 @@ import type {
   EventRecord,
   PortOption,
   SessionSnapshot,
+  SessionMode,
   TelemetrySample,
 } from "../lib/types";
 
@@ -90,6 +92,7 @@ const controllerControlOrder = [
 ];
 const tabs = [
   { id: "overview", title: "Overview", copy: "Session, transport, and host command", icon: "overview" },
+  { id: "music", title: "Music", copy: "Song playback, volume, and compact status", icon: "music" },
   { id: "controller", title: "Controller", copy: "Sticks, triggers, and button state", icon: "controller" },
   { id: "telemetry", title: "Telemetry", copy: "MCU status and rolling charts", icon: "telemetry" },
   { id: "motor", title: "Motor Control", copy: "Speedometer, electrical stats, and emergency brake", icon: "motor" },
@@ -139,10 +142,14 @@ function getHealthBanner(snapshot: SessionSnapshot) {
   let level = "neutral";
 
   if (snapshot.session_state === "running") {
-    title = "Drive runtime active";
+    title = snapshot.mode === "music" ? "Music runtime active" : "Drive runtime active";
     message = health.terminal_only
-      ? "Controller and host TX are running in demo mode. No MCU telemetry is expected."
-      : "Controller, host UART, and MCU telemetry are streaming.";
+      ? snapshot.mode === "music"
+        ? "Music commands are being staged in demo mode. No MCU telemetry is expected."
+        : "Controller and host TX are running in demo mode. No MCU telemetry is expected."
+      : snapshot.mode === "music"
+        ? "Song commands, music status frames, and UART diagnostics are streaming."
+        : "Controller, host UART, and MCU telemetry are streaming.";
     level = "good";
   }
 
@@ -171,6 +178,26 @@ function getHealthBanner(snapshot: SessionSnapshot) {
   }
 
   return { title, message, level };
+}
+
+function ModePlaceholderPanel({
+  title,
+  copy,
+}: {
+  title: string;
+  copy: string;
+}) {
+  return (
+    <section className="panel mode-placeholder-panel">
+      <div className="panel-heading">
+        <div>
+          <HeadingLine icon="music" title={title} hint={copy} />
+          <p className="panel-copy">{copy}</p>
+        </div>
+      </div>
+      <div className="placeholder">This view is drive-only. Switch to the Music tab for the active music session.</div>
+    </section>
+  );
 }
 
 function getTelemetryChip(health: SessionSnapshot["health"]) {
@@ -333,19 +360,21 @@ function OverviewTab({
   wsConnected: boolean;
   loadingSession: boolean;
   loadingPorts: boolean;
-  startSession: (payload: { port: string | null; baudrate: number; joystick_index: number }) => Promise<void>;
+  startSession: (payload: { port: string | null; baudrate: number; joystick_index: number; mode: SessionMode }) => Promise<void>;
   stopSession: () => Promise<void>;
   reloadPorts: () => Promise<void>;
 }) {
   const [selectedPort, setSelectedPort] = useState("demo");
   const [baudrate, setBaudrate] = useState(115200);
   const [joystickIndex, setJoystickIndex] = useState(0);
+  const [selectedMode, setSelectedMode] = useState<SessionMode>("drive");
 
   useEffect(() => {
     setSelectedPort(snapshot.port || "demo");
     setBaudrate(snapshot.baudrate || 115200);
     setJoystickIndex(snapshot.joystick_index || 0);
-  }, [snapshot.port, snapshot.baudrate, snapshot.joystick_index]);
+    setSelectedMode(snapshot.mode === "music" ? "music" : "drive");
+  }, [snapshot.port, snapshot.baudrate, snapshot.joystick_index, snapshot.mode]);
 
   useEffect(() => {
     if (!ports.length) {
@@ -359,6 +388,7 @@ function OverviewTab({
 
   const portHelp = getPortHelp(selectedPort, ports);
   const telemetryChip = getTelemetryChip(snapshot.health || {});
+  const isMusicMode = selectedMode === "music";
 
   return (
     <div className="overview-grid">
@@ -368,13 +398,22 @@ function OverviewTab({
             <HeadingLine
               icon="session"
               title="Session Control"
-              hint="Choose the controller, select the serial target, and start or stop the drive-mode runtime for this instance."
+              hint="Choose drive or music mode, select the serial target, and start or stop the active runtime for this instance."
             />
-            <p className="panel-copy">Connect the controller, choose the UART target, and start the drive loop.</p>
+            <p className="panel-copy">
+              Choose the operating mode, select the UART target, and start the drive or musical-motor runtime.
+            </p>
           </div>
           <span className={`badge ${wsConnected ? "online" : "offline"}`}>{wsConnected ? "Socket live" : "Socket offline"}</span>
         </div>
         <div className="session-form">
+          <label className="control-field control-field-wide">
+            Mode
+            <select value={selectedMode} onChange={(event) => setSelectedMode(event.target.value as SessionMode)}>
+              <option value="drive">Drive</option>
+              <option value="music">Music</option>
+            </select>
+          </label>
           <label className="control-field control-field-wide">
             Port
             <select value={selectedPort} onChange={(event) => setSelectedPort(event.target.value)}>
@@ -396,16 +435,18 @@ function OverviewTab({
                 onChange={(event) => setBaudrate(Number(event.target.value))}
               />
             </label>
-            <label className="control-field">
-              Joystick Index
-              <input
-                type="number"
-                value={joystickIndex}
-                min={0}
-                step={1}
-                onChange={(event) => setJoystickIndex(Number(event.target.value))}
-              />
-            </label>
+            {!isMusicMode ? (
+              <label className="control-field">
+                Joystick Index
+                <input
+                  type="number"
+                  value={joystickIndex}
+                  min={0}
+                  step={1}
+                  onChange={(event) => setJoystickIndex(Number(event.target.value))}
+                />
+              </label>
+            ) : null}
           </div>
         </div>
         <p className={`control-help${portHelp.tone ? ` ${portHelp.tone}` : ""}`}>{portHelp.message}</p>
@@ -417,11 +458,12 @@ function OverviewTab({
               void startSession({
                 port: selectedPort,
                 baudrate,
-                joystick_index: joystickIndex,
+                joystick_index: isMusicMode ? 0 : joystickIndex,
+                mode: selectedMode,
               }).catch(() => undefined)
             }
           >
-            {loadingSession ? "Starting..." : "Start Drive Session"}
+            {loadingSession ? "Starting..." : `Start ${isMusicMode ? "Music" : "Drive"} Session`}
           </button>
           <button disabled={loadingSession} onClick={() => void stopSession().catch(() => undefined)}>
             Stop
@@ -437,7 +479,7 @@ function OverviewTab({
           </div>
           <div>
             <dt>Controller</dt>
-            <dd>{snapshot.joystick_name || "Not connected"}</dd>
+            <dd>{isMusicMode ? "Not used in music mode" : snapshot.joystick_name || "Not connected"}</dd>
           </div>
           <div>
             <dt>Started</dt>
@@ -493,27 +535,56 @@ function OverviewTab({
           <div>
             <HeadingLine
               icon="command"
-              title="Host Command"
-              hint="Shows the latest command values being encoded on the laptop before they are transmitted over UART."
+              title={snapshot.mode === "music" ? "Music Command" : "Host Command"}
+              hint={
+                snapshot.mode === "music"
+                  ? "Shows the latest song, control, or volume command being encoded on the laptop before it is transmitted over UART."
+                  : "Shows the latest command values being encoded on the laptop before they are transmitted over UART."
+              }
             />
-            <p className="panel-copy">The latest control command being packed and sent from the laptop.</p>
+            <p className="panel-copy">
+              {snapshot.mode === "music"
+                ? "The latest musical-motor command being packed and sent from the laptop."
+                : "The latest control command being packed and sent from the laptop."}
+            </p>
           </div>
-          <span className="badge">{String(snapshot.last_host_command?.ctrl_state || "STOP")}</span>
+          <span className="badge">
+            {snapshot.mode === "music"
+              ? snapshot.music_state?.play_state || "IDLE"
+              : String(snapshot.last_host_command?.ctrl_state || "STOP")}
+          </span>
         </div>
-        <div className="command-grid">
-          <div className="command-meter">
-            <span>Speed Ref</span>
-            <strong>{formatSigned(snapshot.last_host_command?.speed_ref, 4)}</strong>
+        {snapshot.mode === "music" ? (
+          <div className="command-grid">
+            <div className="command-meter">
+              <span>Song</span>
+              <strong>{snapshot.music_state?.last_command?.song_label || "None"}</strong>
+            </div>
+            <div className="command-meter">
+              <span>Action</span>
+              <strong>{snapshot.music_state?.last_command?.action || snapshot.music_state?.play_state || "IDLE"}</strong>
+            </div>
+            <div className="command-meter">
+              <span>Volume</span>
+              <strong>{formatFixed(snapshot.music_state?.volume, 2)}</strong>
+            </div>
           </div>
-          <div className="command-meter">
-            <span>Id Ref</span>
-            <strong>{formatSigned(snapshot.last_host_command?.id_ref, 4)}</strong>
+        ) : (
+          <div className="command-grid">
+            <div className="command-meter">
+              <span>Speed Ref</span>
+              <strong>{formatSigned(snapshot.last_host_command?.speed_ref, 4)}</strong>
+            </div>
+            <div className="command-meter">
+              <span>Id Ref</span>
+              <strong>{formatSigned(snapshot.last_host_command?.id_ref, 4)}</strong>
+            </div>
+            <div className="command-meter">
+              <span>Iq Ref</span>
+              <strong>{formatSigned(snapshot.last_host_command?.iq_ref, 4)}</strong>
+            </div>
           </div>
-          <div className="command-meter">
-            <span>Iq Ref</span>
-            <strong>{formatSigned(snapshot.last_host_command?.iq_ref, 4)}</strong>
-          </div>
-        </div>
+        )}
       </section>
     </div>
   );
@@ -892,13 +963,28 @@ function EventsTab({ events }: { events: EventRecord[] }) {
 }
 
 export function DashboardPage() {
-  const { snapshot, ports, wsConnected, loading, startSession, stopSession, reloadPorts, engageBrake, releaseBrake } =
-    useDashboard();
+  const {
+    snapshot,
+    ports,
+    wsConnected,
+    loading,
+    startSession,
+    stopSession,
+    reloadPorts,
+    engageBrake,
+    releaseBrake,
+    playMusic,
+    pauseMusic,
+    resumeMusic,
+    stopMusic,
+    setMusicVolume,
+  } = useDashboard();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>(getTabFromHash(location.hash));
   const [activeInstanceName, setActiveInstanceName] = useState("No instance selected");
+  const previousSessionRef = useRef({ mode: snapshot.mode, sessionState: snapshot.session_state });
   const instanceId = searchParams.get("instance");
 
   useEffect(() => {
@@ -947,6 +1033,19 @@ export function DashboardPage() {
     frontendLogger.info("tabs", "Dashboard tab changed", { tab: activeTab });
   }, [activeTab]);
 
+  useEffect(() => {
+    const previous = previousSessionRef.current;
+    const startedMusicSession =
+      snapshot.mode === "music" &&
+      snapshot.session_state === "running" &&
+      (previous.mode !== "music" || previous.sessionState !== "running");
+
+    if (startedMusicSession && activeTab === "overview") {
+      setTab("music");
+    }
+    previousSessionRef.current = { mode: snapshot.mode, sessionState: snapshot.session_state };
+  }, [activeTab, snapshot.mode, snapshot.session_state]);
+
   const healthBanner = getHealthBanner(snapshot);
   const motorPagePath = instanceId ? `/mcu/primary?instance=${encodeURIComponent(instanceId)}` : "/mcu/primary";
 
@@ -969,7 +1068,7 @@ export function DashboardPage() {
           <p className="eyebrow">Emission Impossible</p>
           <h1>Inverter OS</h1>
           <p className="hero-copy">
-            A professional operator console for controller input, host command frames, and motor-control MCU telemetry.
+            A professional operator console for drive control, musical-motor playback, host command frames, and MCU telemetry.
           </p>
         </div>
         <div className="hero-status">
@@ -1040,13 +1139,49 @@ export function DashboardPage() {
         </section>
 
         <section
+          id="tab-panel-music"
+          className={`tab-panel${activeTab === "music" ? " active" : ""}`}
+          role="tabpanel"
+          aria-labelledby="tab-button-music"
+          hidden={activeTab !== "music"}
+        >
+          <MusicControlPanel
+            snapshot={snapshot}
+            loadingMusic={loading.music}
+            onPlay={(songId, amplitude) => {
+              void playMusic(songId, amplitude).catch(() => undefined);
+            }}
+            onPause={() => {
+              void pauseMusic().catch(() => undefined);
+            }}
+            onResume={() => {
+              void resumeMusic().catch(() => undefined);
+            }}
+            onStop={() => {
+              void stopMusic().catch(() => undefined);
+            }}
+            onVolumeChange={(volume) => {
+              void setMusicVolume(volume).catch(() => undefined);
+            }}
+            onOpenUart={() => setTab("uart")}
+          />
+        </section>
+
+        <section
           id="tab-panel-controller"
           className={`tab-panel${activeTab === "controller" ? " active" : ""}`}
           role="tabpanel"
           aria-labelledby="tab-button-controller"
           hidden={activeTab !== "controller"}
         >
-          <ControllerTab snapshot={snapshot} />
+          {snapshot.mode === "music" ? (
+            <ModePlaceholderPanel
+              title="Controller View Unavailable"
+              copy="The current session is running in music mode, so the controller visualization and drive mapping are intentionally left untouched."
+            />
+          ) : (
+            <ControllerTab snapshot={snapshot} />
+          )}
         </section>
 
         <section
@@ -1056,7 +1191,14 @@ export function DashboardPage() {
           aria-labelledby="tab-button-telemetry"
           hidden={activeTab !== "telemetry"}
         >
-          <TelemetryTab snapshot={snapshot} />
+          {snapshot.mode === "music" ? (
+            <ModePlaceholderPanel
+              title="Drive Telemetry Hidden"
+              copy="Music sessions report song/status telemetry instead of the drive-mode electrical charts shown here."
+            />
+          ) : (
+            <TelemetryTab snapshot={snapshot} />
+          )}
         </section>
 
         <section
@@ -1066,17 +1208,24 @@ export function DashboardPage() {
           aria-labelledby="tab-button-motor"
           hidden={activeTab !== "motor"}
         >
-          <MotorControlPanel
-            snapshot={snapshot}
-            loadingBrake={loading.brake}
-            detailPath={motorPagePath}
-            onBrake={() => {
-              void engageBrake().catch(() => undefined);
-            }}
-            onBrakeRelease={() => {
-              void releaseBrake().catch(() => undefined);
-            }}
-          />
+          {snapshot.mode === "music" ? (
+            <ModePlaceholderPanel
+              title="Drive Motor Controls Hidden"
+              copy="Emergency brake, speedometer, and d/q current surfaces remain drive-only so the musical-motor path stays non-invasive."
+            />
+          ) : (
+            <MotorControlPanel
+              snapshot={snapshot}
+              loadingBrake={loading.brake}
+              detailPath={motorPagePath}
+              onBrake={() => {
+                void engageBrake().catch(() => undefined);
+              }}
+              onBrakeRelease={() => {
+                void releaseBrake().catch(() => undefined);
+              }}
+            />
+          )}
         </section>
 
         <section

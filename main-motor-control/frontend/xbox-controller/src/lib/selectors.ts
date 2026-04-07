@@ -39,6 +39,7 @@ export function createEmptySnapshot(): SessionSnapshot {
     recent_frames: [],
     recent_events: [],
     telemetry_samples: [],
+    music_state: null,
     counters: {
       loop_iterations: 0,
       tx_frames: 0,
@@ -126,10 +127,12 @@ function mergeUiTick(
   let nextSnapshot: SessionSnapshot = {
     ...snapshot,
     updated_at: updatedAt,
+    mode: payload.mode ?? snapshot.mode,
     controller_state: payload.controller_state ?? snapshot.controller_state,
     motor_config: payload.motor_config ?? snapshot.motor_config,
     last_host_command: payload.last_host_command ?? snapshot.last_host_command,
     latest_mcu_status: payload.latest_mcu_status ?? snapshot.latest_mcu_status,
+    music_state: payload.music_state ?? snapshot.music_state,
     health: payload.health ?? snapshot.health,
     counters: payload.counters ? { ...(snapshot.counters || {}), ...payload.counters } : snapshot.counters,
   };
@@ -286,11 +289,16 @@ export function derivePrimaryMcuSummary(snapshot: SessionSnapshot | null): McuSu
   if (!snapshot || !snapshot.started_at || !["starting", "running", "error"].includes(snapshot.session_state)) {
     return null;
   }
+  const mode = snapshot.mode || "drive";
+  const ctrlState =
+    mode === "music"
+      ? normalizePlayState(snapshot.music_state?.play_state ?? "IDLE")
+      : normalizeCtrlState(snapshot.latest_mcu_status?.ctrl_state ?? snapshot.last_host_command?.ctrl_state ?? "STOP");
   return {
     id: "primary",
     name: "Primary MCU",
-    detail_path: "/mcu/primary",
-    configure_path: "/configure",
+    detail_path: mode === "music" ? "/configure#music" : "/mcu/primary",
+    configure_path: mode === "music" ? "/configure#music" : "/configure",
     port: snapshot.port || "demo",
     session_state: snapshot.session_state,
     controller_connected: snapshot.controller_connected,
@@ -298,10 +306,9 @@ export function derivePrimaryMcuSummary(snapshot: SessionSnapshot | null): McuSu
     has_mcu_telemetry: Boolean(snapshot.health?.has_mcu_telemetry),
     telemetry_stale: Boolean(snapshot.health?.telemetry_stale),
     last_frame_at: snapshot.health?.last_frame_at ?? null,
-    ctrl_state: normalizeCtrlState(
-      snapshot.latest_mcu_status?.ctrl_state ?? snapshot.last_host_command?.ctrl_state ?? "STOP",
-    ),
-    active_override: snapshot.active_override ?? null,
+    ctrl_state: ctrlState,
+    active_override: mode === "drive" ? snapshot.active_override ?? null : null,
+    mode,
   };
 }
 
@@ -343,7 +350,27 @@ export function derivePrimaryMcuDetail(snapshot: SessionSnapshot | null): McuDet
       last_frame_at: snapshot.health?.last_frame_at ?? null,
       last_status_at: snapshot.health?.last_status_at ?? null,
     },
+    music_state: snapshot.music_state,
   };
+}
+
+export function normalizePlayState(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    switch (value) {
+      case 0:
+        return "IDLE";
+      case 1:
+        return "PLAYING";
+      case 2:
+        return "PAUSED";
+      default:
+        return String(value);
+    }
+  }
+  return "IDLE";
 }
 
 export function normalizeCtrlState(value: unknown): string {

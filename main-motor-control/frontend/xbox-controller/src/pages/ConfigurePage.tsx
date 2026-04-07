@@ -60,7 +60,7 @@ export function ConfigurePage() {
 
           <div className="action-row">
             <Link className={`button ${primaryMcu ? "primary" : "ghost"}`} to={primaryMcu?.detail_path || "/"}>
-              {primaryMcu ? "Open motor page" : "Motor page unavailable"}
+              {primaryMcu ? (primaryMcu.mode === "music" ? "Open music tab" : "Open motor page") : "Motor page unavailable"}
             </Link>
           </div>
         </section>

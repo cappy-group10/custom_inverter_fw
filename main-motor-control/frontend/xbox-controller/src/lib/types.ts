@@ -1,4 +1,5 @@
 export type SessionState = "idle" | "starting" | "running" | "stopped" | "error";
+export type SessionMode = "drive" | "music";
 export type ActiveOverride = "BRAKE" | null;
 
 export interface FrontendLogRecord {
@@ -128,6 +129,48 @@ export interface TelemetrySample {
   current_cs: number;
 }
 
+export interface MusicSongOption {
+  song_id: number;
+  label: string;
+}
+
+export interface MusicCommandRecord {
+  command_type: string;
+  song_id?: number | null;
+  song_label?: string | null;
+  action?: string | null;
+  volume?: number | null;
+  amplitude?: number | null;
+  timestamp: number;
+}
+
+export interface MusicStatus {
+  play_state: string;
+  play_mode: string;
+  song_id: number;
+  note_index: number;
+  note_total: number;
+  current_freq_hz: number;
+  amplitude: number;
+  isr_ticker: number;
+}
+
+export interface MusicState {
+  songs: MusicSongOption[];
+  selected_song_id: number | null;
+  last_started_song_id: number | null;
+  volume: number;
+  last_command: MusicCommandRecord | null;
+  latest_status: MusicStatus | null;
+  play_state: string;
+  play_mode: string;
+  note_index: number;
+  note_total: number;
+  current_freq_hz: number;
+  amplitude: number;
+  isr_ticker: number;
+}
+
 export interface HealthState {
   controller_connected?: boolean;
   port_open?: boolean;
@@ -141,7 +184,7 @@ export interface HealthState {
 
 export interface SessionSnapshot {
   session_state: SessionState;
-  mode?: string;
+  mode: SessionMode | string;
   port: string | null;
   baudrate: number;
   joystick_index: number;
@@ -158,6 +201,7 @@ export interface SessionSnapshot {
   recent_frames: FrameRecord[];
   recent_events: EventRecord[];
   telemetry_samples: TelemetrySample[];
+  music_state: MusicState | null;
   counters: Record<string, number>;
   health: HealthState;
   updated_at: number;
@@ -170,6 +214,7 @@ export interface StartSessionPayload {
   port: string | null;
   baudrate: number;
   joystick_index: number;
+  mode: SessionMode;
 }
 
 export interface McuSummary {
@@ -186,6 +231,7 @@ export interface McuSummary {
   last_frame_at: number | null;
   ctrl_state: string;
   active_override: ActiveOverride;
+  mode: SessionMode | string;
 }
 
 export interface McuDetail extends McuSummary {
@@ -218,4 +264,20 @@ export interface McuDetail extends McuSummary {
     last_frame_at: number | null;
     last_status_at: number | null;
   };
+  music_state?: MusicState | null;
+}
+
+export interface MusicDetail extends McuSummary {
+  baudrate: number;
+  songs: MusicSongOption[];
+  music_state: MusicState | null;
+  transport: {
+    tx_frames: number;
+    rx_frames: number;
+    checksum_errors: number;
+    serial_errors: number;
+    last_frame_at: number | null;
+    last_status_at: number | null;
+  };
+  health: HealthState;
 }

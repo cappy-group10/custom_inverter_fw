@@ -99,6 +99,7 @@ export function SessionLauncher({
                 port: port === "demo" ? "demo" : port,
                 baudrate,
                 joystick_index: joystickIndex,
+                mode: "drive",
               });
               onStarted?.();
             } catch {
