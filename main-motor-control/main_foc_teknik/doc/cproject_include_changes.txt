@@ -1,0 +1,101 @@
+# .cproject Include Path Changes
+# ============================================================
+# In .cproject, find the INCLUDE_PATH option blocks (there are
+# two — one for F2837x_RAM, one for F2837x_FLASH) and replace
+# all SDK-variable-based paths with PROJECT_LOC-relative ones.
+#
+# OLD paths (SDK-dependent)         → NEW paths (local copies)
+# ============================================================
+
+# Remove this entirely (SDK product macro injection):
+#   ${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_INCLUDE_PATH}
+
+# Replace each path as follows:
+
+OLD: ${C2000WARE_DEVICE_SUPPORT_ROOT}/common/include/
+NEW: ${PROJECT_ROOT}/include/device_support/common
+
+OLD: ${C2000WARE_DEVICE_SUPPORT_ROOT}/headers/include/
+NEW: ${PROJECT_ROOT}/include/device_support/headers
+
+OLD: ${C2000WARE_DLIB_ROOT}
+NEW: ${PROJECT_ROOT}/include/driverlib
+
+OLD: ${C2000WARE_LIB_ROOT}/math/FPUfastRTS/c28/include/
+NEW: ${PROJECT_ROOT}/include/math_FPUfastRTS
+
+OLD: ${C2000WARE_LIB_ROOT}/control/DCL/c28/include/
+NEW: ${PROJECT_ROOT}/include/DCL
+
+OLD: ${SFRA_INSTALL_ROOT}/include/
+NEW: ${PROJECT_ROOT}/include/sfra
+
+OLD: ${SFRA_INSTALL_ROOT}/gui/include/
+NEW: ${PROJECT_ROOT}/include/sfra_gui
+
+OLD: ${SDK_ROOT}/libraries/utilities/datalog/include/
+NEW: ${PROJECT_ROOT}/include/datalog
+
+OLD: ${SDK_ROOT}/libraries/fcl/include/
+NEW: ${PROJECT_ROOT}/include/fcl
+
+OLD: ${SDK_ROOT}/libraries/position_sensing/qep/include/
+NEW: ${PROJECT_ROOT}/include/qep
+
+OLD: ${SDK_ROOT}/libraries/utilities/math_blocks/include/CLA_v1.0/
+NEW: ${PROJECT_ROOT}/include/math_blocks_cla
+
+OLD: ${SDK_ROOT}/libraries/utilities/math_blocks/include/v4.3/
+NEW: ${PROJECT_ROOT}/include/math_blocks_v43
+
+OLD: ${SDK_ROOT}/libraries/dacs/dac128s085/include
+NEW: ${PROJECT_ROOT}/include/dac128s085
+
+OLD: ${SDK_ROOT}/solutions/common/sensored_foc/include/
+NEW: ${PROJECT_ROOT}/include/sensored_foc
+
+OLD: ${SDK_ROOT}/solutions/boostxl_3phganinv/f2837x/include/
+NEW: ${PROJECT_ROOT}/include/boostxl_3phganinv
+
+# Keep as-is (compiler tool root, not SDK-dependent):
+#   ${PROJECT_ROOT}
+#   ${CG_TOOL_ROOT}/include
+
+# ============================================================
+# Also update the macros block at the top of each cconfiguration:
+# DELETE the entire <macros> block — these five variables are
+# no longer needed:
+#   C2000WARE_LIB_ROOT
+#   SDK_ROOT
+#   C2000WARE_DLIB_ROOT
+#   SFRA_INSTALL_ROOT
+#   C2000WARE_DEVICE_SUPPORT_ROOT
+#
+# ============================================================
+# Linker SEARCH_PATH — update these two:
+OLD: ${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_LIBRARY_PATH}
+NEW: ${PROJECT_ROOT}/lib
+
+OLD: ${C2000WARE_LIB_ROOT}/dsp/VCU/c28/lib
+NEW: (delete — only needed if you use VCU DSP library explicitly)
+
+# Linker LIBRARY — update:
+OLD: ${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_LIBRARIES}
+NEW: driverlib.lib
+# sfra.lib is already linked as a project resource, no change needed there
+
+# ============================================================
+# DEFINE symbols — remove only:
+OLD: ${COM_TI_MOTOR_CONTROL_C2000WARE_SDK_SOFTWARE_PACKAGE_SYMBOLS}
+# Keep all other defines exactly as-is:
+#   _DEBUG, LARGE_MODEL, CPU1, DAC128S_ENABLE, DAC128S_SPIA,
+#   _DUAL_HEADERS, TEST_ENABLE, F2837x_DEVICE, _LAUNCHXL_F28379D,
+#   _BOOSTXL_3PHGANINV, DANIAL_BUILD_FIX
+# For F2837x_FLASH config also keep: _FLASH
+#
+# Add your EnDat define here if you use a compile-time guard:
+#   ENDAT_ENABLE
+# ============================================================
+
+# Add EnDat include path (new):
+NEW: ${PROJECT_ROOT}/sources/endat

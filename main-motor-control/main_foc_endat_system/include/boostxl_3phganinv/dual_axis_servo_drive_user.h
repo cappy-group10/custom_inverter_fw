@@ -79,7 +79,7 @@
 #define M1_CURRENT_SENSE_SENSITIVITY        0.09f
 #define M1_CURRENT_SENSE_ZERO_VOLTAGE       2.5f
 
-#define M1_CMPSS_ZERO_COUNT                 3413U
+#define M1_CMPSS_ZERO_COUNT                 2048U
 #define M1_CURRENT_COUNTS_PER_AMP           ((M1_CURRENT_SENSE_SENSITIVITY * \
                                               M1_ADC_FULL_SCALE_COUNTS) / \
                                              M1_ADC_REFERENCE_VOLTAGE)

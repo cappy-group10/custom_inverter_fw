@@ -667,7 +667,7 @@ void C2(void) // UART TX: send status frame to host (Phase 2)
 {
     //
     // Rate divider: C2 runs every ~450 us (C-task cycle = 3 * 150 us).
-    // At 115200 baud, a 43-byte frame takes ~3.7 ms to transmit.
+    // At 115200 baud, a 55-byte diagnostic frame takes ~4.8 ms to transmit.
     // Send one frame every ~50 ms (~22 Hz) to avoid saturating the link.
     // 50 ms / 0.45 ms ≈ 111 calls between transmits.
     //
@@ -1278,6 +1278,11 @@ static inline void buildLevel3_M1(void)
 // and in case of QEP also finds the index location and initializes the angle
 // w.r.t. the index location
 // ----------------------------------------------------------------------------
+    if(motorVars[0].ctrlState == CTRL_RUN)
+    {
+        motorVars[0].ptrFCL->lsw = ENC_CALIBRATION_DONE;
+    }
+    
     if(motorVars[0].runMotor == MOTOR_STOP)
     {
         motorVars[0].ptrFCL->lsw = ENC_ALIGNMENT;
@@ -1773,17 +1778,17 @@ __interrupt void motor1ControlISR(void)
 //-----------------------------------------------------------------------------
 // Variable display on DACs
 //-----------------------------------------------------------------------------
-    // DAC_setShadowValue(hal.dacHandle[0],
-    //                    DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.ref));
+    DAC_setShadowValue(hal.dacHandle[0],
+                       DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.ref));
     // DAC_setShadowValue(hal.dacHandle[0],
     //                    DAC_MACRO_PU(motorVars[0].posElecTheta));
-    // DAC_setShadowValue(hal.dacHandle[1],
-    //                    DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.fbk));
-
-    DAC_setShadowValue(hal.dacHandle[0],
-                       DAC_MACRO_PU(motorVars[0].ptrFCL->rg.Out));
     DAC_setShadowValue(hal.dacHandle[1],
-                       DAC_MACRO_PU(motorVars[0].posElecTheta));
+                       DAC_MACRO_PU(motorVars[0].ptrFCL->pi_iq.fbk));
+
+    // DAC_setShadowValue(hal.dacHandle[0],
+    //                    DAC_MACRO_PU(motorVars[0].ptrFCL->rg.Out));
+    // DAC_setShadowValue(hal.dacHandle[1],
+    //                    DAC_MACRO_PU(motorVars[0].posElecTheta));
 #endif   // DACOUT_EN
 
 #elif(BUILDLEVEL == FCL_LEVEL4)
