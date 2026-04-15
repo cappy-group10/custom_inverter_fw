@@ -44,6 +44,9 @@
 //
 //-----------------------------------------------------------------------------
 
+// TODO
+// (1) add support for cal routine (r-l estimation)
+// (2) examine loop latency drop
 //
 // includes
 //
